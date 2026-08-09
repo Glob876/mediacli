@@ -1,38 +1,44 @@
-#!/usr/bin/env python3
 """
 MogDop's MediaCLI — a comprehensive console wrapper around yt-dlp & FFmpeg
-for Arch Linux with a navigable TUI menu (archinstall-style).
+for Linux, macOS, and Windows with a navigable TUI menu.
 
 Default UI language is English. Russian can be turned on in Settings -> Language.
 
 Features:
   - ASCII Art Header on Main Screen.
+  - Advanced YouTube Video Downloading:
+      * Multi-audio / All available audio tracks downloading & embedding.
+      * Audio language track selection (Russian, English, custom lang).
+      * SponsorBlock integration (auto-cut sponsors & self-promos).
+      * Time clipping / section downloading (*00:01:00-00:03:00).
+      * Embed Thumbnails, Metadata, Chapters & Subtitles.
+      * FPS caps (30 FPS / 60 FPS / Max).
+  - Cross-platform support (Linux, macOS, Windows).
   - Video, Audio, Playlist, and Subtitle downloads via yt-dlp.
   - Dedicated "Convert local file" tab using FFmpeg with live descriptions.
   - Batch Convert Folder option for batch media encoding.
   - Video/Audio Trimmer tool (fast stream-copy or re-encode).
   - FFprobe Local Media Inspector for detailed file stream analysis.
-  - Operation History tracking (~/.config/mediacli/history.json).
+  - Operation History tracking.
   - First-time setup wizard (language, use-case purpose, themes, paths).
   - Customizable color themes with "Keep terminal default background" support.
   - Progress Bar UI during downloads/conversions (press F10 to toggle raw logs).
   - Ctrl+C (SIGINT) is disabled. Quit via Ctrl+Q or Exit menu item.
 
 Scriptable CLI usage:
-  ./ytcli.py video <url> [-q 1080] [-p davinci-dnxhr] [-o DIR]
-  ./ytcli.py convert <file_path> [-p davinci_dnxhr_hq] [-o DIR]
-  ./ytcli.py trim <file_path> -s 00:01:00 -e 00:02:30 [--copy]
-  ./ytcli.py probe <file_path>
-  ./ytcli.py audio <url> [-f wav] [-o DIR]
-  ./ytcli.py playlist <url> [-o DIR] [--audio-only]
-  ./ytcli.py info <url>
-  ./ytcli.py subs <url> [-l ru,en] [-o DIR]
-  ./ytcli.py update
-  ./ytcli.py            # TUI menu
+  ./mediacli.py video <url> [-q 1080] [-p davinci-dnxhr] [--all-audio] [--sponsorblock sponsors]
+  ./mediacli.py convert <file_path> [-p davinci_dnxhr_hq] [-o DIR]
+  ./mediacli.py trim <file_path> -s 00:01:00 -e 00:02:30 [--copy]
+  ./mediacli.py probe <file_path>
+  ./mediacli.py audio <url> [-f wav] [-o DIR]
+  ./mediacli.py playlist <url> [-o DIR] [--audio-only]
+  ./mediacli.py info <url>
+  ./mediacli.py subs <url> [-l ru,en] [-o DIR]
+  ./mediacli.py update
+  ./mediacli.py            # TUI menu
 """
 
 import argparse
-import curses
 import json
 import locale
 import os
@@ -45,10 +51,36 @@ import sys
 import time
 from pathlib import Path
 
+# Safe curses import for Windows compatibility
+try:
+    import curses
+except ImportError:
+    curses = None
+
+# ==========================================================================
+# Cross-Platform Directory Resolver
+# ==========================================================================
+
+def get_config_dir() -> Path:
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            return Path(appdata) / "mediacli"
+        return Path.home() / "AppData" / "Roaming" / "mediacli"
+    elif sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "mediacli"
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME")
+        if xdg:
+            return Path(xdg) / "mediacli"
+        return Path.home() / ".config" / "mediacli"
+
+
+CONFIG_DIR = get_config_dir()
+CONFIG_PATH = CONFIG_DIR / "config.json"
+HISTORY_PATH = CONFIG_DIR / "history.json"
+DEFAULT_COOKIES_FILE = str(CONFIG_DIR / "cookies.txt")
 DEFAULT_DOWNLOAD_DIR = str(Path.home() / "Downloads" / "MediaCLI")
-CONFIG_PATH = Path.home() / ".config" / "mediacli" / "config.json"
-HISTORY_PATH = Path.home() / ".config" / "mediacli" / "history.json"
-DEFAULT_COOKIES_FILE = str(Path.home() / ".config" / "mediacli" / "cookies.txt")
 
 DEFAULT_CONFIG = {
     "first_run_completed": False,
@@ -87,57 +119,57 @@ THEMES = {
         "id": "cyan",
         "name_en": "Arch Cyan (Default)",
         "name_ru": "Arch Cyan (По умолчанию)",
-        "hl_fg": curses.COLOR_BLACK,
-        "hl_bg": curses.COLOR_CYAN,
-        "bg": curses.COLOR_BLACK
+        "hl_fg": 0 if curses else 0,
+        "hl_bg": 6 if curses else 6,  # COLOR_CYAN
+        "bg": 0 if curses else 0
     },
     "nord": {
         "id": "nord",
         "name_en": "Nord Blue",
         "name_ru": "Nord Blue",
-        "hl_fg": curses.COLOR_BLACK,
-        "hl_bg": curses.COLOR_BLUE,
-        "bg": curses.COLOR_BLACK
+        "hl_fg": 0 if curses else 0,
+        "hl_bg": 4 if curses else 4,  # COLOR_BLUE
+        "bg": 0 if curses else 0
     },
     "matrix": {
         "id": "matrix",
         "name_en": "Matrix Green",
         "name_ru": "Matrix Green",
-        "hl_fg": curses.COLOR_BLACK,
-        "hl_bg": curses.COLOR_GREEN,
-        "bg": curses.COLOR_BLACK
+        "hl_fg": 0 if curses else 0,
+        "hl_bg": 2 if curses else 2,  # COLOR_GREEN
+        "bg": 0 if curses else 0
     },
     "dracula": {
         "id": "dracula",
         "name_en": "Dracula Magenta",
         "name_ru": "Dracula Magenta",
-        "hl_fg": curses.COLOR_BLACK,
-        "hl_bg": curses.COLOR_MAGENTA,
-        "bg": curses.COLOR_BLACK
+        "hl_fg": 0 if curses else 0,
+        "hl_bg": 5 if curses else 5,  # COLOR_MAGENTA
+        "bg": 0 if curses else 0
     },
     "gruvbox": {
         "id": "gruvbox",
         "name_en": "Gruvbox Yellow",
         "name_ru": "Gruvbox Yellow",
-        "hl_fg": curses.COLOR_BLACK,
-        "hl_bg": curses.COLOR_YELLOW,
-        "bg": curses.COLOR_BLACK
+        "hl_fg": 0 if curses else 0,
+        "hl_bg": 3 if curses else 3,  # COLOR_YELLOW
+        "bg": 0 if curses else 0
     },
     "fire": {
         "id": "fire",
         "name_en": "Fire Red",
         "name_ru": "Fire Red",
-        "hl_fg": curses.COLOR_BLACK,
-        "hl_bg": curses.COLOR_RED,
-        "bg": curses.COLOR_BLACK
+        "hl_fg": 0 if curses else 0,
+        "hl_bg": 1 if curses else 1,  # COLOR_RED
+        "bg": 0 if curses else 0
     },
     "classic": {
         "id": "classic",
         "name_en": "Classic High Contrast (White)",
         "name_ru": "Классический высококонтрастный (Белый)",
-        "hl_fg": curses.COLOR_BLACK,
-        "hl_bg": curses.COLOR_WHITE,
-        "bg": curses.COLOR_BLACK
+        "hl_fg": 0 if curses else 0,
+        "hl_bg": 7 if curses else 7,  # COLOR_WHITE
+        "bg": 0 if curses else 0
     }
 }
 
@@ -146,6 +178,8 @@ HL_ATTR = None
 
 def apply_theme(cfg: dict) -> None:
     global HL_ATTR
+    if curses is None:
+        return
     try:
         curses.start_color()
         curses.use_default_colors()
@@ -194,8 +228,8 @@ VIDEO_PRESETS = {
         "id": "davinci_dnxhr",
         "name_en": "DaVinci Resolve: DNxHR HQ + PCM Audio (.mov) [RECOMMENDED]",
         "name_ru": "DaVinci Resolve: DNxHR HQ + PCM Аудио (.mov) [РЕКОМЕНДУЕТСЯ]",
-        "desc_en": "Converts video to Avid DNxHR HQ with PCM 16-bit audio. Optimal for DaVinci Resolve Free on Linux.",
-        "desc_ru": "Конвертирует в Avid DNxHR HQ с PCM 16-бит аудио. Идеально для бесплатного DaVinci Resolve на Linux.",
+        "desc_en": "Converts video to Avid DNxHR HQ with PCM 16-bit audio. Optimal for DaVinci Resolve (especially Free version).",
+        "desc_ru": "Конвертирует в Avid DNxHR HQ с PCM 16-бит аудио. Идеально для бесплатной версии DaVinci Resolve.",
         "args": ["--recode-video", "mov", "--postprocessor-args", "ffmpeg:-c:v dnxhd -profile:v dnxhr_hq -c:a pcm_s16le"]
     },
     "davinci_prores": {
@@ -210,8 +244,8 @@ VIDEO_PRESETS = {
         "id": "davinci_h264",
         "name_en": "DaVinci Resolve: H.264 + PCM Audio (.mov)",
         "name_ru": "DaVinci Resolve: H.264 + PCM Аудио (.mov)",
-        "desc_en": "H.264 video with PCM audio in MOV container. Compact size while fixing silent audio in DaVinci Linux.",
-        "desc_ru": "Видео H.264 с PCM аудио в MOV контейнере. Компактный размер и работающий звук в DaVinci на Linux.",
+        "desc_en": "H.264 video with PCM audio in MOV container. Compact size while fixing silent audio in DaVinci.",
+        "desc_ru": "Видео H.264 с PCM аудио в MOV контейнере. Компактный размер и работающий звук в DaVinci.",
         "args": ["--recode-video", "mov", "--postprocessor-args", "ffmpeg:-c:v libx264 -pix_fmt yuv420p -c:a pcm_s16le"]
     },
     "standard_mp4": {
@@ -258,8 +292,8 @@ CONVERT_PRESETS = [
         "id": "davinci_dnxhr_hq",
         "name_en": "DaVinci Resolve: DNxHR HQ + PCM (.mov) [Recommended]",
         "name_ru": "DaVinci Resolve: DNxHR HQ + PCM (.mov) [Рекомендуется]",
-        "desc_en": "Avid DNxHR HQ video codec with uncompressed 16-bit PCM audio in MOV container. Works reliably in DaVinci Free on Linux.",
-        "desc_ru": "Кодек Avid DNxHR HQ с несжатым PCM 16-бит аудио в MOV. Надёжно работает в бесплатном DaVinci на Linux.",
+        "desc_en": "Avid DNxHR HQ video codec with uncompressed 16-bit PCM audio in MOV container. Works reliably in DaVinci Resolve.",
+        "desc_ru": "Кодек Avid DNxHR HQ с несжатым PCM 16-бит аудио в MOV. Надёжно работает в бесплатном DaVinci.",
         "ext": "mov",
         "suffix": "_dnxhr",
         "ffmpeg_flags": ["-c:v", "dnxhd", "-profile:v", "dnxhr_hq", "-c:a", "pcm_s16le"]
@@ -278,8 +312,8 @@ CONVERT_PRESETS = [
         "id": "davinci_h264",
         "name_en": "DaVinci Resolve: H.264 + PCM Audio (.mov)",
         "name_ru": "DaVinci Resolve: H.264 + PCM Аудио (.mov)",
-        "desc_en": "H.264 video with PCM audio in MOV container. Smaller file size while maintaining audio compatibility in DaVinci Linux.",
-        "desc_ru": "Видео H.264 с PCM аудио в контейнере MOV. Меньший размер файла и рабочий звук в DaVinci на Linux.",
+        "desc_en": "H.264 video with PCM audio in MOV container. Smaller file size while maintaining audio compatibility in DaVinci.",
+        "desc_ru": "Видео H.264 с PCM аудио в контейнере MOV. Меньший размер файла и рабочий звук в DaVinci.",
         "ext": "mov",
         "suffix": "_davinci",
         "ffmpeg_flags": ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "pcm_s16le"]
@@ -365,7 +399,7 @@ def setup_signal_handlers() -> None:
 
 STRINGS = {
     "en": {
-        "app_title": "MogDop's MediaCLI (Arch Linux)",
+        "app_title": "MogDop's MediaCLI",
         "menu_video": "Download video",
         "menu_audio": "Download audio",
         "menu_playlist": "Download playlist",
@@ -426,6 +460,29 @@ STRINGS = {
 
         "custom_ext_prompt": "Target file extension (e.g. mp4, mov, mkv, avi):",
         "custom_flags_prompt": "Custom FFmpeg flags (e.g. -c:v libx264 -c:a pcm_s16le):",
+
+        # Advanced Video Options strings
+        "adv_title": "Advanced Download Settings",
+        "adv_audio_track": "Audio Track(s): {v}",
+        "adv_audio_default": "Default Track",
+        "adv_audio_all": "ALL Available Tracks (Multilingual)",
+        "adv_audio_ru": "Russian (ru)",
+        "adv_audio_en": "English (en)",
+        "adv_audio_custom": "Custom Lang Code",
+        "adv_audio_prompt": "Enter audio language code (e.g. es, ja, de):",
+        "adv_sponsorblock": "SponsorBlock (Auto-cut Sponsors): {v}",
+        "adv_sb_off": "Disabled",
+        "adv_sb_sponsors": "Cut Sponsors Only",
+        "adv_sb_all": "Cut Sponsors + Promos + Intros",
+        "adv_clip": "Time Clip / Section: {v}",
+        "adv_clip_full": "Full Video",
+        "adv_clip_prompt": "Enter time section (e.g. *00:01:00-00:03:30):",
+        "adv_embed_meta": "Embed Thumbnail & Metadata: {v}",
+        "adv_embed_chap": "Embed Video Chapters: {v}",
+        "adv_embed_subs": "Embed Subtitles into Video: {v}",
+        "adv_fps": "FPS Limit: {v}",
+        "adv_fps_max": "Max available",
+        "adv_proceed": "-> Proceed to Download ->",
 
         "label_url": "URL:",
         "label_input": "Input File:",
@@ -509,13 +566,14 @@ STRINGS = {
         "settings_reset_confirm": "Reset all settings to defaults and re-run setup wizard?",
 
         "update_title": "Update yt-dlp",
-        "update_via_pacman": "Via pacman (needs sudo password)",
-        "update_via_pip": "Via pip",
+        "update_via_pkg": "Via System Package Manager (pacman/apt/brew/winget)",
+        "update_via_pip": "Via Python Pip",
+        "update_via_ytdlp": "Via yt-dlp self-update (-U)",
         "update_cancel": "Cancel",
 
         "deps_title": "Warning",
         "deps_missing_header": "Missing dependencies:",
-        "deps_install_header": "Install on Arch Linux:",
+        "deps_install_header": "Install dependencies on your system:",
         "deps_note": "The menu will still open, but downloads/conversions won't work.",
 
         # Wizard strings
@@ -523,7 +581,7 @@ STRINGS = {
         "wizard_step1_title": "Step 1/4: Select Language",
         "wizard_step2_title": "Step 2/4: Primary Goal / Use Case",
         "wizard_step2_subtitle": "This determines default preset choices and ordering across the app",
-        "goal_editing": "Video Editing (DaVinci Resolve / Premiere / Linux Editors)",
+        "goal_editing": "Video Editing (DaVinci Resolve / Premiere / Video Editors)",
         "goal_downloading": "General Video Downloading (YouTube / MP4)",
         "goal_audio": "Audio & Music Extraction (MP3 / WAV)",
         "goal_transcoding": "Local Media Transcoding / FFmpeg Conversions",
@@ -536,13 +594,13 @@ STRINGS = {
         "wizard_done_msg": "Your configuration has been saved. You can change settings anytime in Settings.",
     },
     "ru": {
-        "app_title": "MogDop's MediaCLI (Arch Linux)",
+        "app_title": "MogDop's MediaCLI",
         "menu_video": "Скачать видео",
         "menu_audio": "Скачать аудио",
         "menu_playlist": "Скачать плейлист",
         "menu_convert": "Конвертировать локальный файл (FFmpeg)",
         "menu_batch_convert": "Пакетная конвертация папки",
-        "menu_trim": "Ообрезать видео / аудио",
+        "menu_trim": "Обрезать видео / аудио",
         "menu_probe": "Анализ файла (FFprobe)",
         "menu_info": "Информация о ссылке",
         "menu_subs": "Скачать субтитры",
@@ -597,6 +655,29 @@ STRINGS = {
 
         "custom_ext_prompt": "Расширение итогового файла (например, mp4, mov, mkv, avi):",
         "custom_flags_prompt": "Флаги FFmpeg (например, -c:v libx264 -c:a pcm_s16le):",
+
+        # Advanced Video Options strings
+        "adv_title": "Расширенные настройки скачивания",
+        "adv_audio_track": "Звуковая дорожка(и): {v}",
+        "adv_audio_default": "Дорожка по умолчанию",
+        "adv_audio_all": "ВСЕ доступные дорожки (Мультиязычный)",
+        "adv_audio_ru": "Русская (ru)",
+        "adv_audio_en": "Английская (en)",
+        "adv_audio_custom": "Указать код языка...",
+        "adv_audio_prompt": "Введи код языка звука (например: es, ja, de):",
+        "adv_sponsorblock": "SponsorBlock (Вырезка рекламы): {v}",
+        "adv_sb_off": "Отключено",
+        "adv_sb_sponsors": "Вырезать только интеграции",
+        "adv_sb_all": "Вырезать интеграции + заставки + интро",
+        "adv_clip": "Обрезка фрагмента / Таймкод: {v}",
+        "adv_clip_full": "Полное видео",
+        "adv_clip_prompt": "Введи интервал (например: *00:01:00-00:03:30):",
+        "adv_embed_meta": "Вшить обложку и метаданные: {v}",
+        "adv_embed_chap": "Вшить главы (Chapters): {v}",
+        "adv_embed_subs": "Вшить субтитры в видео: {v}",
+        "adv_fps": "Ограничение FPS: {v}",
+        "adv_fps_max": "Максимальный",
+        "adv_proceed": "-> Перейти к скачиванию ->",
 
         "label_url": "URL:",
         "label_input": "Исходный файл:",
@@ -680,13 +761,14 @@ STRINGS = {
         "settings_reset_confirm": "Сбросить все настройки к заводским и пройти настройку заново?",
 
         "update_title": "Обновить yt-dlp",
-        "update_via_pacman": "Через pacman (нужен пароль sudo)",
-        "update_via_pip": "Через pip",
+        "update_via_pkg": "Через системный пакетный менеджер (pacman/apt/brew/winget)",
+        "update_via_pip": "Через Python Pip",
+        "update_via_ytdlp": "Через встроенный yt-dlp -U",
         "update_cancel": "Отмена",
 
         "deps_title": "Внимание",
         "deps_missing_header": "Не найдены зависимости:",
-        "deps_install_header": "Установка на Arch Linux:",
+        "deps_install_header": "Установка зависимостей в вашей системе:",
         "deps_note": "Меню всё равно откроется, но скачивание/конвертация не будет работать.",
 
         # Wizard strings
@@ -694,7 +776,7 @@ STRINGS = {
         "wizard_step1_title": "Шаг 1/4: Выбор языка",
         "wizard_step2_title": "Шаг 2/4: Основная цель использования",
         "wizard_step2_subtitle": "Это повлияет на приоритет и порядок пресетов во всей программе",
-        "goal_editing": "Видеомонтаж (DaVinci Resolve / Premiere / Linux редакторы)",
+        "goal_editing": "Видеомонтаж (DaVinci Resolve / Premiere / Видеоредакторы)",
         "goal_downloading": "Обычная загрузка видео (YouTube / MP4)",
         "goal_audio": "Извлечение аудио и музыки (MP3 / WAV)",
         "goal_transcoding": "Конвертация локальных медиафайлов (FFmpeg)",
@@ -720,6 +802,22 @@ def get_preset_name(cfg: dict, preset_id: str) -> str:
     preset = VIDEO_PRESETS.get(preset_id, VIDEO_PRESETS["default"])
     lang = cfg.get("language", "en")
     return preset["name_ru"] if lang == "ru" else preset["name_en"]
+
+
+def get_install_command(missing_bins: list[str]) -> str:
+    pkgs = " ".join(missing_bins)
+    if sys.platform == "win32":
+        return f"winget install {' '.join(missing_bins)}"
+    elif sys.platform == "darwin":
+        return f"brew install {pkgs}"
+    else:
+        if shutil.which("pacman"):
+            return f"sudo pacman -S {pkgs}"
+        elif shutil.which("apt"):
+            return f"sudo apt update && sudo apt install {pkgs}"
+        elif shutil.which("dnf"):
+            return f"sudo dnf install {pkgs}"
+        return f"pip install {pkgs}"
 
 
 # ==========================================================================
@@ -814,7 +912,7 @@ def missing_dependencies() -> list[tuple[str, str]]:
 # ==========================================================================
 
 def safe_addstr(stdscr, y: int, x: int, text: str, max_w: int, attr=curses.A_NORMAL) -> None:
-    if max_w <= 0 or y < 0 or x < 0:
+    if stdscr is None or max_w <= 0 or y < 0 or x < 0:
         return
     try:
         stdscr.addstr(y, x, text[:max_w], attr)
@@ -1266,6 +1364,99 @@ def select_preset_menu(stdscr, cfg: dict) -> tuple[str | None, list[str]]:
     return selected_key, VIDEO_PRESETS[selected_key]["args"]
 
 
+def configure_advanced_video_options(stdscr, cfg: dict) -> dict | None:
+    """Sub-menu for configuring advanced YouTube download flags."""
+    adv = {
+        "audio_track": "default",      # "default" | "all" | "ru" | "en" | "custom"
+        "custom_audio_lang": "",
+        "sponsorblock": "off",         # "off" | "sponsors" | "sponsors_promo"
+        "clip_range": "",              # "" or "*00:01:00-00:02:30"
+        "embed_metadata": True,
+        "embed_chapters": True,
+        "embed_subs": False,
+        "fps_limit": "",               # "" | "30" | "60"
+    }
+
+    while True:
+        # Format Labels
+        if adv["audio_track"] == "all":
+            aud_str = t(cfg, "adv_audio_all")
+        elif adv["audio_track"] == "ru":
+            aud_str = t(cfg, "adv_audio_ru")
+        elif adv["audio_track"] == "en":
+            aud_str = t(cfg, "adv_audio_en")
+        elif adv["audio_track"] == "custom":
+            aud_str = f"{t(cfg, 'adv_audio_custom')} ({adv['custom_audio_lang']})"
+        else:
+            aud_str = t(cfg, "adv_audio_default")
+
+        sb_map = {
+            "off": t(cfg, "adv_sb_off"),
+            "sponsors": t(cfg, "adv_sb_sponsors"),
+            "sponsors_promo": t(cfg, "adv_sb_all")
+        }
+        sb_str = sb_map.get(adv["sponsorblock"], t(cfg, "adv_sb_off"))
+        clip_str = adv["clip_range"] if adv["clip_range"] else t(cfg, "adv_clip_full")
+        fps_str = adv["fps_limit"] + " FPS" if adv["fps_limit"] else t(cfg, "adv_fps_max")
+
+        items = [
+            t(cfg, "adv_audio_track", v=aud_str),
+            t(cfg, "adv_sponsorblock", v=sb_str),
+            t(cfg, "adv_clip", v=clip_str),
+            t(cfg, "adv_embed_meta", v=("YES" if adv["embed_metadata"] else "NO")),
+            t(cfg, "adv_embed_chap", v=("YES" if adv["embed_chapters"] else "NO")),
+            t(cfg, "adv_embed_subs", v=("YES" if adv["embed_subs"] else "NO")),
+            t(cfg, "adv_fps", v=fps_str),
+            t(cfg, "adv_proceed")
+        ]
+
+        choice = run_menu(stdscr, t(cfg, "adv_title"), items, t(cfg, "footer_nav"))
+        if choice is None:
+            return None
+        if choice == 7:  # Proceed
+            return adv
+
+        if choice == 0:  # Audio Tracks
+            a_opts = [
+                t(cfg, "adv_audio_default"),
+                t(cfg, "adv_audio_all"),
+                t(cfg, "adv_audio_ru"),
+                t(cfg, "adv_audio_en"),
+                t(cfg, "adv_audio_custom")
+            ]
+            ai = run_menu(stdscr, t(cfg, "adv_title"), a_opts, t(cfg, "footer_nav"))
+            if ai is not None:
+                keys = ["default", "all", "ru", "en", "custom"]
+                adv["audio_track"] = keys[ai]
+                if keys[ai] == "custom":
+                    clang = text_input(stdscr, t(cfg, "adv_title"), t(cfg, "adv_audio_prompt"), t(cfg, "footer_input"))
+                    if clang:
+                        adv["custom_audio_lang"] = clang.strip()
+
+        elif choice == 1:  # SponsorBlock
+            sb_opts = [t(cfg, "adv_sb_off"), t(cfg, "adv_sb_sponsors"), t(cfg, "adv_sb_all")]
+            sbi = run_menu(stdscr, t(cfg, "adv_title"), sb_opts, t(cfg, "footer_nav"))
+            if sbi is not None:
+                adv["sponsorblock"] = ["off", "sponsors", "sponsors_promo"][sbi]
+
+        elif choice == 2:  # Time clip
+            c_val = text_input(stdscr, t(cfg, "adv_title"), t(cfg, "adv_clip_prompt"), t(cfg, "footer_input"), default=adv["clip_range"])
+            if c_val is not None:
+                adv["clip_range"] = c_val.strip()
+
+        elif choice == 3:  # Embed Metadata
+            adv["embed_metadata"] = not adv["embed_metadata"]
+        elif choice == 4:  # Embed Chapters
+            adv["embed_chapters"] = not adv["embed_chapters"]
+        elif choice == 5:  # Embed Subtitles
+            adv["embed_subs"] = not adv["embed_subs"]
+        elif choice == 6:  # FPS Limit
+            fps_opts = [t(cfg, "adv_fps_max"), "60 FPS", "30 FPS"]
+            fi = run_menu(stdscr, t(cfg, "adv_title"), fps_opts, t(cfg, "footer_nav"))
+            if fi is not None:
+                adv["fps_limit"] = ["", "60", "30"][fi]
+
+
 def screen_video(stdscr, cfg: dict) -> None:
     url = text_input(stdscr, t(cfg, "video_title"), t(cfg, "video_prompt_url"), t(cfg, "footer_input"))
     if not url:
@@ -1296,19 +1487,65 @@ def screen_video(stdscr, cfg: dict) -> None:
         subs = text_input(stdscr, t(cfg, "video_title"), t(cfg, "subs_langs_prompt"),
                            t(cfg, "footer_input"), default=cfg["sub_langs"])
 
+    # Configure Advanced Options (Multi-audio, SponsorBlock, Clip, Embeds, FPS)
+    adv = configure_advanced_video_options(stdscr, cfg)
+    if adv is None:
+        return
+
     out_dir = text_input(stdscr, t(cfg, "video_title"), t(cfg, "outdir_prompt"),
                           t(cfg, "footer_input"), default=cfg["download_dir"])
     if out_dir is None:
         return
 
     expanded_out = Path(out_dir).expanduser()
-    fmt = f"bestvideo[height<={quality}]+bestaudio/best[height<={quality}]" if quality else "bestvideo+bestaudio/best"
     expanded_out.mkdir(parents=True, exist_ok=True)
 
-    cmd = ["yt-dlp", "-f", fmt, "-o", str(expanded_out / "%(title)s.%(ext)s"),
-           *preset_args, *cookie_args(cfg), url]
+    # Build Advanced yt-dlp command
+    cmd = ["yt-dlp"]
+
+    fps_suffix = f"[fps<={adv['fps_limit']}]" if adv['fps_limit'] else ""
+    q_str = f"[height<={quality}]" if quality else ""
+
+    if adv["audio_track"] == "all":
+        cmd += ["--audio-multistreams"]
+        fmt = f"bestvideo{q_str}{fps_suffix}+mergeall[format_id*=audio]/bestvideo{q_str}{fps_suffix}+bestaudio/best"
+    elif adv["audio_track"] == "ru":
+        fmt = f"bestvideo{q_str}{fps_suffix}+bestaudio[language=ru]/bestvideo{q_str}{fps_suffix}+bestaudio[language^=ru]/bestvideo{q_str}{fps_suffix}+bestaudio"
+    elif adv["audio_track"] == "en":
+        fmt = f"bestvideo{q_str}{fps_suffix}+bestaudio[language=en]/bestvideo{q_str}{fps_suffix}+bestaudio[language^=en]/bestvideo{q_str}{fps_suffix}+bestaudio"
+    elif adv["audio_track"] == "custom" and adv["custom_audio_lang"]:
+        clang = adv["custom_audio_lang"].strip()
+        fmt = f"bestvideo{q_str}{fps_suffix}+bestaudio[language={clang}]/bestvideo{q_str}{fps_suffix}+bestaudio"
+    else:
+        fmt = f"bestvideo{q_str}{fps_suffix}+bestaudio/best{q_str}{fps_suffix}"
+
+    cmd += ["-f", fmt]
+
+    # SponsorBlock
+    if adv["sponsorblock"] == "sponsors":
+        cmd += ["--sponsorblock-remove", "sponsor"]
+    elif adv["sponsorblock"] == "sponsors_promo":
+        cmd += ["--sponsorblock-remove", "sponsor,selfpromo,interaction"]
+
+    # Download sections / clipping
+    if adv["clip_range"]:
+        clip_val = adv["clip_range"].strip()
+        if not clip_val.startswith("*"):
+            clip_val = f"*{clip_val}"
+        cmd += ["--download-sections", clip_val]
+
+    # Embeds
+    if adv["embed_metadata"]:
+        cmd += ["--embed-metadata", "--embed-thumbnail"]
+    if adv["embed_chapters"]:
+        cmd += ["--embed-chapters"]
+    if adv["embed_subs"] and subs:
+        cmd += ["--embed-subs"]
+
     if subs:
         cmd += ["--write-subs", "--sub-langs", subs]
+
+    cmd += ["-o", str(expanded_out / "%(title)s.%(ext)s"), *preset_args, *cookie_args(cfg), url]
 
     q_display = quality or t(cfg, "quality_best_short")
     p_display = get_preset_name(cfg, preset_id) if preset_id != "custom" else "Custom FFmpeg"
@@ -1733,7 +1970,11 @@ def screen_cookies(stdscr, cfg: dict) -> None:
             exp_path.parent.mkdir(parents=True, exist_ok=True)
             if not exp_path.exists():
                 exp_path.write_text("# Netscape HTTP Cookie File\n# Generated by MogDop's MediaCLI.\n\n")
-            editor = os.environ.get("EDITOR") or shutil.which("nano") or shutil.which("vim") or shutil.which("vi") or "vi"
+            editor = (os.environ.get("EDITOR") or
+                      shutil.which("nano") or
+                      shutil.which("vim") or
+                      shutil.which("vi") or
+                      shutil.which("notepad") or "notepad")
             run_external(stdscr, [editor, str(exp_path)])
             cfg["cookies_mode"] = "file"
             cfg["cookies_file"] = path
@@ -1878,14 +2119,28 @@ def screen_settings(stdscr, cfg: dict) -> None:
 
 def screen_update(stdscr, cfg: dict) -> None:
     choice = run_menu(stdscr, t(cfg, "update_title"),
-                       [t(cfg, "update_via_pacman"), t(cfg, "update_via_pip"), t(cfg, "update_cancel")],
+                       [t(cfg, "update_via_pkg"), t(cfg, "update_via_pip"), t(cfg, "update_via_ytdlp"), t(cfg, "update_cancel")],
                        t(cfg, "footer_nav"))
-    if choice is None or choice == 2:
+    if choice is None or choice == 3:
         return
     if choice == 0:
-        run_external(stdscr, ["sudo", "pacman", "-Syu", "yt-dlp"])
-    else:
+        if sys.platform == "win32":
+            run_external(stdscr, ["winget", "upgrade", "yt-dlp"])
+        elif sys.platform == "darwin":
+            run_external(stdscr, ["brew", "upgrade", "yt-dlp"])
+        elif shutil.which("pacman"):
+            run_external(stdscr, ["sudo", "pacman", "-Syu", "yt-dlp"])
+        elif shutil.which("apt"):
+            run_external(stdscr, ["sudo", "apt", "update"])
+            run_external(stdscr, ["sudo", "apt", "install", "--only-upgrade", "yt-dlp"])
+        elif shutil.which("dnf"):
+            run_external(stdscr, ["sudo", "dnf", "upgrade", "yt-dlp"])
+        else:
+            run_with_log(stdscr, cfg, ["python", "-m", "pip", "install", "--user", "-U", "yt-dlp"])
+    elif choice == 1:
         run_with_log(stdscr, cfg, ["python", "-m", "pip", "install", "--user", "-U", "yt-dlp"])
+    elif choice == 2:
+        run_with_log(stdscr, cfg, ["yt-dlp", "-U"])
 
 
 # ==========================================================================
@@ -1920,11 +2175,12 @@ def main_tui(stdscr) -> None:
 
     missing = missing_dependencies()
     if missing:
+        missing_bins = [bin_ for bin_, _ in missing]
         lines = [t(cfg, "deps_missing_header"), ""]
-        for bin_, _ in missing:
+        for bin_ in missing_bins:
             lines.append(f"  - {bin_}")
         lines += ["", t(cfg, "deps_install_header"),
-                  "  sudo pacman -S " + " ".join(pkg for _, pkg in missing), "",
+                  "  " + get_install_command(missing_bins), "",
                   t(cfg, "deps_note")]
         show_message(stdscr, t(cfg, "deps_title"), lines, t(cfg, "footer_message"))
 
@@ -1969,7 +2225,7 @@ def classic_menu() -> int:
     if choice == "0" or not choice:
         return 0
     if choice == "7":
-        return run(["sudo", "pacman", "-Syu", "yt-dlp"])
+        return run(["python", "-m", "pip", "install", "-U", "yt-dlp"])
 
     if choice == "4":
         try:
@@ -2060,8 +2316,14 @@ def cli_video(args: argparse.Namespace) -> int:
     else:
         preset_args = VIDEO_PRESETS[preset_key]["args"]
 
-    cmd = ["yt-dlp", "-f", fmt, "-o", str(out_dir / "%(title)s.%(ext)s"),
-           *preset_args, *_resolve_cookie_args(args), args.url]
+    cmd = ["yt-dlp"]
+    if args.all_audio:
+        cmd += ["--audio-multistreams"]
+    if args.sponsorblock:
+        cmd += ["--sponsorblock-remove", args.sponsorblock]
+
+    cmd += ["-f", fmt, "-o", str(out_dir / "%(title)s.%(ext)s"),
+            *preset_args, *_resolve_cookie_args(args), args.url]
     if args.subs:
         cmd += ["--write-subs", "--sub-langs", args.subs]
     return run(cmd)
@@ -2176,13 +2438,19 @@ def cli_subs(args: argparse.Namespace) -> int:
 
 
 def cli_update(_args: argparse.Namespace) -> int:
-    if shutil.which("pacman"):
+    if sys.platform == "win32":
+        return run(["winget", "upgrade", "yt-dlp"])
+    elif sys.platform == "darwin":
+        return run(["brew", "upgrade", "yt-dlp"])
+    elif shutil.which("pacman"):
         return run(["sudo", "pacman", "-Syu", "yt-dlp"])
+    elif shutil.which("apt"):
+        return run(["sudo", "apt", "update"]) or run(["sudo", "apt", "install", "--only-upgrade", "yt-dlp"])
     return run(["python", "-m", "pip", "install", "--user", "-U", "yt-dlp"])
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mediacli", description="MogDop's MediaCLI — yt-dlp & FFmpeg toolkit for Arch Linux")
+    parser = argparse.ArgumentParser(prog="mediacli", description="MogDop's MediaCLI — yt-dlp & FFmpeg toolkit")
     sub = parser.add_subparsers(dest="command")
 
     cookie_parent = argparse.ArgumentParser(add_help=False)
@@ -2195,6 +2463,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_video.add_argument("-q", "--quality", default="")
     p_video.add_argument("-p", "--preset", default="davinci-dnxhr", choices=list(PRESET_CLI_MAP.keys()),
                          help="FFmpeg export preset (e.g. davinci-dnxhr, standard-mp4, custom)")
+    p_video.add_argument("--all-audio", action="store_true", help="Download all available audio streams")
+    p_video.add_argument("--sponsorblock", default=None, help="Remove sponsors (e.g. sponsor, selfpromo)")
     p_video.add_argument("--custom-ext", default="mp4", help="Extension for custom preset")
     p_video.add_argument("--custom-flags", default="-c:v libx264 -c:a aac", help="Flags for custom preset")
     p_video.add_argument("-o", "--output", default=DEFAULT_DOWNLOAD_DIR)
@@ -2265,12 +2535,15 @@ def main() -> int:
     except locale.Error:
         pass
 
-    if sys.stdout.isatty() and sys.stdin.isatty():
+    if curses is not None and sys.stdout.isatty() and sys.stdin.isatty():
         try:
             curses.wrapper(main_tui)
             return 0
         except curses.error:
             print("[!] Curses is not available in this terminal, falling back to classic menu.\n")
+
+    if sys.platform == "win32" and curses is None:
+        print("[!] Note: For full TUI menu on Windows, run: pip install windows-curses\n")
 
     return classic_menu()
 
