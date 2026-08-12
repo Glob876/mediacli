@@ -6,28 +6,21 @@ Default UI language is English. Russian can be turned on in Settings -> Language
 
 Features:
   - Tabbed Navigation for Main Menu & Settings (Switch tabs with Left/Right arrows).
-  - Built-in Proxy Support (HTTP/HTTPS/SOCKS5).
+  - Robust Path Parsing (supports quotes, spaces, and ~ tildes like ~/Downloads/"file.mp4").
+  - FFmpeg proxy bug fixed (proxy is applied ONLY to yt-dlp).
+  - Extended Presets Library: DaVinci Resolve, Standard MP4, HEVC H.265, AV1, WebM,
+    Fast Compression (Discord/Email), FLAC Lossless, AAC M4A, MP3, WAV, GIF.
+  - Built-in System & Custom Proxy Support (SOCKS5/HTTP).
   - Dynamic Multi-Stage Process Tracker (displays ONLY active command stages).
   - Formatted Progress Bar Styles (Blocks, Classic, Dots, Minimal).
   - Auto-installation of dependencies on Arch Linux.
   - Polite, formal Russian localization ("Вы / Введите / Выберите").
-  - Advanced YouTube Video Downloading:
-      * Multi-audio / All available audio tracks downloading & embedding.
-      * Video Codec Preference (Force AV1, VP9, H.264, or Auto).
-      * Geo-Bypass & Custom Proxy integration.
-      * Bandwidth Rate Limiting (2MB/s, 5MB/s, 10MB/s, Unlimited).
-      * SponsorBlock integration (auto-cut sponsors & self-promos).
-      * Time clipping / section downloading (*00:01:00-00:03:00).
-      * Live Stream Mode (--live-from-start).
-      * Save description & thumbnail as separate files.
-      * Embed Thumbnails, Metadata, Chapters & Subtitles.
-      * FPS caps (30 FPS / 60 FPS / Max).
-  - Local FFmpeg Tools: Convert, Batch Convert, Trim & FFprobe Inspector.
+  - Advanced YouTube Video Downloading & Local FFmpeg Tools.
   - First-time setup wizard & Operation History tracking.
   - Ctrl+C (SIGINT) is disabled. Quit via Ctrl+Q or Exit menu item.
 
 Scriptable CLI usage:
-  ./mediacli.py video <url> [-q 1080] [-p davinci-dnxhr] [--proxy socks5://127.0.0.1:1080]
+  ./mediacli.py video <url> [-q 1080] [-p davinci-dnxhr] [--proxy-mode system]
   ./mediacli.py convert <file_path> [-p davinci_dnxhr_hq] [-o DIR]
   ./mediacli.py trim <file_path> -s 00:01:00 -e 00:02:30 [--copy]
   ./mediacli.py probe <file_path>
@@ -59,7 +52,7 @@ except ImportError:
     curses = None
 
 # ==========================================================================
-# Cross-Platform Directory Resolver
+# Cross-Platform Directory & Path Resolvers
 # ==========================================================================
 
 def get_config_dir() -> Path:
@@ -75,6 +68,19 @@ def get_config_dir() -> Path:
         if xdg:
             return Path(xdg) / "mediacli"
         return Path.home() / ".config" / "mediacli"
+
+
+def parse_user_path(raw_path: str) -> Path:
+    """Robustly cleans user input paths (strips quotes, handles ~ tildes, removes internal quotes)."""
+    if not raw_path:
+        return Path(".")
+    s = raw_path.strip()
+    # Strip surrounding quotes if whole path is quoted
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        s = s[1:-1].strip()
+    # Strip inner accidental quotes (e.g. ~/Downloads/"file name.mp4")
+    s = s.replace('"', '').replace("'", '')
+    return Path(s).expanduser()
 
 
 CONFIG_DIR = get_config_dir()
@@ -96,7 +102,8 @@ DEFAULT_CONFIG = {
     "video_preset": "davinci_dnxhr",
     "theme": "cyan",              # "cyan" | "nord" | "matrix" | "dracula" | "gruvbox" | "fire" | "classic"
     "use_terminal_bg": True,      # Keep terminal default background (transparent)
-    "proxy": "",                  # Built-in proxy (e.g. socks5://127.0.0.1:1080)
+    "proxy_mode": "system",       # "system" | "custom" | "none"
+    "proxy_url": "",              # Custom proxy URL
     "progress_style": "blocks",   # "blocks" | "classic" | "dots" | "minimal"
 }
 
@@ -237,10 +244,10 @@ VIDEO_PRESETS = {
     },
     "davinci_prores": {
         "id": "davinci_prores",
-        "name_en": "DaVinci Resolve: Apple ProRes HQ + PCM Audio (.mov)",
-        "name_ru": "DaVinci Resolve: Apple ProRes HQ + PCM Аудио (.mov)",
-        "desc_en": "Apple ProRes HQ video codec with uncompressed PCM audio in MOV container.",
-        "desc_ru": "Видеокодек Apple ProRes HQ с несжатым PCM аудио в контейнере MOV.",
+        "name_en": "DaVinci Resolve: Apple ProRes 422 + PCM Audio (.mov)",
+        "name_ru": "DaVinci Resolve: Apple ProRes 422 + PCM Аудио (.mov)",
+        "desc_en": "Apple ProRes HQ video codec with uncompressed PCM audio in MOV container. Studio editing standard.",
+        "desc_ru": "Видеокодек Apple ProRes HQ с несжатым PCM аудио в контейнере MOV. Студийный стандарт для монтажа.",
         "args": ["--recode-video", "mov", "--postprocessor-args", "ffmpeg:-c:v prores_ks -profile:v 3 -c:a pcm_s16le"]
     },
     "davinci_h264": {
@@ -258,6 +265,46 @@ VIDEO_PRESETS = {
         "desc_en": "Universal MP4 container with H.264 video and AAC audio. High compatibility for web and media players.",
         "desc_ru": "Универсальный MP4 с H.264 видео и AAC аудио. Максимальная совместимость с плеерами и соцсетями.",
         "args": ["--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx264 -c:a aac"]
+    },
+    "hevc_mp4": {
+        "id": "hevc_mp4",
+        "name_en": "High Efficiency MP4 (H.265 / HEVC + AAC)",
+        "name_ru": "Высокоэффективный MP4 (H.265 / HEVC + AAC)",
+        "desc_en": "H.265/HEVC video codec. Up to 50% smaller file size with high visual quality. Great for 4K/8K.",
+        "desc_ru": "Видеокодек H.265/HEVC. До 50% меньший размер файла при высоком качестве. Отлично для 4K/8K.",
+        "args": ["--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx265 -c:a aac"]
+    },
+    "webm_vp9": {
+        "id": "webm_vp9",
+        "name_en": "WebM (VP9 + Opus)",
+        "name_ru": "WebM (VP9 + Opus)",
+        "desc_en": "Open WebM media format with VP9 video and Opus audio. Perfect for web browsers and HTML5.",
+        "desc_ru": "Открытый веб-формат WebM с видео VP9 и аудио Opus. Идеально для браузеров и веб-сайтов.",
+        "args": ["--recode-video", "webm", "--postprocessor-args", "ffmpeg:-c:v libvpx-vp9 -c:a libopus"]
+    },
+    "mkv_av1": {
+        "id": "mkv_av1",
+        "name_en": "Modern MKV (AV1 + AAC)",
+        "name_ru": "Современный MKV (AV1 + AAC)",
+        "desc_en": "Next-generation AV1 video codec in Matroska MKV container. Ultra high compression efficiency.",
+        "desc_ru": "Видеокодек нового поколения AV1 в контейнере MKV. Ультравысокая эффективность сжатия.",
+        "args": ["--recode-video", "mkv", "--postprocessor-args", "ffmpeg:-c:v libsvtav1 -c:a aac"]
+    },
+    "audio_mp3": {
+        "id": "audio_mp3",
+        "name_en": "Audio Only: MP3 320 kbps",
+        "name_ru": "Только аудио: MP3 320 кбит/с",
+        "desc_en": "Extracts audio stream into high quality 320 kbps MP3 format.",
+        "desc_ru": "Извлекает звуковую дорожку в высококачественный MP3 320 кбит/с.",
+        "args": ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
+    },
+    "audio_flac": {
+        "id": "audio_flac",
+        "name_en": "Audio Only: FLAC Lossless",
+        "name_ru": "Только аудио: FLAC без потерь",
+        "desc_en": "Extracts audio stream into lossless FLAC audio format.",
+        "desc_ru": "Извлекает звуковую дорожку в сжатый формат без потерь качества FLAC.",
+        "args": ["-x", "--audio-format", "flac"]
     },
     "default": {
         "id": "default",
@@ -283,6 +330,9 @@ PRESET_CLI_MAP = {
     "davinci-prores": "davinci_prores",
     "davinci-h264": "davinci_h264",
     "standard-mp4": "standard_mp4",
+    "hevc-mp4": "hevc_mp4",
+    "webm-vp9": "webm_vp9",
+    "mkv-av1": "mkv_av1",
     "custom": "custom",
 }
 
@@ -303,8 +353,8 @@ CONVERT_PRESETS = [
     },
     {
         "id": "davinci_prores",
-        "name_en": "DaVinci Resolve: Apple ProRes HQ + PCM (.mov)",
-        "name_ru": "DaVinci Resolve: Apple ProRes HQ + PCM (.mov)",
+        "name_en": "DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
+        "name_ru": "DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
         "desc_en": "Apple ProRes HQ video codec with PCM 16-bit audio. Studio quality for video editing.",
         "desc_ru": "Видеокодек Apple ProRes HQ с несжатым PCM 16-бит аудио. Студийный стандарт для видеомонтажа.",
         "ext": "mov",
@@ -332,6 +382,46 @@ CONVERT_PRESETS = [
         "ffmpeg_flags": ["-c:v", "libx264", "-c:a", "aac", "-b:a", "192k"]
     },
     {
+        "id": "hevc_mp4",
+        "name_en": "High Efficiency MP4 (H.265 / HEVC + AAC)",
+        "name_ru": "Высокоэффективный MP4 (H.265 / HEVC + AAC)",
+        "desc_en": "Encodes with x265 codec. Up to 50% smaller file size at high quality. Great for archiving 4K/8K media.",
+        "desc_ru": "Кодирование с кодеком x265. До 50% меньший размер файла при высоком качестве. Отлично для архива 4K/8K.",
+        "ext": "mp4",
+        "suffix": "_hevc",
+        "ffmpeg_flags": ["-c:v", "libx265", "-c:a", "aac", "-b:a", "192k"]
+    },
+    {
+        "id": "fast_compress",
+        "name_en": "Fast Video Compress (H.264 CRF 28 - Web / Discord)",
+        "name_ru": "Быстрое сжатие видео (H.264 CRF 28 - Web / Discord)",
+        "desc_en": "Reduces file size dramatically for easy sharing via Discord, Telegram, or Email.",
+        "desc_ru": "Сильно уменьшает размер файла для быстрой отправки в Telegram, Discord или по почте.",
+        "ext": "mp4",
+        "suffix": "_compressed",
+        "ffmpeg_flags": ["-c:v", "libx264", "-crf", "28", "-preset", "faster", "-c:a", "aac", "-b:a", "128k"]
+    },
+    {
+        "id": "webm_vp9",
+        "name_en": "Open WebM (VP9 + Opus)",
+        "name_ru": "Открытый WebM (VP9 + Opus)",
+        "desc_en": "Converts file to open WebM media container for web browser streaming.",
+        "desc_ru": "Переводит файл в открытый формат WebM для публикаций в вебе и браузерах.",
+        "ext": "webm",
+        "suffix": "_webm",
+        "ffmpeg_flags": ["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-c:a", "libopus"]
+    },
+    {
+        "id": "mkv_av1",
+        "name_en": "Modern MKV (AV1 + AAC)",
+        "name_ru": "Современный MKV (AV1 + AAC)",
+        "desc_en": "Encodes video using open SVT-AV1 codec into Matroska MKV container.",
+        "desc_ru": "Кодирует видео современным открытым кодеком SVT-AV1 в контейнер MKV.",
+        "ext": "mkv",
+        "suffix": "_av1",
+        "ffmpeg_flags": ["-c:v", "libsvtav1", "-crf", "32", "-c:a", "aac"]
+    },
+    {
         "id": "audio_wav",
         "name_en": "Extract Audio: Uncompressed WAV (.wav)",
         "name_ru": "Извлечь аудио: WAV без сжатия (.wav)",
@@ -343,13 +433,43 @@ CONVERT_PRESETS = [
     },
     {
         "id": "audio_mp3",
-        "name_en": "Extract Audio: MP3 320kbps (.mp3)",
+        "name_en": "Extract Audio: MP3 320 kbps (.mp3)",
         "name_ru": "Извлечь аудио: MP3 320 кбит/с (.mp3)",
         "desc_en": "Extracts audio track into high-bitrate MP3 audio file.",
         "desc_ru": "Извлекает аудиодорожку в высококачественный MP3 файл 320 кбит/с.",
         "ext": "mp3",
         "suffix": "_audio",
         "ffmpeg_flags": ["-vn", "-ab", "320k"]
+    },
+    {
+        "id": "audio_flac",
+        "name_en": "Extract Audio: FLAC Lossless (.flac)",
+        "name_ru": "Извлечь аудио: FLAC без потерь (.flac)",
+        "desc_en": "Extracts audio track into lossless compressed FLAC audio format.",
+        "desc_ru": "Извлекает аудиодорожку в сжатый формат без потерь качества FLAC.",
+        "ext": "flac",
+        "suffix": "_audio",
+        "ffmpeg_flags": ["-vn", "-c:a", "flac"]
+    },
+    {
+        "id": "audio_aac",
+        "name_en": "Extract Audio: AAC / M4A 256 kbps (.m4a)",
+        "name_ru": "Извлечь аудио: AAC / M4A 256 кбит/с (.m4a)",
+        "desc_en": "Extracts audio track into AAC format inside M4A container (Apple/mobile standard).",
+        "desc_ru": "Извлекает аудиодорожку в формат AAC в контейнере M4A (стандарт Apple).",
+        "ext": "m4a",
+        "suffix": "_audio",
+        "ffmpeg_flags": ["-vn", "-c:a", "aac", "-b:a", "256k"]
+    },
+    {
+        "id": "gif_anim",
+        "name_en": "Create Animated GIF (.gif)",
+        "name_ru": "Создать анимированный GIF (.gif)",
+        "desc_en": "Converts video snippet into animated GIF image (15 FPS, max width 480px).",
+        "desc_ru": "Конвертирует видео в анимированный гиф-файл (15 FPS, макс. ширина 480px).",
+        "ext": "gif",
+        "suffix": "_anim",
+        "ffmpeg_flags": ["-vf", "fps=15,scale=480:-1:flags=lanczos", "-c:v", "gif"]
     },
     {
         "id": "custom",
@@ -367,24 +487,35 @@ CONVERT_PRESETS = [
 def get_ordered_video_preset_keys(cfg: dict) -> list[str]:
     goal = cfg.get("user_goal", "editing")
     if goal == "downloading":
-        return ["standard_mp4", "default", "davinci_dnxhr", "davinci_prores", "davinci_h264", "custom"]
+        return ["standard_mp4", "hevc_mp4", "default", "webm_vp9", "mkv_av1", "davinci_dnxhr", "davinci_prores", "davinci_h264", "audio_mp3", "audio_flac", "custom"]
     elif goal == "audio":
-        return ["standard_mp4", "default", "davinci_dnxhr", "custom"]
+        return ["audio_mp3", "audio_flac", "standard_mp4", "default", "davinci_dnxhr", "custom"]
     else:  # "editing" or "transcoding"
-        return ["davinci_dnxhr", "davinci_prores", "davinci_h264", "standard_mp4", "default", "custom"]
+        return ["davinci_dnxhr", "davinci_prores", "davinci_h264", "standard_mp4", "hevc_mp4", "default", "webm_vp9", "mkv_av1", "audio_mp3", "audio_flac", "custom"]
 
 
 def get_ordered_convert_presets(cfg: dict) -> list[dict]:
     goal = cfg.get("user_goal", "editing")
     if goal == "downloading" or goal == "transcoding":
-        order = ["standard_mp4", "davinci_dnxhr_hq", "davinci_prores", "davinci_h264", "audio_mp3", "audio_wav", "custom"]
+        order = ["standard_mp4", "hevc_mp4", "fast_compress", "mkv_av1", "webm_vp9", "davinci_dnxhr_hq", "davinci_prores", "davinci_h264", "audio_mp3", "audio_wav", "audio_flac", "audio_aac", "gif_anim", "custom"]
     elif goal == "audio":
-        order = ["audio_mp3", "audio_wav", "standard_mp4", "davinci_dnxhr_hq", "davinci_prores", "custom"]
+        order = ["audio_mp3", "audio_wav", "audio_flac", "audio_aac", "standard_mp4", "hevc_mp4", "davinci_dnxhr_hq", "custom"]
     else:  # "editing"
-        order = ["davinci_dnxhr_hq", "davinci_prores", "davinci_h264", "audio_wav", "standard_mp4", "audio_mp3", "custom"]
+        order = ["davinci_dnxhr_hq", "davinci_prores", "davinci_h264", "standard_mp4", "hevc_mp4", "fast_compress", "audio_wav", "audio_mp3", "audio_flac", "audio_aac", "gif_anim", "custom"]
 
     preset_dict = {p["id"]: p for p in CONVERT_PRESETS}
     return [preset_dict[pid] for pid in order if pid in preset_dict]
+
+
+def get_proxy_args(cfg: dict, override_mode: str = None, override_url: str = None) -> list[str]:
+    mode = override_mode if override_mode is not None else cfg.get("proxy_mode", "system")
+    url = override_url if override_url is not None else cfg.get("proxy_url", "")
+
+    if mode == "custom" and url.strip():
+        return ["--proxy", url.strip()]
+    elif mode == "none":
+        return ["--no-proxy"]
+    return []
 
 
 # ==========================================================================
@@ -505,9 +636,11 @@ STRINGS = {
         "adv_embed_subs": "Embed Subtitles into Video: {v}",
         "adv_fps": "FPS Limit: {v}",
         "adv_fps_max": "Max available",
-        "adv_proxy": "Custom Proxy: {v}",
-        "adv_proxy_none": "None",
-        "adv_proxy_prompt": "Enter proxy URL (e.g. socks5://127.0.0.1:1080):",
+        "adv_proxy_mode": "Proxy Mode: {v}",
+        "adv_proxy_url_prompt": "Enter custom proxy URL (e.g. socks5://127.0.0.1:10808):",
+        "proxy_system": "System Proxy (Auto / OS settings)",
+        "proxy_custom": "Custom Proxy (URL)",
+        "proxy_none": "Disabled (Direct connection)",
         "adv_proceed": "-> Proceed to Download ->",
 
         "label_url": "URL:",
@@ -677,7 +810,7 @@ STRINGS = {
         "batch_prompt_folder": "Введите путь к папке с видео/аудио файлами:",
         "batch_no_files": "В выбранной папке не найдено подходящих медиафайлов.",
 
-        "trim_title": "Ообрезать медиафайл",
+        "trim_title": "Обрезать медиафайл",
         "trim_prompt_file": "Введите путь к видео/аудиофайлу:",
         "trim_prompt_start": "Время начала (ЧЧ:ММ:СС или секунды, например 00:01:30):",
         "trim_prompt_end": "Время окончания / Длительность (ЧЧ:ММ:СС или секунды):",
@@ -726,9 +859,11 @@ STRINGS = {
         "adv_embed_subs": "Вшить субтитры в видео: {v}",
         "adv_fps": "Ограничение FPS: {v}",
         "adv_fps_max": "Максимальный",
-        "adv_proxy": "Встроенный Прокси: {v}",
-        "adv_proxy_none": "Не используется",
-        "adv_proxy_prompt": "Введите URL прокси (например, socks5://127.0.0.1:1080):",
+        "adv_proxy_mode": "Режим прокси: {v}",
+        "adv_proxy_url_prompt": "Введите URL прокси (например, socks5://127.0.0.1:10808):",
+        "proxy_system": "Системный прокси (Авто / Настройки ОС)",
+        "proxy_custom": "Свой прокси (URL)",
+        "proxy_none": "Отключить прокси (Прямое подключение)",
         "adv_proceed": "-> Перейти к скачиванию ->",
 
         "label_url": "URL:",
@@ -906,7 +1041,7 @@ def reset_config() -> dict:
 def cookie_args(cfg: dict) -> list[str]:
     mode = cfg.get("cookies_mode", "none")
     if mode == "file" and cfg.get("cookies_file"):
-        cpath = Path(cfg["cookies_file"]).expanduser()
+        cpath = parse_user_path(cfg["cookies_file"])
         if cpath.exists():
             return ["--cookies", str(cpath)]
     if mode == "browser" and cfg.get("cookies_browser"):
@@ -919,7 +1054,7 @@ def cookie_args(cfg: dict) -> list[str]:
 # ==========================================================================
 
 def parse_cookies_file(path: str) -> list[dict]:
-    p = Path(path).expanduser()
+    p = parse_user_path(path)
     if not p.exists():
         return []
     cookies = []
@@ -939,7 +1074,7 @@ def parse_cookies_file(path: str) -> list[dict]:
 
 
 def append_cookie_entry(path: str, domain: str, name: str, value: str) -> None:
-    p = Path(path).expanduser()
+    p = parse_user_path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     if not p.exists():
         p.write_text(
@@ -1254,10 +1389,12 @@ def run_with_log(stdscr, cfg: dict, cmd: list[str], op_type: str = "Task",
     lang = cfg.get("language", "en")
     style = cfg.get("progress_style", "blocks")
 
-    # Inject Proxy if configured
-    proxy_val = cfg.get("proxy", "").strip()
-    if proxy_val and "yt-dlp" in cmd[0] and "--proxy" not in cmd:
-        cmd += ["--proxy", proxy_val]
+    # Inject Proxy ONLY into yt-dlp commands (NEVER FFmpeg)
+    if cmd and "yt-dlp" in cmd[0]:
+        p_args = get_proxy_args(cfg)
+        for pa in p_args:
+            if pa not in cmd:
+                cmd.append(pa)
 
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
@@ -1609,7 +1746,8 @@ def configure_advanced_video_options(stdscr, cfg: dict) -> dict | None:
         "embed_chapters": True,
         "embed_subs": False,
         "fps_limit": "",               # "" | "30" | "60"
-        "proxy": cfg.get("proxy", ""),
+        "proxy_mode": cfg.get("proxy_mode", "system"), # "system" | "custom" | "none"
+        "proxy_url": cfg.get("proxy_url", ""),
     }
 
     while True:
@@ -1635,7 +1773,13 @@ def configure_advanced_video_options(stdscr, cfg: dict) -> dict | None:
         clip_str = adv["clip_range"] if adv["clip_range"] else t(cfg, "adv_clip_full")
         fps_str = adv["fps_limit"] + " FPS" if adv["fps_limit"] else t(cfg, "adv_fps_max")
         rate_str = adv["ratelimit"] if adv["ratelimit"] else t(cfg, "adv_ratelimit_max")
-        proxy_str = adv["proxy"] if adv["proxy"] else t(cfg, "adv_proxy_none")
+
+        proxy_mode_map = {
+            "system": t(cfg, "proxy_system"),
+            "custom": f"{t(cfg, 'proxy_custom')} [{adv['proxy_url'] or 'Not set'}]",
+            "none": t(cfg, "proxy_none")
+        }
+        proxy_str = proxy_mode_map.get(adv["proxy_mode"], t(cfg, "proxy_system"))
 
         # Items list with Proceed at TOP and dividers
         items = [
@@ -1653,9 +1797,9 @@ def configure_advanced_video_options(stdscr, cfg: dict) -> dict | None:
             t(cfg, "adv_embed_chap", v=("YES" if adv["embed_chapters"] else "NO")),
             t(cfg, "adv_embed_subs", v=("YES" if adv["embed_subs"] else "NO")),
             t(cfg, "adv_write_extra", v=("YES" if adv["write_extra"] else "NO")),
-            "--- Network & Unblock ---",
+            "--- Network & Proxy ---",
             t(cfg, "adv_geobypass", v=("YES" if adv["geobypass"] else "NO")),
-            t(cfg, "adv_proxy", v=proxy_str),
+            t(cfg, "adv_proxy_mode", v=proxy_str),
         ]
 
         choice = run_menu(stdscr, t(cfg, "adv_title"), items, t(cfg, "footer_nav"))
@@ -1715,10 +1859,16 @@ def configure_advanced_video_options(stdscr, cfg: dict) -> dict | None:
 
         elif choice == 15:  # Geo-bypass
             adv["geobypass"] = not adv["geobypass"]
-        elif choice == 16:  # Proxy
-            pr = text_input(stdscr, t(cfg, "adv_title"), t(cfg, "adv_proxy_prompt"), t(cfg, "footer_input"), default=adv["proxy"])
-            if pr is not None:
-                adv["proxy"] = pr.strip()
+        elif choice == 16:  # Proxy Mode
+            p_opts = [t(cfg, "proxy_system"), t(cfg, "proxy_custom"), t(cfg, "proxy_none")]
+            pi = run_menu(stdscr, t(cfg, "adv_title"), p_opts, t(cfg, "footer_nav"))
+            if pi is not None:
+                modes = ["system", "custom", "none"]
+                adv["proxy_mode"] = modes[pi]
+                if modes[pi] == "custom":
+                    pr = text_input(stdscr, t(cfg, "adv_title"), t(cfg, "adv_proxy_url_prompt"), t(cfg, "footer_input"), default=adv["proxy_url"])
+                    if pr is not None:
+                        adv["proxy_url"] = pr.strip()
 
 
 def screen_video(stdscr, cfg: dict) -> None:
@@ -1756,12 +1906,12 @@ def screen_video(stdscr, cfg: dict) -> None:
     if adv is None:
         return
 
-    out_dir = text_input(stdscr, t(cfg, "video_title"), t(cfg, "outdir_prompt"),
-                          t(cfg, "footer_input"), default=cfg["download_dir"])
-    if out_dir is None:
+    out_dir_str = text_input(stdscr, t(cfg, "video_title"), t(cfg, "outdir_prompt"),
+                              t(cfg, "footer_input"), default=cfg["download_dir"])
+    if out_dir_str is None:
         return
 
-    expanded_out = Path(out_dir).expanduser()
+    expanded_out = parse_user_path(out_dir_str)
     expanded_out.mkdir(parents=True, exist_ok=True)
 
     # Build Advanced yt-dlp command
@@ -1795,8 +1945,10 @@ def screen_video(stdscr, cfg: dict) -> None:
 
     if adv["geobypass"]:
         cmd += ["--geo-bypass"]
-    if adv["proxy"]:
-        cmd += ["--proxy", adv["proxy"]]
+
+    # Proxy Override
+    cmd += get_proxy_args(cfg, override_mode=adv["proxy_mode"], override_url=adv["proxy_url"])
+
     if adv["ratelimit"]:
         cmd += ["--limit-rate", adv["ratelimit"]]
     if adv["live_start"]:
@@ -1816,7 +1968,7 @@ def screen_video(stdscr, cfg: dict) -> None:
         cmd += ["--download-sections", clip_val]
 
     if adv["embed_metadata"]:
-        cmd += ["--embed-metadata", "--embed-thumbnail"]
+        cmd += ["--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg"]
     if adv["embed_chapters"]:
         cmd += ["--embed-chapters"]
     if adv["embed_subs"] and subs:
@@ -1832,7 +1984,7 @@ def screen_video(stdscr, cfg: dict) -> None:
     cmd_str = " ".join(cmd)
     subtitle = (f"{t(cfg, 'label_url')} {url}\n"
                 f"{t(cfg, 'label_quality')} {q_display}   {t(cfg, 'label_preset')} {p_display}\n"
-                f"{t(cfg, 'label_folder')} {out_dir}\n"
+                f"{t(cfg, 'label_folder')} {out_dir_str}\n"
                 f"{t(cfg, 'label_cmd')} {cmd_str}")
     confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
                         t(cfg, "footer_nav"), subtitle=subtitle)
@@ -1846,7 +1998,7 @@ def screen_convert(stdscr, cfg: dict) -> None:
     if not file_path_str:
         return
 
-    inp_path = Path(file_path_str.strip()).expanduser()
+    inp_path = parse_user_path(file_path_str)
     if not inp_path.exists() or not inp_path.is_file():
         show_message(stdscr, t(cfg, "convert_title"), [t(cfg, "convert_err_notfound", f=str(inp_path))], t(cfg, "footer_message"))
         return
@@ -1883,7 +2035,7 @@ def screen_convert(stdscr, cfg: dict) -> None:
     if out_dir_str is None:
         return
 
-    out_dir = Path(out_dir_str.strip()).expanduser() if out_dir_str.strip() else inp_path.parent
+    out_dir = parse_user_path(out_dir_str) if out_dir_str.strip() else inp_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
     out_file = out_dir / f"{inp_path.stem}{suffix}.{ext}"
@@ -1909,7 +2061,7 @@ def screen_batch_convert(stdscr, cfg: dict) -> None:
     if not folder_str:
         return
 
-    folder_path = Path(folder_str.strip()).expanduser()
+    folder_path = parse_user_path(folder_str)
     if not folder_path.exists() or not folder_path.is_dir():
         show_message(stdscr, t(cfg, "batch_title"), [t(cfg, "convert_err_notfound", f=str(folder_path))], t(cfg, "footer_message"))
         return
@@ -1947,7 +2099,7 @@ def screen_trim(stdscr, cfg: dict) -> None:
     if not file_path_str:
         return
 
-    inp_path = Path(file_path_str.strip()).expanduser()
+    inp_path = parse_user_path(file_path_str)
     if not inp_path.exists() or not inp_path.is_file():
         show_message(stdscr, t(cfg, "trim_title"), [t(cfg, "convert_err_notfound", f=str(inp_path))], t(cfg, "footer_message"))
         return
@@ -1989,7 +2141,7 @@ def screen_probe(stdscr, cfg: dict) -> None:
     if not file_path_str:
         return
 
-    inp_path = Path(file_path_str.strip()).expanduser()
+    inp_path = parse_user_path(file_path_str)
     if not inp_path.exists() or not inp_path.is_file():
         show_message(stdscr, t(cfg, "probe_title"), [t(cfg, "convert_err_notfound", f=str(inp_path))], t(cfg, "footer_message"))
         return
@@ -2071,7 +2223,7 @@ def screen_audio(stdscr, cfg: dict) -> None:
     if out_dir is None:
         return
 
-    expanded_out = Path(out_dir).expanduser()
+    expanded_out = parse_user_path(out_dir)
     expanded_out.mkdir(parents=True, exist_ok=True)
     cmd = ["yt-dlp", "-x", "--audio-format", audio_format, "--audio-quality", "0",
            "-o", str(expanded_out / "%(title)s.%(ext)s"), *cookie_args(cfg), url]
@@ -2101,7 +2253,7 @@ def screen_playlist(stdscr, cfg: dict) -> None:
     if out_dir is None:
         return
 
-    expanded_out = Path(out_dir).expanduser()
+    expanded_out = parse_user_path(out_dir)
     expanded_out.mkdir(parents=True, exist_ok=True)
     template = str(expanded_out / "%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s")
     cargs = cookie_args(cfg)
@@ -2174,7 +2326,7 @@ def screen_subs(stdscr, cfg: dict) -> None:
     if out_dir is None:
         return
 
-    expanded_out = Path(out_dir).expanduser()
+    expanded_out = parse_user_path(out_dir)
     expanded_out.mkdir(parents=True, exist_ok=True)
     cmd = ["yt-dlp", "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", langs,
            "-o", str(expanded_out / "%(title)s.%(ext)s"), *cookie_args(cfg), url]
@@ -2246,7 +2398,7 @@ def screen_cookies(stdscr, cfg: dict) -> None:
                          t(cfg, "footer_message"))
 
         elif choice == 2:  # edit in $EDITOR
-            exp_path = Path(path).expanduser()
+            exp_path = parse_user_path(path)
             exp_path.parent.mkdir(parents=True, exist_ok=True)
             if not exp_path.exists():
                 exp_path.write_text("# Netscape HTTP Cookie File\n# Generated by MogDop's MediaCLI.\n\n")
@@ -2306,7 +2458,7 @@ def screen_settings(stdscr, cfg: dict) -> None:
                 "items": [
                     t(cfg, "settings_download_dir", v=cfg["download_dir"]),
                     t(cfg, "settings_goal", v=cfg.get("user_goal", "editing")),
-                    t(cfg, "settings_proxy", v=(cfg.get("proxy") or "None")),
+                    t(cfg, "settings_proxy", v=(cfg.get("proxy_url") if cfg.get("proxy_mode") == "custom" else t(cfg, f"proxy_{cfg.get('proxy_mode', 'system')}"))),
                     t(cfg, "settings_language", v=("English" if lang == "en" else "Русский")),
                     t(cfg, "settings_cookies", v=cookies_status_line(cfg)),
                 ]
@@ -2355,10 +2507,16 @@ def screen_settings(stdscr, cfg: dict) -> None:
                 if gi is not None:
                     cfg["user_goal"] = goals[gi]
                     save_config(cfg)
-            elif current_item == 2:  # Proxy
-                pr = text_input(stdscr, t(cfg, "settings_title"), t(cfg, "adv_proxy_prompt"), t(cfg, "footer_input"), default=cfg.get("proxy", ""))
-                if pr is not None:
-                    cfg["proxy"] = pr.strip()
+            elif current_item == 2:  # Proxy Mode
+                p_opts = [t(cfg, "proxy_system"), t(cfg, "proxy_custom"), t(cfg, "proxy_none")]
+                pi = run_menu(stdscr, t(cfg, "settings_title"), p_opts, t(cfg, "footer_nav"))
+                if pi is not None:
+                    modes = ["system", "custom", "none"]
+                    cfg["proxy_mode"] = modes[pi]
+                    if modes[pi] == "custom":
+                        pr = text_input(stdscr, t(cfg, "settings_title"), t(cfg, "adv_proxy_url_prompt"), t(cfg, "footer_input"), default=cfg.get("proxy_url", ""))
+                        if pr is not None:
+                            cfg["proxy_url"] = pr.strip()
                     save_config(cfg)
             elif current_item == 3:  # Language
                 li = run_menu(stdscr, t(cfg, "settings_title"), ["English", "Русский"], t(cfg, "footer_nav"), subtitle=t(cfg, "settings_choose_language"))
@@ -2491,7 +2649,7 @@ def main_tui(stdscr) -> None:
             lines += ["", t(cfg, "deps_arch_install_prompt")]
             choice = run_menu(stdscr, t(cfg, "deps_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")], t(cfg, "footer_nav"), subtitle="\n".join(lines))
             if choice == 0:
-                run_external(stdscr, ["sudo", "pacman", "-S", "--noconfirm", *missing_bins])
+                run_external(stdscr, ["sudo", "pacman", "-S", "--noconfirm", *missing_bins, "atomicparsley"])
         else:
             lines += ["", t(cfg, "deps_install_header"), "  " + get_install_command(missing_bins), "", t(cfg, "deps_note")]
             show_message(stdscr, t(cfg, "deps_title"), lines, t(cfg, "footer_message"))
@@ -2500,7 +2658,6 @@ def main_tui(stdscr) -> None:
     current_item = 0
 
     while True:
-        # Build Tabbed structure with i18n
         tabs = []
         for tab in MAIN_TABS:
             tabs.append({
@@ -2556,14 +2713,14 @@ def classic_menu() -> int:
     if choice == "4":
         try:
             inp = input("Enter path to file: ").strip()
-            if not inp or not Path(inp).expanduser().exists():
+            if not inp or not parse_user_path(inp).exists():
                 print("File not found.")
                 return 1
             print("1) DaVinci DNxHR HQ  2) DaVinci ProRes HQ  3) DaVinci H.264+PCM  4) Standard MP4  5) WAV  6) MP3  7) Custom")
             p_sel = input("Preset [1]: ").strip() or "1"
             p_map = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6}
             preset = CONVERT_PRESETS[p_map.get(p_sel, 0)]
-            inp_path = Path(inp).expanduser()
+            inp_path = parse_user_path(inp)
 
             if preset["id"] == "custom":
                 ext = input("Custom extension [mov]: ").strip() or "mov"
@@ -2587,7 +2744,7 @@ def classic_menu() -> int:
     except (KeyboardInterrupt, EOFError):
         return 0
 
-    exp_out = Path(out).expanduser()
+    exp_out = parse_user_path(out)
     exp_out.mkdir(parents=True, exist_ok=True)
     cargs = cookie_args(cfg)
 
@@ -2622,7 +2779,7 @@ def classic_menu() -> int:
 
 def _resolve_cookie_args(args: argparse.Namespace) -> list[str]:
     if getattr(args, "cookies", None):
-        return ["--cookies", str(Path(args.cookies).expanduser())]
+        return ["--cookies", str(parse_user_path(args.cookies))]
     if getattr(args, "cookies_from_browser", None):
         return ["--cookies-from-browser", args.cookies_from_browser]
     return cookie_args(load_config())
@@ -2630,7 +2787,7 @@ def _resolve_cookie_args(args: argparse.Namespace) -> list[str]:
 
 def cli_video(args: argparse.Namespace) -> int:
     cfg = load_config()
-    out_dir = Path(args.output).expanduser()
+    out_dir = parse_user_path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
     fmt = f"bestvideo[height<={args.quality}]+bestaudio/best[height<={args.quality}]" if args.quality else "bestvideo+bestaudio/best"
 
@@ -2647,8 +2804,8 @@ def cli_video(args: argparse.Namespace) -> int:
         cmd += ["--audio-multistreams"]
     if args.sponsorblock:
         cmd += ["--sponsorblock-remove", args.sponsorblock]
-    if getattr(args, "proxy", None):
-        cmd += ["--proxy", args.proxy]
+
+    cmd += get_proxy_args(cfg, override_mode=args.proxy_mode, override_url=args.proxy_url)
 
     cmd += ["-f", fmt, "-o", str(out_dir / "%(title)s.%(ext)s"),
             *preset_args, *_resolve_cookie_args(args), args.url]
@@ -2658,12 +2815,12 @@ def cli_video(args: argparse.Namespace) -> int:
 
 
 def cli_convert(args: argparse.Namespace) -> int:
-    inp_path = Path(args.input).expanduser()
+    inp_path = parse_user_path(args.input)
     if not inp_path.exists():
         print(f"[!] Input file '{inp_path}' does not exist.")
         return 1
 
-    out_dir = Path(args.output_dir).expanduser() if args.output_dir else inp_path.parent
+    out_dir = parse_user_path(args.output_dir) if args.output_dir else inp_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if args.preset == "custom":
@@ -2682,7 +2839,7 @@ def cli_convert(args: argparse.Namespace) -> int:
 
 
 def cli_trim(args: argparse.Namespace) -> int:
-    inp_path = Path(args.input).expanduser()
+    inp_path = parse_user_path(args.input)
     if not inp_path.exists():
         print(f"[!] Input file '{inp_path}' does not exist.")
         return 1
@@ -2702,7 +2859,7 @@ def cli_trim(args: argparse.Namespace) -> int:
 
 
 def cli_probe(args: argparse.Namespace) -> int:
-    inp_path = Path(args.input).expanduser()
+    inp_path = parse_user_path(args.input)
     if not inp_path.exists():
         print(f"[!] Input file '{inp_path}' does not exist.")
         return 1
@@ -2712,7 +2869,7 @@ def cli_probe(args: argparse.Namespace) -> int:
 
 
 def cli_audio(args: argparse.Namespace) -> int:
-    out_dir = Path(args.output).expanduser()
+    out_dir = parse_user_path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = ["yt-dlp", "-x", "--audio-format", args.format, "--audio-quality", "0",
            "-o", str(out_dir / "%(title)s.%(ext)s"), *_resolve_cookie_args(args), args.url]
@@ -2721,7 +2878,7 @@ def cli_audio(args: argparse.Namespace) -> int:
 
 def cli_playlist(args: argparse.Namespace) -> int:
     cfg = load_config()
-    out_dir = Path(args.output).expanduser()
+    out_dir = parse_user_path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
     template = str(out_dir / "%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s")
     cargs = _resolve_cookie_args(args)
@@ -2758,7 +2915,7 @@ def cli_info(args: argparse.Namespace) -> int:
 
 
 def cli_subs(args: argparse.Namespace) -> int:
-    out_dir = Path(args.output).expanduser()
+    out_dir = parse_user_path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = ["yt-dlp", "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", args.langs,
            "-o", str(out_dir / "%(title)s.%(ext)s"), *_resolve_cookie_args(args), args.url]
@@ -2793,7 +2950,8 @@ def build_parser() -> argparse.ArgumentParser:
                          help="FFmpeg export preset (e.g. davinci-dnxhr, standard-mp4, custom)")
     p_video.add_argument("--all-audio", action="store_true", help="Download all available audio streams")
     p_video.add_argument("--sponsorblock", default=None, help="Remove sponsors (e.g. sponsor, selfpromo)")
-    p_video.add_argument("--proxy", default=None, help="Proxy URL (e.g. socks5://127.0.0.1:1080)")
+    p_video.add_argument("--proxy-mode", default=None, choices=["system", "custom", "none"])
+    p_video.add_argument("--proxy-url", default=None, help="Custom proxy URL")
     p_video.add_argument("--custom-ext", default="mp4", help="Extension for custom preset")
     p_video.add_argument("--custom-flags", default="-c:v libx264 -c:a aac", help="Flags for custom preset")
     p_video.add_argument("-o", "--output", default=DEFAULT_DOWNLOAD_DIR)
