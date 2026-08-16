@@ -105,6 +105,13 @@ DEFAULT_CONFIG = {
     "proxy_mode": "system",       # "system" | "custom" | "none"
     "proxy_url": "",              # Custom proxy URL
     "progress_style": "blocks",   # "blocks" | "classic" | "dots" | "minimal"
+    # Download Presets system (see "Download Presets" section below).
+    # Stored inline in config.json (not a separate presets.json) because MediaCLI already
+    # persists everything through load_config()/save_config() as a single small JSON blob;
+    # a second file would need its own load/merge/error-handling path for no real benefit
+    # at this data size (a handful of named parameter sets).
+    "download_presets": [],       # list[dict] — see default_preset_fields()/new preset objects
+    "default_download_preset": None,  # id of the preset used by "Quick Download", or None
 }
 
 BROWSERS = ["chrome", "chromium", "firefox", "brave", "edge", "opera", "vivaldi", "safari"]
@@ -654,6 +661,75 @@ STRINGS = {
         "label_langs": "Languages:",
         "label_cmd": "Command:",
 
+        # Download Presets system
+        "download_mode_quick": "Quick Download (use default preset)",
+        "download_mode_preset": "Choose a saved preset",
+        "download_mode_manual": "Configure manually",
+        "download_mode_subtitle": "How would you like to download this?",
+        "preset_none_quick": "No default preset is set yet. Configuring manually instead.",
+        "presets_list_title": "Download Presets",
+        "presets_list_subtitle": "Choose a saved preset",
+        "preset_create_new": "+ Create new preset...",
+        "preset_no_presets": "You have no saved presets yet. Configure manually and save one first.",
+        "preset_default_marker": "[default] ",
+        "manual_title": "Manual Download Setup",
+        "cat_general": "General",
+        "cat_video": "Video",
+        "cat_audio": "Audio",
+        "cat_subtitles": "Subtitles",
+        "cat_thumbmeta": "Thumbnails & Metadata",
+        "cat_sponsorblock": "Post-processing & SponsorBlock",
+        "cat_network": "Network & Cookies",
+        "cat_playlist": "Playlist",
+        "cat_actions": "Save / Start",
+        "field_quality": "Max quality (height, e.g. 1080; empty = best): {v}",
+        "field_output_template": "Output filename template (empty = default): {v}",
+        "field_video_preset": "Codec / export preset: {v}",
+        "field_vcodec": "Video codec preference: {v}",
+        "field_fps": "FPS limit: {v}",
+        "field_audio_track": "Audio track(s): {v}",
+        "field_audio_only": "Audio only (extract audio, skip video): {v}",
+        "field_audio_format": "Audio format: {v}",
+        "field_subs_enabled": "Download subtitles: {v}",
+        "field_sub_langs": "Subtitle languages: {v}",
+        "field_auto_subs": "Include auto-generated subtitles: {v}",
+        "field_embed_subs": "Embed subtitles into video file: {v}",
+        "field_embed_metadata": "Embed thumbnail & metadata: {v}",
+        "field_embed_chapters": "Embed chapters: {v}",
+        "field_write_extra": "Save description & thumbnail as separate files: {v}",
+        "field_sponsorblock": "SponsorBlock: {v}",
+        "field_clip_range": "Time clip / section: {v}",
+        "field_proxy_mode": "Proxy: {v}",
+        "field_ratelimit": "Download speed limit: {v}",
+        "field_geobypass": "Geo-bypass: {v}",
+        "field_live_start": "Live stream from start: {v}",
+        "field_cookies_status": "Cookies (managed in Settings): {v}",
+        "field_playlist_items": "Playlist items (e.g. 1,3,5-8): {v}",
+        "field_playlist_start": "Playlist start index: {v}",
+        "field_playlist_end": "Playlist end index: {v}",
+        "field_download_archive": "Skip already-downloaded items (archive file): {v}",
+        "preset_action_save": "Save as new preset...",
+        "preset_action_save_existing": "Save changes to this preset",
+        "preset_action_run_once": "Download once, don't save",
+        "preset_action_cancel": "Cancel",
+        "preset_name_prompt": "Name for this preset:",
+        "preset_saved_as_default_q": "Also set as default preset for Quick Download?",
+        "preset_opt_use": "Use this preset now",
+        "preset_opt_edit": "Edit",
+        "preset_opt_duplicate": "Duplicate",
+        "preset_opt_delete": "Delete",
+        "preset_opt_set_default": "Set as default (Quick Download)",
+        "preset_opt_unset_default": "Unset as default",
+        "preset_opt_back": "Back",
+        "preset_confirm_delete": "Delete preset '{v}'? This cannot be undone.",
+        "preset_duplicate_suffix": " (copy)",
+        "settings_download_presets": "Manage Download Presets ({v} saved)",
+        "val_yes": "YES",
+        "val_no": "NO",
+        "val_best": "best",
+        "val_default": "(default)",
+        "val_custom_ffmpeg": "Custom FFmpeg preset",
+
         "audio_title": "Download audio",
         "audio_format_subtitle": "Choose audio format (WAV recommended for DaVinci Resolve)",
 
@@ -876,6 +952,75 @@ STRINGS = {
         "label_mode": "Режим:",
         "label_langs": "Языки:",
         "label_cmd": "Команда:",
+
+        # Download Presets system
+        "download_mode_quick": "Быстрая загрузка (пресет по умолчанию)",
+        "download_mode_preset": "Выбрать сохранённый пресет",
+        "download_mode_manual": "Настроить вручную",
+        "download_mode_subtitle": "Как Вы хотите скачать это видео?",
+        "preset_none_quick": "Пресет по умолчанию ещё не задан. Переходим к ручной настройке.",
+        "presets_list_title": "Пресеты загрузки",
+        "presets_list_subtitle": "Выберите сохранённый пресет",
+        "preset_create_new": "+ Создать новый пресет...",
+        "preset_no_presets": "У Вас пока нет сохранённых пресетов. Настройте вручную и сохраните первый.",
+        "preset_default_marker": "[по умолчанию] ",
+        "manual_title": "Ручная настройка загрузки",
+        "cat_general": "Основные",
+        "cat_video": "Видео",
+        "cat_audio": "Аудио",
+        "cat_subtitles": "Субтитры",
+        "cat_thumbmeta": "Обложка и метаданные",
+        "cat_sponsorblock": "Постобработка и SponsorBlock",
+        "cat_network": "Сеть и Cookies",
+        "cat_playlist": "Плейлист",
+        "cat_actions": "Сохранить / Начать",
+        "field_quality": "Макс. качество (высота, напр. 1080; пусто = лучшее): {v}",
+        "field_output_template": "Шаблон имени файла (пусто = по умолчанию): {v}",
+        "field_video_preset": "Пресет кодека / экспорта: {v}",
+        "field_vcodec": "Приоритет видеокодека: {v}",
+        "field_fps": "Ограничение FPS: {v}",
+        "field_audio_track": "Звуковая дорожка(и): {v}",
+        "field_audio_only": "Только аудио (извлечь звук, без видео): {v}",
+        "field_audio_format": "Формат аудио: {v}",
+        "field_subs_enabled": "Скачивать субтитры: {v}",
+        "field_sub_langs": "Языки субтитров: {v}",
+        "field_auto_subs": "Включая автоматические субтитры: {v}",
+        "field_embed_subs": "Вшить субтитры в видеофайл: {v}",
+        "field_embed_metadata": "Вшить обложку и метаданные: {v}",
+        "field_embed_chapters": "Вшить главы: {v}",
+        "field_write_extra": "Сохранить описание и обложку отдельными файлами: {v}",
+        "field_sponsorblock": "SponsorBlock: {v}",
+        "field_clip_range": "Обрезка фрагмента / Таймкод: {v}",
+        "field_proxy_mode": "Прокси: {v}",
+        "field_ratelimit": "Ограничение скорости скачивания: {v}",
+        "field_geobypass": "Обход гео-ограничений: {v}",
+        "field_live_start": "Стрим с самого начала: {v}",
+        "field_cookies_status": "Cookies (настраиваются в Настройках): {v}",
+        "field_playlist_items": "Элементы плейлиста (напр. 1,3,5-8): {v}",
+        "field_playlist_start": "Начальный индекс плейлиста: {v}",
+        "field_playlist_end": "Конечный индекс плейлиста: {v}",
+        "field_download_archive": "Пропускать уже скачанное (файл-архив): {v}",
+        "preset_action_save": "Сохранить как новый пресет...",
+        "preset_action_save_existing": "Сохранить изменения в этот пресет",
+        "preset_action_run_once": "Скачать один раз, не сохранять",
+        "preset_action_cancel": "Отмена",
+        "preset_name_prompt": "Название пресета:",
+        "preset_saved_as_default_q": "Сделать пресетом по умолчанию для быстрой загрузки?",
+        "preset_opt_use": "Использовать этот пресет",
+        "preset_opt_edit": "Редактировать",
+        "preset_opt_duplicate": "Дублировать",
+        "preset_opt_delete": "Удалить",
+        "preset_opt_set_default": "Сделать пресетом по умолчанию",
+        "preset_opt_unset_default": "Убрать пометку 'по умолчанию'",
+        "preset_opt_back": "Назад",
+        "preset_confirm_delete": "Удалить пресет '{v}'? Это действие необратимо.",
+        "preset_duplicate_suffix": " (копия)",
+        "settings_download_presets": "Управление пресетами загрузки ({v} шт.)",
+        "val_yes": "ДА",
+        "val_no": "НЕТ",
+        "val_best": "лучшее",
+        "val_default": "(по умолчанию)",
+        "val_custom_ffmpeg": "Свой пресет FFmpeg",
 
         "audio_title": "Скачать аудио",
         "audio_format_subtitle": "Выберите формат аудио (WAV рекомендуется для DaVinci Resolve)",
@@ -1871,125 +2016,560 @@ def configure_advanced_video_options(stdscr, cfg: dict) -> dict | None:
                         adv["proxy_url"] = pr.strip()
 
 
+# ==========================================================================
+# Download Presets (superset of VIDEO_PRESETS: codec preset + subs + meta +
+# sponsorblock + network + cookies + playlist options, saved & reusable)
+# ==========================================================================
+
+def default_preset_fields() -> dict:
+    """Returns the default flat field dict backing a new Download Preset.
+
+    Kept flat (not nested per-category) on purpose: the declarative
+    DOWNLOAD_PRESET_CATEGORIES schema below renders/edits any field the same way
+    regardless of which category it's displayed under, so nesting would only add
+    bookkeeping without simplifying the renderer.
+    """
+    return {
+        "quality": "",                 # "" = best, else height in px, e.g. "1080"
+        "video_preset": "davinci_dnxhr",  # VIDEO_PRESETS key, or "custom"
+        "custom_ext": "mp4",
+        "custom_flags": "-c:v libx264 -c:a aac",
+        "vcodec": "auto",              # "auto" | "av1" | "vp9" | "h264"
+        "fps_limit": "",               # "" | "60" | "30"
+        "audio_track": "default",      # "default" | "all" | "ru" | "en" | "custom"
+        "custom_audio_lang": "",
+        "audio_only": False,
+        "audio_format": "mp3",
+        "subs_enabled": False,
+        "sub_langs": "ru,en",
+        "auto_subs": False,
+        "embed_subs": False,
+        "embed_metadata": True,
+        "embed_chapters": True,
+        "write_extra": False,
+        "sponsorblock": "off",         # "off" | "sponsors" | "sponsors_promo"
+        "clip_range": "",
+        "proxy_mode": "system",        # "system" | "custom" | "none"
+        "proxy_url": "",
+        "ratelimit": "",
+        "geobypass": False,
+        "live_start": False,
+        "output_template": "",
+        "playlist_items": "",
+        "playlist_start": "",
+        "playlist_end": "",
+        "download_archive": False,
+    }
+
+
+def new_preset_id() -> str:
+    return f"p{int(time.time() * 1000)}"
+
+
+def build_ytdlp_args_from_preset(preset: dict, cfg: dict, out_dir: Path, for_playlist: bool = False) -> list[str]:
+    """Deterministically builds the yt-dlp argument list (excluding the 'yt-dlp'
+    binary and the URL itself) from a Download Preset, analogous to how
+    VIDEO_PRESETS[key]["args"] is spliced into `cmd` elsewhere in this file.
+
+    Design decision: the scriptable CLI (`build_parser`, `-p/--preset` on the
+    `video`/`playlist` subcommands) intentionally keeps pointing at the legacy
+    VIDEO_PRESETS/PRESET_CLI_MAP table, not at cfg["download_presets"]. Reasons:
+      1. Backward compatibility — existing shell scripts/aliases using -p must
+         keep working unchanged (see requirement to not break cli_video/cli_playlist).
+      2. Download Presets are named, user-saved, TUI-managed objects tied to a
+         user's local config.json; a `-p` value from the CLI has no such identity
+         to look up before the config is loaded in a scripting context.
+    This function is exposed at module level, though, so a future
+    `--download-preset NAME` CLI flag could resolve a name against
+    cfg["download_presets"] and call this same function without touching -p.
+    """
+    f = preset["fields"]
+    cmd: list[str] = []
+
+    if f.get("audio_only"):
+        cmd += ["-x", "--audio-format", f.get("audio_format", "mp3"), "--audio-quality", "0"]
+    else:
+        quality = f.get("quality", "")
+        fps_suffix = f"[fps<={f['fps_limit']}]" if f.get("fps_limit") else ""
+        q_str = f"[height<={quality}]" if quality else ""
+        vc_filter = {"av1": "[vcodec^=av01]", "vp9": "[vcodec^=vp9]", "h264": "[vcodec^=avc1]"}.get(f.get("vcodec", "auto"), "")
+
+        track = f.get("audio_track", "default")
+        if track == "all":
+            cmd += ["--audio-multistreams"]
+            fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+mergeall[format_id*=audio]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio/best"
+        elif track in ("ru", "en"):
+            fmt = (f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language={track}]/"
+                   f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language^={track}]/"
+                   f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio")
+        elif track == "custom" and f.get("custom_audio_lang"):
+            clang = f["custom_audio_lang"].strip()
+            fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language={clang}]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio"
+        else:
+            fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio/best{q_str}{fps_suffix}"
+        cmd += ["-f", fmt]
+
+        video_preset_id = f.get("video_preset", "davinci_dnxhr")
+        if video_preset_id == "custom":
+            ext = (f.get("custom_ext") or "mp4").strip(".")
+            flags = f.get("custom_flags") or "-c:v libx264 -c:a aac"
+            cmd += ["--recode-video", ext, "--postprocessor-args", f"ffmpeg:{flags}"]
+        else:
+            cmd += VIDEO_PRESETS.get(video_preset_id, VIDEO_PRESETS["davinci_dnxhr"])["args"]
+
+    if f.get("geobypass"):
+        cmd += ["--geo-bypass"]
+    cmd += get_proxy_args(cfg, override_mode=f.get("proxy_mode"), override_url=f.get("proxy_url"))
+    if f.get("ratelimit"):
+        cmd += ["--limit-rate", f["ratelimit"]]
+    if f.get("live_start"):
+        cmd += ["--live-from-start"]
+    if f.get("write_extra"):
+        cmd += ["--write-description", "--write-thumbnail"]
+
+    sb = f.get("sponsorblock", "off")
+    if sb == "sponsors":
+        cmd += ["--sponsorblock-remove", "sponsor"]
+    elif sb == "sponsors_promo":
+        cmd += ["--sponsorblock-remove", "sponsor,selfpromo,interaction"]
+
+    if f.get("clip_range"):
+        clip_val = f["clip_range"].strip()
+        if not clip_val.startswith("*"):
+            clip_val = f"*{clip_val}"
+        cmd += ["--download-sections", clip_val]
+
+    if not f.get("audio_only"):
+        if f.get("embed_metadata", True):
+            cmd += ["--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg"]
+        if f.get("embed_chapters", True):
+            cmd += ["--embed-chapters"]
+
+    if f.get("subs_enabled"):
+        cmd += ["--write-subs", "--sub-langs", f.get("sub_langs") or cfg.get("sub_langs", "ru,en")]
+        if f.get("auto_subs"):
+            cmd += ["--write-auto-subs"]
+        if f.get("embed_subs"):
+            cmd += ["--embed-subs"]
+
+    if for_playlist:
+        cmd += ["--yes-playlist"]
+        if f.get("playlist_items"):
+            cmd += ["--playlist-items", f["playlist_items"]]
+        if f.get("playlist_start"):
+            cmd += ["--playlist-start", f["playlist_start"]]
+        if f.get("playlist_end"):
+            cmd += ["--playlist-end", f["playlist_end"]]
+        if f.get("download_archive"):
+            cmd += ["--download-archive", str(out_dir / "download_archive.txt")]
+        template = f.get("output_template") or "%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s"
+    else:
+        template = f.get("output_template") or "%(title)s.%(ext)s"
+
+    cmd += ["-o", str(out_dir / template)]
+    cmd += cookie_args(cfg)
+    return cmd
+
+
+def preset_preview_line(cfg: dict, preset: dict) -> str:
+    """Short one-line preview of a preset's key parameters, used as a subtitle/
+    description in preset-selection menus."""
+    f = preset["fields"]
+    lang = cfg.get("language", "en")
+    parts = []
+    parts.append((f["quality"] + "p") if f.get("quality") else t(cfg, "val_best"))
+    if f.get("audio_only"):
+        parts.append(f.get("audio_format", "mp3").upper())
+    elif f.get("video_preset") == "custom":
+        parts.append(t(cfg, "val_custom_ffmpeg"))
+    else:
+        parts.append(get_preset_name(cfg, f.get("video_preset", "davinci_dnxhr")))
+    if f.get("subs_enabled"):
+        parts.append(f"Subs: {f.get('sub_langs', '')}" if lang == "en" else f"Субтитры: {f.get('sub_langs', '')}")
+    if f.get("sponsorblock", "off") != "off":
+        parts.append("SponsorBlock")
+    return " | ".join(parts)
+
+
+# Declarative schema for the manual-configuration screen. Each category is
+# rendered as one tab (run_menu_tabbed); each field is one line inside that tab.
+# type: "bool" -> toggled in place; "text" -> text_input; "choice" -> run_menu
+# over `choices` (list of (value, label_key)); other values are special-cased
+# in edit_preset_field() below (video_preset / audio_track / proxy_mode).
+DOWNLOAD_PRESET_CATEGORIES = [
+    {"title_key": "cat_general", "fields": [
+        {"key": "quality", "label_key": "field_quality", "type": "text"},
+        {"key": "output_template", "label_key": "field_output_template", "type": "text"},
+    ]},
+    {"title_key": "cat_video", "fields": [
+        {"key": "video_preset", "label_key": "field_video_preset", "type": "video_preset"},
+        {"key": "vcodec", "label_key": "field_vcodec", "type": "choice", "choices": [
+            ("auto", "adv_vcodec_auto"), ("av1", "adv_vcodec_av1"), ("vp9", "adv_vcodec_vp9"), ("h264", "adv_vcodec_h264")]},
+        {"key": "fps_limit", "label_key": "field_fps", "type": "choice", "value_suffix": " FPS", "choices": [
+            ("", "adv_fps_max"), ("60", None), ("30", None)]},
+    ]},
+    {"title_key": "cat_audio", "fields": [
+        {"key": "audio_only", "label_key": "field_audio_only", "type": "bool"},
+        {"key": "audio_format", "label_key": "field_audio_format", "type": "choice",
+         "choices": [(a, a) for a in AUDIO_FORMATS]},
+        {"key": "audio_track", "label_key": "field_audio_track", "type": "audio_track"},
+    ]},
+    {"title_key": "cat_subtitles", "fields": [
+        {"key": "subs_enabled", "label_key": "field_subs_enabled", "type": "bool"},
+        {"key": "sub_langs", "label_key": "field_sub_langs", "type": "text"},
+        {"key": "auto_subs", "label_key": "field_auto_subs", "type": "bool"},
+        {"key": "embed_subs", "label_key": "field_embed_subs", "type": "bool"},
+    ]},
+    {"title_key": "cat_thumbmeta", "fields": [
+        {"key": "embed_metadata", "label_key": "field_embed_metadata", "type": "bool"},
+        {"key": "embed_chapters", "label_key": "field_embed_chapters", "type": "bool"},
+        {"key": "write_extra", "label_key": "field_write_extra", "type": "bool"},
+    ]},
+    {"title_key": "cat_sponsorblock", "fields": [
+        {"key": "sponsorblock", "label_key": "field_sponsorblock", "type": "choice", "choices": [
+            ("off", "adv_sb_off"), ("sponsors", "adv_sb_sponsors"), ("sponsors_promo", "adv_sb_all")]},
+        {"key": "clip_range", "label_key": "field_clip_range", "type": "text"},
+    ]},
+    {"title_key": "cat_network", "fields": [
+        {"key": "proxy_mode", "label_key": "field_proxy_mode", "type": "proxy_mode"},
+        {"key": "ratelimit", "label_key": "field_ratelimit", "type": "choice", "choices": [
+            ("", "adv_ratelimit_max"), ("10M", None), ("5M", None), ("2M", None)]},
+        {"key": "geobypass", "label_key": "field_geobypass", "type": "bool"},
+        {"key": "live_start", "label_key": "field_live_start", "type": "bool"},
+        {"key": "cookies_status", "label_key": "field_cookies_status", "type": "cookies_readonly"},
+    ]},
+    {"title_key": "cat_playlist", "fields": [
+        {"key": "playlist_items", "label_key": "field_playlist_items", "type": "text"},
+        {"key": "playlist_start", "label_key": "field_playlist_start", "type": "text"},
+        {"key": "playlist_end", "label_key": "field_playlist_end", "type": "text"},
+        {"key": "download_archive", "label_key": "field_download_archive", "type": "bool"},
+    ]},
+]
+
+
+def format_preset_field_value(cfg: dict, fld: dict, fields: dict) -> str:
+    """Renders the current value of one declarative preset field for display."""
+    key = fld["key"]
+    ftype = fld["type"]
+    if ftype == "bool":
+        return t(cfg, "val_yes") if fields.get(key) else t(cfg, "val_no")
+    if ftype == "text":
+        val = fields.get(key, "")
+        return val if val else t(cfg, "val_default")
+    if ftype == "choice":
+        cur = fields.get(key)
+        for value, label_key in fld["choices"]:
+            if value == cur:
+                if label_key is None:
+                    return t(cfg, "val_default") if not value else f"{value}{fld.get('value_suffix', '')}"
+                return t(cfg, label_key)
+        return t(cfg, "val_default")
+    if ftype == "video_preset":
+        if fields.get(key) == "custom":
+            return t(cfg, "val_custom_ffmpeg")
+        return get_preset_name(cfg, fields.get(key, "davinci_dnxhr"))
+    if ftype == "audio_track":
+        track = fields.get(key, "default")
+        label_map = {"default": "adv_audio_default", "all": "adv_audio_all", "ru": "adv_audio_ru", "en": "adv_audio_en"}
+        if track == "custom":
+            return f"{t(cfg, 'adv_audio_custom')} ({fields.get('custom_audio_lang', '')})"
+        return t(cfg, label_map.get(track, "adv_audio_default"))
+    if ftype == "proxy_mode":
+        mode = fields.get(key, "system")
+        if mode == "custom":
+            return f"{t(cfg, 'proxy_custom')} [{fields.get('proxy_url') or '—'}]"
+        return t(cfg, {"system": "proxy_system", "none": "proxy_none"}.get(mode, "proxy_system"))
+    if ftype == "cookies_readonly":
+        return cookies_status_line(cfg)
+    return str(fields.get(key, ""))
+
+
+def edit_preset_field(stdscr, cfg: dict, fld: dict, fields: dict) -> None:
+    """Dispatches to the right small widget to edit one declarative preset field,
+    mutating `fields` in place. Shared by the manual-configuration screen so no
+    category needs its own hand-written edit block."""
+    key = fld["key"]
+    ftype = fld["type"]
+
+    if ftype == "bool":
+        fields[key] = not fields.get(key, False)
+
+    elif ftype == "text":
+        val = text_input(stdscr, t(cfg, "manual_title"), t(cfg, fld["label_key"], v=""),
+                          t(cfg, "footer_input"), default=str(fields.get(key, "")))
+        if val is not None:
+            fields[key] = val.strip()
+
+    elif ftype == "choice":
+        suffix = fld.get("value_suffix", "")
+        labels = [(t(cfg, lk) if lk is not None else (t(cfg, "val_default") if not v else f"{v}{suffix}"))
+                  for v, lk in fld["choices"]]
+        cur = fields.get(key)
+        start = next((i for i, (v, _) in enumerate(fld["choices"]) if v == cur), 0)
+        ci = run_menu(stdscr, t(cfg, "manual_title"), labels, t(cfg, "footer_nav"), start_index=start)
+        if ci is not None:
+            fields[key] = fld["choices"][ci][0]
+
+    elif ftype == "video_preset":
+        preset_keys = get_ordered_video_preset_keys(cfg)
+        lang = cfg.get("language", "en")
+        labels = [VIDEO_PRESETS[pk]["name_ru"] if lang == "ru" else VIDEO_PRESETS[pk]["name_en"] for pk in preset_keys]
+        descs = [VIDEO_PRESETS[pk]["desc_ru"] if lang == "ru" else VIDEO_PRESETS[pk]["desc_en"] for pk in preset_keys]
+        start = preset_keys.index(fields.get(key, "davinci_dnxhr")) if fields.get(key) in preset_keys else 0
+        pi = run_menu(stdscr, t(cfg, "manual_title"), labels, t(cfg, "footer_nav"),
+                      subtitle=t(cfg, "preset_subtitle"), start_index=start, descriptions=descs)
+        if pi is not None:
+            selected = preset_keys[pi]
+            fields[key] = selected
+            if selected == "custom":
+                ext = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "custom_ext_prompt"),
+                                  t(cfg, "footer_input"), default=fields.get("custom_ext", "mp4"))
+                if ext:
+                    fields["custom_ext"] = ext.strip(".")
+                flags = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "custom_flags_prompt"),
+                                    t(cfg, "footer_input"), default=fields.get("custom_flags", "-c:v libx264 -c:a aac"))
+                if flags is not None:
+                    fields["custom_flags"] = flags
+
+    elif ftype == "audio_track":
+        a_opts = [t(cfg, "adv_audio_default"), t(cfg, "adv_audio_all"), t(cfg, "adv_audio_ru"),
+                  t(cfg, "adv_audio_en"), t(cfg, "adv_audio_custom")]
+        keys = ["default", "all", "ru", "en", "custom"]
+        start = keys.index(fields.get(key, "default")) if fields.get(key) in keys else 0
+        ai = run_menu(stdscr, t(cfg, "manual_title"), a_opts, t(cfg, "footer_nav"), start_index=start)
+        if ai is not None:
+            fields[key] = keys[ai]
+            if keys[ai] == "custom":
+                clang = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "adv_audio_prompt"),
+                                    t(cfg, "footer_input"), default=fields.get("custom_audio_lang", ""))
+                if clang:
+                    fields["custom_audio_lang"] = clang.strip()
+
+    elif ftype == "proxy_mode":
+        p_opts = [t(cfg, "proxy_system"), t(cfg, "proxy_custom"), t(cfg, "proxy_none")]
+        modes = ["system", "custom", "none"]
+        start = modes.index(fields.get(key, "system")) if fields.get(key) in modes else 0
+        pi = run_menu(stdscr, t(cfg, "manual_title"), p_opts, t(cfg, "footer_nav"), start_index=start)
+        if pi is not None:
+            fields[key] = modes[pi]
+            if modes[pi] == "custom":
+                pr = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "adv_proxy_url_prompt"),
+                                 t(cfg, "footer_input"), default=fields.get("proxy_url", ""))
+                if pr is not None:
+                    fields["proxy_url"] = pr.strip()
+
+    elif ftype == "cookies_readonly":
+        pass  # informational only; managed from Settings -> Cookies
+
+
+def screen_manual_preset_config(stdscr, cfg: dict, fields: dict, for_playlist: bool = False) -> tuple[str, dict] | None:
+    """Tabbed manual configuration screen over DOWNLOAD_PRESET_CATEGORIES.
+
+    Returns ("save", fields), ("run_once", fields), or None (cancelled).
+    `fields` is mutated in place as the user edits it.
+    """
+    categories = DOWNLOAD_PRESET_CATEGORIES if for_playlist else DOWNLOAD_PRESET_CATEGORIES[:-1]
+    current_tab, current_item = 0, 0
+
+    while True:
+        tabs = []
+        for cat in categories:
+            items = [t(cfg, fld["label_key"], v=format_preset_field_value(cfg, fld, fields)) for fld in cat["fields"]]
+            tabs.append({"title": t(cfg, cat["title_key"]), "items": items})
+        tabs.append({"title": t(cfg, "cat_actions"),
+                     "items": [t(cfg, "preset_action_save"), t(cfg, "preset_action_run_once"), t(cfg, "preset_action_cancel")]})
+
+        t_idx, i_idx = run_menu_tabbed(stdscr, t(cfg, "manual_title"), tabs, t(cfg, "footer_nav"),
+                                       start_tab=current_tab, start_index=current_item)
+        if t_idx is None:
+            return None
+        current_tab, current_item = t_idx, i_idx
+
+        if t_idx == len(tabs) - 1:  # Actions tab
+            if i_idx == 0:
+                return "save", fields
+            elif i_idx == 1:
+                return "run_once", fields
+            else:
+                return None
+
+        fld = categories[t_idx]["fields"][i_idx]
+        edit_preset_field(stdscr, cfg, fld, fields)
+
+
+def prompt_save_preset(stdscr, cfg: dict, fields: dict, default_name: str = "") -> dict | None:
+    """Prompts for a name and optionally 'set as default', appends the preset to
+    cfg["download_presets"], persists cfg, and returns the new preset dict."""
+    name = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "preset_name_prompt"),
+                       t(cfg, "footer_input"), default=default_name)
+    if not name:
+        return None
+    preset = {"id": new_preset_id(), "name": name.strip(), "fields": dict(fields)}
+    cfg.setdefault("download_presets", []).append(preset)
+
+    make_default = run_menu(stdscr, t(cfg, "manual_title"),
+                             [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")], t(cfg, "footer_nav"),
+                             subtitle=t(cfg, "preset_saved_as_default_q"))
+    if make_default == 0:
+        cfg["default_download_preset"] = preset["id"]
+    save_config(cfg)
+    return preset
+
+
+def screen_manage_download_presets(stdscr, cfg: dict) -> None:
+    """CRUD screen for Download Presets, reachable from Settings."""
+    idx = 0
+    while True:
+        presets = cfg.get("download_presets", [])
+        default_id = cfg.get("default_download_preset")
+        items = [t(cfg, "preset_create_new")]
+        for p in presets:
+            marker = t(cfg, "preset_default_marker") if p["id"] == default_id else ""
+            items.append(f"{marker}{p['name']}")
+        descs = [""] + [preset_preview_line(cfg, p) for p in presets]
+
+        idx = min(idx, len(items) - 1)
+        sel = run_menu(stdscr, t(cfg, "presets_list_title"), items, t(cfg, "footer_nav"),
+                       subtitle=t(cfg, "presets_list_subtitle"), start_index=idx, descriptions=descs)
+        if sel is None:
+            return
+        idx = sel
+
+        if sel == 0:  # Create new
+            fields = default_preset_fields()
+            result = screen_manual_preset_config(stdscr, cfg, fields, for_playlist=True)
+            if result and result[0] in ("save", "run_once"):
+                prompt_save_preset(stdscr, cfg, result[1])
+            continue
+
+        preset = presets[sel - 1]
+        opt_labels = [t(cfg, "preset_opt_edit"), t(cfg, "preset_opt_duplicate")]
+        if preset["id"] == default_id:
+            opt_labels.append(t(cfg, "preset_opt_unset_default"))
+        else:
+            opt_labels.append(t(cfg, "preset_opt_set_default"))
+        opt_labels += [t(cfg, "preset_opt_delete"), t(cfg, "preset_opt_back")]
+
+        oi = run_menu(stdscr, preset["name"], opt_labels, t(cfg, "footer_nav"),
+                      subtitle=preset_preview_line(cfg, preset))
+        if oi is None or oi == len(opt_labels) - 1:
+            continue
+
+        if oi == 0:  # Edit
+            fields = dict(preset["fields"])
+            result = screen_manual_preset_config(stdscr, cfg, fields, for_playlist=True)
+            if result and result[0] in ("save", "run_once"):
+                preset["fields"] = fields
+                save_config(cfg)
+        elif oi == 1:  # Duplicate
+            new_p = {"id": new_preset_id(), "name": preset["name"] + t(cfg, "preset_duplicate_suffix"),
+                     "fields": dict(preset["fields"])}
+            cfg["download_presets"].append(new_p)
+            save_config(cfg)
+        elif oi == 2:  # Set/unset default
+            cfg["default_download_preset"] = None if preset["id"] == default_id else preset["id"]
+            save_config(cfg)
+        elif oi == 3:  # Delete
+            confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
+                               t(cfg, "footer_nav"), subtitle=t(cfg, "preset_confirm_delete", v=preset["name"]))
+            if confirm == 0:
+                cfg["download_presets"] = [p for p in cfg["download_presets"] if p["id"] != preset["id"]]
+                if cfg.get("default_download_preset") == preset["id"]:
+                    cfg["default_download_preset"] = None
+                save_config(cfg)
+                idx = 0
+
+
+def choose_download_preset(stdscr, cfg: dict) -> dict | None:
+    """Lists cfg["download_presets"] for selection, with a per-item preview."""
+    presets = cfg.get("download_presets", [])
+    if not presets:
+        show_message(stdscr, t(cfg, "presets_list_title"), [t(cfg, "preset_no_presets")], t(cfg, "footer_message"))
+        return None
+    labels = [p["name"] for p in presets]
+    descs = [preset_preview_line(cfg, p) for p in presets]
+    pi = run_menu(stdscr, t(cfg, "presets_list_title"), labels, t(cfg, "footer_nav"),
+                  subtitle=t(cfg, "presets_list_subtitle"), descriptions=descs)
+    return presets[pi] if pi is not None else None
+
+
+def run_download_with_preset(stdscr, cfg: dict, url: str, preset: dict, out_dir_str: str,
+                             for_playlist: bool = False, op_type: str = "Download Video") -> None:
+    """Builds the final yt-dlp command from a preset, shows the confirmation
+    screen, and (on confirm) runs it via run_with_log — shared by Quick / Preset
+    / Manual (run-once) paths in screen_video and screen_playlist."""
+    expanded_out = parse_user_path(out_dir_str)
+    expanded_out.mkdir(parents=True, exist_ok=True)
+    args = build_ytdlp_args_from_preset(preset, cfg, expanded_out, for_playlist=for_playlist)
+    cmd = ["yt-dlp", *args, url]
+
+    cmd_str = " ".join(cmd)
+    subtitle = (f"{t(cfg, 'label_url')} {url}\n"
+                f"{preset_preview_line(cfg, preset)}\n"
+                f"{t(cfg, 'label_folder')} {out_dir_str}\n"
+                f"{t(cfg, 'label_cmd')} {cmd_str}")
+    confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
+                       t(cfg, "footer_nav"), subtitle=subtitle)
+    if confirm == 0:
+        run_with_log(stdscr, cfg, cmd, op_type=op_type, source=url, target=str(expanded_out))
+
+
 def screen_video(stdscr, cfg: dict) -> None:
+    """Entry point: URL first, then a 3-way choice — Quick Download (default
+    preset) / Choose a saved preset / Configure manually — per the Download
+    Presets UX spec. `screen_playlist` mirrors this same flow for consistency."""
     url = text_input(stdscr, t(cfg, "video_title"), t(cfg, "video_prompt_url"), t(cfg, "footer_input"))
     if not url:
         return
 
-    quality_opts = [(t(cfg, "quality_best"), ""), ("2160p (4K)", "2160"), ("1440p (2K)", "1440"),
-                     ("1080p", "1080"), ("720p", "720"), ("480p", "480"), (t(cfg, "quality_custom"), "custom")]
-    labels = [label for label, _ in quality_opts]
-    qi = run_menu(stdscr, t(cfg, "video_title"), labels, t(cfg, "footer_nav"),
-                  subtitle=t(cfg, "video_quality_subtitle"))
-    if qi is None:
-        return
-    quality = quality_opts[qi][1]
-    if quality == "custom":
-        quality = text_input(stdscr, t(cfg, "video_title"), t(cfg, "quality_custom_prompt"),
-                              t(cfg, "footer_input")) or ""
-
-    preset_id, preset_args = select_preset_menu(stdscr, cfg)
-    if preset_id is None:
+    mode_labels = [t(cfg, "download_mode_quick"), t(cfg, "download_mode_preset"), t(cfg, "download_mode_manual")]
+    mode = run_menu(stdscr, t(cfg, "video_title"), mode_labels, t(cfg, "footer_nav"),
+                    subtitle=t(cfg, "download_mode_subtitle"))
+    if mode is None:
         return
 
-    subs_choice = run_menu(stdscr, t(cfg, "video_title"),
-                            [t(cfg, "subs_choice_none"), t(cfg, "subs_choice_yes")], t(cfg, "footer_nav"))
-    if subs_choice is None:
-        return
-    subs = None
-    if subs_choice == 1:
-        subs = text_input(stdscr, t(cfg, "video_title"), t(cfg, "subs_langs_prompt"),
-                           t(cfg, "footer_input"), default=cfg["sub_langs"])
+    if mode == 0:  # Quick Download
+        default_id = cfg.get("default_download_preset")
+        preset = next((p for p in cfg.get("download_presets", []) if p["id"] == default_id), None)
+        if preset is None:
+            show_message(stdscr, t(cfg, "video_title"), [t(cfg, "preset_none_quick")], t(cfg, "footer_message"))
+            mode = 2
+        else:
+            out_dir_str = cfg.get("download_dir", DEFAULT_DOWNLOAD_DIR)
+            run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, op_type="Download Video")
+            return
 
-    # Configure Advanced Options
-    adv = configure_advanced_video_options(stdscr, cfg)
-    if adv is None:
+    if mode == 1:  # Choose a saved preset
+        preset = choose_download_preset(stdscr, cfg)
+        if preset is None:
+            return
+        out_dir_str = text_input(stdscr, t(cfg, "video_title"), t(cfg, "outdir_prompt"),
+                                  t(cfg, "footer_input"), default=cfg["download_dir"])
+        if out_dir_str is None:
+            return
+        run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, op_type="Download Video")
         return
+
+    # mode == 2: Configure manually
+    fields = default_preset_fields()
+    result = screen_manual_preset_config(stdscr, cfg, fields, for_playlist=False)
+    if result is None:
+        return
+    action, fields = result
 
     out_dir_str = text_input(stdscr, t(cfg, "video_title"), t(cfg, "outdir_prompt"),
                               t(cfg, "footer_input"), default=cfg["download_dir"])
     if out_dir_str is None:
         return
 
-    expanded_out = parse_user_path(out_dir_str)
-    expanded_out.mkdir(parents=True, exist_ok=True)
-
-    # Build Advanced yt-dlp command
-    cmd = ["yt-dlp"]
-
-    fps_suffix = f"[fps<={adv['fps_limit']}]" if adv['fps_limit'] else ""
-    q_str = f"[height<={quality}]" if quality else ""
-
-    vc_filter = ""
-    if adv["vcodec"] == "av1":
-        vc_filter = "[vcodec^=av01]"
-    elif adv["vcodec"] == "vp9":
-        vc_filter = "[vcodec^=vp9]"
-    elif adv["vcodec"] == "h264":
-        vc_filter = "[vcodec^=avc1]"
-
-    if adv["audio_track"] == "all":
-        cmd += ["--audio-multistreams"]
-        fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+mergeall[format_id*=audio]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio/best"
-    elif adv["audio_track"] == "ru":
-        fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language=ru]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language^=ru]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio"
-    elif adv["audio_track"] == "en":
-        fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language=en]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language^=en]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio"
-    elif adv["audio_track"] == "custom" and adv["custom_audio_lang"]:
-        clang = adv["custom_audio_lang"].strip()
-        fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language={clang}]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio"
+    if action == "save":
+        preset = prompt_save_preset(stdscr, cfg, fields)
+        if preset is None:
+            preset = {"id": "", "name": "", "fields": fields}
     else:
-        fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio/best{q_str}{fps_suffix}"
+        preset = {"id": "", "name": "", "fields": fields}
 
-    cmd += ["-f", fmt]
-
-    if adv["geobypass"]:
-        cmd += ["--geo-bypass"]
-
-    # Proxy Override
-    cmd += get_proxy_args(cfg, override_mode=adv["proxy_mode"], override_url=adv["proxy_url"])
-
-    if adv["ratelimit"]:
-        cmd += ["--limit-rate", adv["ratelimit"]]
-    if adv["live_start"]:
-        cmd += ["--live-from-start"]
-    if adv["write_extra"]:
-        cmd += ["--write-description", "--write-thumbnail"]
-
-    if adv["sponsorblock"] == "sponsors":
-        cmd += ["--sponsorblock-remove", "sponsor"]
-    elif adv["sponsorblock"] == "sponsors_promo":
-        cmd += ["--sponsorblock-remove", "sponsor,selfpromo,interaction"]
-
-    if adv["clip_range"]:
-        clip_val = adv["clip_range"].strip()
-        if not clip_val.startswith("*"):
-            clip_val = f"*{clip_val}"
-        cmd += ["--download-sections", clip_val]
-
-    if adv["embed_metadata"]:
-        cmd += ["--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg"]
-    if adv["embed_chapters"]:
-        cmd += ["--embed-chapters"]
-    if adv["embed_subs"] and subs:
-        cmd += ["--embed-subs"]
-
-    if subs:
-        cmd += ["--write-subs", "--sub-langs", subs]
-
-    cmd += ["-o", str(expanded_out / "%(title)s.%(ext)s"), *preset_args, *cookie_args(cfg), url]
-
-    q_display = quality or t(cfg, "quality_best_short")
-    p_display = get_preset_name(cfg, preset_id) if preset_id != "custom" else "Custom FFmpeg"
-    cmd_str = " ".join(cmd)
-    subtitle = (f"{t(cfg, 'label_url')} {url}\n"
-                f"{t(cfg, 'label_quality')} {q_display}   {t(cfg, 'label_preset')} {p_display}\n"
-                f"{t(cfg, 'label_folder')} {out_dir_str}\n"
-                f"{t(cfg, 'label_cmd')} {cmd_str}")
-    confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
-                        t(cfg, "footer_nav"), subtitle=subtitle)
-    if confirm == 0:
-        run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(expanded_out))
+    run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, op_type="Download Video")
 
 
 def screen_convert(stdscr, cfg: dict) -> None:
@@ -2239,40 +2819,60 @@ def screen_audio(stdscr, cfg: dict) -> None:
 
 
 def screen_playlist(stdscr, cfg: dict) -> None:
+    """Mirrors screen_video's Quick / Preset / Manual flow (for_playlist=True so
+    the Playlist category and --yes-playlist/--playlist-* flags are included)."""
     url = text_input(stdscr, t(cfg, "playlist_title"), t(cfg, "playlist_prompt_url"), t(cfg, "footer_input"))
     if not url:
         return
 
-    mode = run_menu(stdscr, t(cfg, "playlist_title"),
-                     [t(cfg, "playlist_mode_video"), t(cfg, "playlist_mode_audio")], t(cfg, "footer_nav"))
+    mode_labels = [t(cfg, "download_mode_quick"), t(cfg, "download_mode_preset"), t(cfg, "download_mode_manual")]
+    mode = run_menu(stdscr, t(cfg, "playlist_title"), mode_labels, t(cfg, "footer_nav"),
+                    subtitle=t(cfg, "download_mode_subtitle"))
     if mode is None:
         return
 
-    out_dir = text_input(stdscr, t(cfg, "playlist_title"), t(cfg, "outdir_prompt"),
-                          t(cfg, "footer_input"), default=cfg["download_dir"])
-    if out_dir is None:
+    if mode == 0:  # Quick Download
+        default_id = cfg.get("default_download_preset")
+        preset = next((p for p in cfg.get("download_presets", []) if p["id"] == default_id), None)
+        if preset is None:
+            show_message(stdscr, t(cfg, "playlist_title"), [t(cfg, "preset_none_quick")], t(cfg, "footer_message"))
+            mode = 2
+        else:
+            out_dir_str = cfg.get("download_dir", DEFAULT_DOWNLOAD_DIR)
+            run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, for_playlist=True, op_type="Download Playlist")
+            return
+
+    if mode == 1:  # Choose a saved preset
+        preset = choose_download_preset(stdscr, cfg)
+        if preset is None:
+            return
+        out_dir_str = text_input(stdscr, t(cfg, "playlist_title"), t(cfg, "outdir_prompt"),
+                                  t(cfg, "footer_input"), default=cfg["download_dir"])
+        if out_dir_str is None:
+            return
+        run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, for_playlist=True, op_type="Download Playlist")
         return
 
-    expanded_out = parse_user_path(out_dir)
-    expanded_out.mkdir(parents=True, exist_ok=True)
-    template = str(expanded_out / "%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s")
-    cargs = cookie_args(cfg)
-    if mode == 1:
-        cmd = ["yt-dlp", "-x", "--audio-format", cfg["audio_format"], "-o", template, "--yes-playlist", *cargs, url]
-    else:
-        preset_args = VIDEO_PRESETS[cfg.get("video_preset", "davinci_dnxhr")]["args"]
-        cmd = ["yt-dlp", "-f", "bestvideo+bestaudio/best", "-o", template, "--yes-playlist",
-               *preset_args, *cargs, url]
+    # mode == 2: Configure manually
+    fields = default_preset_fields()
+    result = screen_manual_preset_config(stdscr, cfg, fields, for_playlist=True)
+    if result is None:
+        return
+    action, fields = result
 
-    mode_display = t(cfg, "playlist_mode_audio") if mode == 1 else t(cfg, "playlist_mode_video")
-    cmd_str = " ".join(cmd)
-    subtitle = (f"{t(cfg, 'label_url')} {url}\n"
-                f"{t(cfg, 'label_mode')} {mode_display}   {t(cfg, 'label_folder')} {out_dir}\n"
-                f"{t(cfg, 'label_cmd')} {cmd_str}")
-    confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
-                        t(cfg, "footer_nav"), subtitle=subtitle)
-    if confirm == 0:
-        run_with_log(stdscr, cfg, cmd, op_type="Download Playlist", source=url, target=str(expanded_out))
+    out_dir_str = text_input(stdscr, t(cfg, "playlist_title"), t(cfg, "outdir_prompt"),
+                              t(cfg, "footer_input"), default=cfg["download_dir"])
+    if out_dir_str is None:
+        return
+
+    if action == "save":
+        preset = prompt_save_preset(stdscr, cfg, fields)
+        if preset is None:
+            preset = {"id": "", "name": "", "fields": fields}
+    else:
+        preset = {"id": "", "name": "", "fields": fields}
+
+    run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, for_playlist=True, op_type="Download Playlist")
 
 
 def screen_info(stdscr, cfg: dict) -> None:
@@ -2461,6 +3061,7 @@ def screen_settings(stdscr, cfg: dict) -> None:
                     t(cfg, "settings_proxy", v=(cfg.get("proxy_url") if cfg.get("proxy_mode") == "custom" else t(cfg, f"proxy_{cfg.get('proxy_mode', 'system')}"))),
                     t(cfg, "settings_language", v=("English" if lang == "en" else "Русский")),
                     t(cfg, "settings_cookies", v=cookies_status_line(cfg)),
+                    t(cfg, "settings_download_presets", v=len(cfg.get("download_presets", []))),
                 ]
             },
             {
@@ -2525,6 +3126,8 @@ def screen_settings(stdscr, cfg: dict) -> None:
                     save_config(cfg)
             elif current_item == 4:  # Cookies
                 screen_cookies(stdscr, cfg)
+            elif current_item == 5:  # Download Presets
+                screen_manage_download_presets(stdscr, cfg)
 
         # TAB 1: CONVERSION
         elif current_tab == 1:
