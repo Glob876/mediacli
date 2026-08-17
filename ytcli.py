@@ -1,51 +1,24 @@
 """
-MogDop's MediaCLI — a comprehensive console wrapper around yt-dlp & FFmpeg
-for Linux, macOS, and Windows with a navigable tabbed TUI menu.
-
-Default UI language is English. Russian can be turned on in Settings -> Language.
-
-Features:
-  - Tabbed Navigation for Main Menu & Settings (Switch tabs with Left/Right arrows).
-  - Robust Path Parsing (supports quotes, spaces, and ~ tildes like ~/Downloads/"file.mp4").
-  - FFmpeg proxy bug fixed (proxy is applied ONLY to yt-dlp).
-  - Extended Presets Library: DaVinci Resolve, Standard MP4, HEVC H.265, AV1, WebM,
-    Fast Compression (Discord/Email), FLAC Lossless, AAC M4A, MP3, WAV, GIF.
-  - Built-in System & Custom Proxy Support (SOCKS5/HTTP).
-  - Dynamic Multi-Stage Process Tracker (displays ONLY active command stages).
-  - Formatted Progress Bar Styles (Blocks, Classic, Dots, Minimal).
-  - Auto-installation of dependencies on Arch Linux.
-  - Polite, formal Russian localization ("Вы / Введите / Выберите").
-  - Advanced YouTube Video Downloading & Local FFmpeg Tools.
-  - First-time setup wizard & Operation History tracking.
-  - Ctrl+C (SIGINT) is disabled. Quit via Ctrl+Q or Exit menu item.
-
-Scriptable CLI usage:
-  ./mediacli.py video <url> [-q 1080] [-p davinci-dnxhr] [--proxy-mode system]
-  ./mediacli.py convert <file_path> [-p davinci_dnxhr_hq] [-o DIR]
-  ./mediacli.py trim <file_path> -s 00:01:00 -e 00:02:30 [--copy]
-  ./mediacli.py probe <file_path>
-  ./mediacli.py audio <url> [-f wav] [-o DIR]
-  ./mediacli.py playlist <url> [-o DIR] [--audio-only]
-  ./mediacli.py info <url>
-  ./mediacli.py subs <url> [-l ru,en] [-o DIR]
-  ./mediacli.py update
-  ./mediacli.py            # TUI menu
+MogDop's MediaCLI — Advanced Console Media Suite around yt-dlp & FFmpeg
+with Tabbed/Split TUI, Global Embedded Overlay Terminal, Background Queue,
+and Robust Multi-Platform Preset Engine.
 """
 
 import argparse
 import json
 import locale
 import os
+import queue
 import re
 import select
 import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
-# Safe curses import for Windows compatibility
 try:
     import curses
 except ImportError:
@@ -71,14 +44,11 @@ def get_config_dir() -> Path:
 
 
 def parse_user_path(raw_path: str) -> Path:
-    """Robustly cleans user input paths (strips quotes, handles ~ tildes, removes internal quotes)."""
     if not raw_path:
         return Path(".")
     s = raw_path.strip()
-    # Strip surrounding quotes if whole path is quoted
     if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
         s = s[1:-1].strip()
-    # Strip inner accidental quotes (e.g. ~/Downloads/"file name.mp4")
     s = s.replace('"', '').replace("'", '')
     return Path(s).expanduser()
 
@@ -98,20 +68,20 @@ DEFAULT_CONFIG = {
     "user_goal": "editing",       # "editing" | "downloading" | "audio" | "transcoding"
     "cookies_mode": "none",       # "none" | "file" | "browser"
     "cookies_file": DEFAULT_COOKIES_FILE,
-    "cookies_browser": "",        # e.g. "firefox" or "chrome:Default"
+    "cookies_browser": "",
     "video_preset": "davinci_dnxhr",
-    "theme": "cyan",              # "cyan" | "nord" | "matrix" | "dracula" | "gruvbox" | "fire" | "classic"
-    "use_terminal_bg": True,      # Keep terminal default background (transparent)
+    "theme": "cyan",
+    "use_terminal_bg": True,
     "proxy_mode": "system",       # "system" | "custom" | "none"
-    "proxy_url": "",              # Custom proxy URL
+    "proxy_url": "",
     "progress_style": "blocks",   # "blocks" | "classic" | "dots" | "minimal"
-    # Download Presets system (see "Download Presets" section below).
-    # Stored inline in config.json (not a separate presets.json) because MediaCLI already
-    # persists everything through load_config()/save_config() as a single small JSON blob;
-    # a second file would need its own load/merge/error-handling path for no real benefit
-    # at this data size (a handful of named parameter sets).
-    "download_presets": [],       # list[dict] — see default_preset_fields()/new preset objects
-    "default_download_preset": None,  # id of the preset used by "Quick Download", or None
+    "bg_queue_max": 3,
+    "notify_bell": True,
+    "auto_check_deps": True,
+    "default_editor": "",
+    "download_presets": [],
+    "default_download_preset": None,
+    "preset_defaults": None,
 }
 
 BROWSERS = ["chrome", "chromium", "firefox", "brave", "edge", "opera", "vivaldi", "safari"]
@@ -127,71 +97,17 @@ ASCII_ART = [
     "    \\|__|     \\|__|\\|_______|\\|_______|\\|__|\\|__|\\|__|\\|_______|\\|_______|\\|__|",
 ]
 
-# ==========================================================================
-# Themes System
-# ==========================================================================
-
 THEMES = {
-    "cyan": {
-        "id": "cyan",
-        "name_en": "Arch Cyan (Default)",
-        "name_ru": "Arch Cyan (По умолчанию)",
-        "hl_fg": 0 if curses else 0,
-        "hl_bg": 6 if curses else 6,  # COLOR_CYAN
-        "bg": 0 if curses else 0
-    },
-    "nord": {
-        "id": "nord",
-        "name_en": "Nord Blue",
-        "name_ru": "Nord Blue",
-        "hl_fg": 0 if curses else 0,
-        "hl_bg": 4 if curses else 4,  # COLOR_BLUE
-        "bg": 0 if curses else 0
-    },
-    "matrix": {
-        "id": "matrix",
-        "name_en": "Matrix Green",
-        "name_ru": "Matrix Green",
-        "hl_fg": 0 if curses else 0,
-        "hl_bg": 2 if curses else 2,  # COLOR_GREEN
-        "bg": 0 if curses else 0
-    },
-    "dracula": {
-        "id": "dracula",
-        "name_en": "Dracula Magenta",
-        "name_ru": "Dracula Magenta",
-        "hl_fg": 0 if curses else 0,
-        "hl_bg": 5 if curses else 5,  # COLOR_MAGENTA
-        "bg": 0 if curses else 0
-    },
-    "gruvbox": {
-        "id": "gruvbox",
-        "name_en": "Gruvbox Yellow",
-        "name_ru": "Gruvbox Yellow",
-        "hl_fg": 0 if curses else 0,
-        "hl_bg": 3 if curses else 3,  # COLOR_YELLOW
-        "bg": 0 if curses else 0
-    },
-    "fire": {
-        "id": "fire",
-        "name_en": "Fire Red",
-        "name_ru": "Fire Red",
-        "hl_fg": 0 if curses else 0,
-        "hl_bg": 1 if curses else 1,  # COLOR_RED
-        "bg": 0 if curses else 0
-    },
-    "classic": {
-        "id": "classic",
-        "name_en": "Classic High Contrast (White)",
-        "name_ru": "Классический высококонтрастный (Белый)",
-        "hl_fg": 0 if curses else 0,
-        "hl_bg": 7 if curses else 7,  # COLOR_WHITE
-        "bg": 0 if curses else 0
-    }
+    "cyan": {"id": "cyan", "name_en": "Arch Cyan (Default)", "name_ru": "Arch Cyan (По умолчанию)", "hl_fg": 0, "hl_bg": 6},
+    "nord": {"id": "nord", "name_en": "Nord Blue", "name_ru": "Nord Blue", "hl_fg": 0, "hl_bg": 4},
+    "matrix": {"id": "matrix", "name_en": "Matrix Green", "name_ru": "Matrix Green", "hl_fg": 0, "hl_bg": 2},
+    "dracula": {"id": "dracula", "name_en": "Dracula Magenta", "name_ru": "Dracula Magenta", "hl_fg": 0, "hl_bg": 5},
+    "gruvbox": {"id": "gruvbox", "name_en": "Gruvbox Yellow", "name_ru": "Gruvbox Yellow", "hl_fg": 0, "hl_bg": 3},
+    "fire": {"id": "fire", "name_en": "Fire Red", "name_ru": "Fire Red", "hl_fg": 0, "hl_bg": 1},
+    "classic": {"id": "classic", "name_en": "Classic High Contrast (White)", "name_ru": "Классический (Белый)", "hl_fg": 0, "hl_bg": 7}
 }
 
 HL_ATTR = None
-
 
 def apply_theme(cfg: dict) -> None:
     global HL_ATTR
@@ -201,43 +117,18 @@ def apply_theme(cfg: dict) -> None:
         curses.start_color()
         curses.use_default_colors()
         theme_id = cfg.get("theme", "cyan")
-
         theme = THEMES.get(theme_id, THEMES["cyan"])
-        hl_fg = theme["hl_fg"]
-        hl_bg = theme["hl_bg"]
-
-        curses.init_pair(1, hl_fg, hl_bg)
+        curses.init_pair(1, theme["hl_fg"], theme["hl_bg"])
+        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        curses.init_pair(3, curses.COLOR_YELLOW, -1)
+        curses.init_pair(4, curses.COLOR_GREEN, -1)
+        curses.init_pair(5, curses.COLOR_CYAN, -1)
         HL_ATTR = curses.color_pair(1)
     except curses.error:
         HL_ATTR = curses.A_REVERSE
 
-
 # ==========================================================================
-# History Tracking Helpers
-# ==========================================================================
-
-def add_history_entry(op_type: str, source: str, target: str, status: str = "Done") -> None:
-    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    entries = []
-    if HISTORY_PATH.exists():
-        try:
-            entries = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            entries = []
-    entry = {
-        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "type": op_type,
-        "source": source,
-        "target": target,
-        "status": status
-    }
-    entries.insert(0, entry)
-    entries = entries[:50]  # Keep last 50 entries
-    HISTORY_PATH.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-# ==========================================================================
-# FFmpeg Download Presets (for yt-dlp downloads)
+# Presets and Conversion Definitions
 # ==========================================================================
 
 VIDEO_PRESETS = {
@@ -245,16 +136,16 @@ VIDEO_PRESETS = {
         "id": "davinci_dnxhr",
         "name_en": "DaVinci Resolve: DNxHR HQ + PCM Audio (.mov) [RECOMMENDED]",
         "name_ru": "DaVinci Resolve: DNxHR HQ + PCM Аудио (.mov) [РЕКОМЕНДУЕТСЯ]",
-        "desc_en": "Converts video to Avid DNxHR HQ with PCM 16-bit audio. Optimal for DaVinci Resolve (especially Free version).",
-        "desc_ru": "Конвертирует в Avid DNxHR HQ с PCM 16-бит аудио. Идеально для бесплатной версии DaVinci Resolve.",
+        "desc_en": "Converts video to Avid DNxHR HQ with PCM 16-bit audio. Optimal for DaVinci Resolve.",
+        "desc_ru": "Конвертирует в Avid DNxHR HQ с PCM 16-бит аудио. Идеально для DaVinci Resolve.",
         "args": ["--recode-video", "mov", "--postprocessor-args", "ffmpeg:-c:v dnxhd -profile:v dnxhr_hq -c:a pcm_s16le"]
     },
     "davinci_prores": {
         "id": "davinci_prores",
         "name_en": "DaVinci Resolve: Apple ProRes 422 + PCM Audio (.mov)",
         "name_ru": "DaVinci Resolve: Apple ProRes 422 + PCM Аудио (.mov)",
-        "desc_en": "Apple ProRes HQ video codec with uncompressed PCM audio in MOV container. Studio editing standard.",
-        "desc_ru": "Видеокодек Apple ProRes HQ с несжатым PCM аудио в контейнере MOV. Студийный стандарт для монтажа.",
+        "desc_en": "Apple ProRes HQ video codec with uncompressed PCM audio in MOV container.",
+        "desc_ru": "Видеокодек Apple ProRes HQ с несжатым PCM аудио в MOV контейнере.",
         "args": ["--recode-video", "mov", "--postprocessor-args", "ffmpeg:-c:v prores_ks -profile:v 3 -c:a pcm_s16le"]
     },
     "davinci_h264": {
@@ -269,32 +160,32 @@ VIDEO_PRESETS = {
         "id": "standard_mp4",
         "name_en": "Standard MP4 (H.264 + AAC)",
         "name_ru": "Стандартный MP4 (H.264 + AAC)",
-        "desc_en": "Universal MP4 container with H.264 video and AAC audio. High compatibility for web and media players.",
-        "desc_ru": "Универсальный MP4 с H.264 видео и AAC аудио. Максимальная совместимость с плеерами и соцсетями.",
+        "desc_en": "Universal MP4 container with H.264 video and AAC audio. High compatibility.",
+        "desc_ru": "Универсальный MP4 с H.264 видео и AAC аудио. Максимальная совместимость.",
         "args": ["--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx264 -c:a aac"]
     },
     "hevc_mp4": {
         "id": "hevc_mp4",
         "name_en": "High Efficiency MP4 (H.265 / HEVC + AAC)",
         "name_ru": "Высокоэффективный MP4 (H.265 / HEVC + AAC)",
-        "desc_en": "H.265/HEVC video codec. Up to 50% smaller file size with high visual quality. Great for 4K/8K.",
-        "desc_ru": "Видеокодек H.265/HEVC. До 50% меньший размер файла при высоком качестве. Отлично для 4K/8K.",
+        "desc_en": "H.265/HEVC video codec. Up to 50% smaller file size with high visual quality.",
+        "desc_ru": "Видеокодек H.265/HEVC. До 50% меньший размер файла при высоком качестве.",
         "args": ["--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx265 -c:a aac"]
     },
     "webm_vp9": {
         "id": "webm_vp9",
         "name_en": "WebM (VP9 + Opus)",
         "name_ru": "WebM (VP9 + Opus)",
-        "desc_en": "Open WebM media format with VP9 video and Opus audio. Perfect for web browsers and HTML5.",
-        "desc_ru": "Открытый веб-формат WebM с видео VP9 и аудио Opus. Идеально для браузеров и веб-сайтов.",
+        "desc_en": "Open WebM media format with VP9 video and Opus audio. Perfect for web browsers.",
+        "desc_ru": "Открытый веб-формат WebM с видео VP9 и аудио Opus. Идеально для браузеров.",
         "args": ["--recode-video", "webm", "--postprocessor-args", "ffmpeg:-c:v libvpx-vp9 -c:a libopus"]
     },
     "mkv_av1": {
         "id": "mkv_av1",
         "name_en": "Modern MKV (AV1 + AAC)",
         "name_ru": "Современный MKV (AV1 + AAC)",
-        "desc_en": "Next-generation AV1 video codec in Matroska MKV container. Ultra high compression efficiency.",
-        "desc_ru": "Видеокодек нового поколения AV1 в контейнере MKV. Ультравысокая эффективность сжатия.",
+        "desc_en": "Next-generation AV1 video codec in Matroska MKV container. Ultra high efficiency.",
+        "desc_ru": "Видеокодек нового поколения AV1 в контейнере MKV. Высокая эффективность сжатия.",
         "args": ["--recode-video", "mkv", "--postprocessor-args", "ffmpeg:-c:v libsvtav1 -c:a aac"]
     },
     "audio_mp3": {
@@ -302,7 +193,7 @@ VIDEO_PRESETS = {
         "name_en": "Audio Only: MP3 320 kbps",
         "name_ru": "Только аудио: MP3 320 кбит/с",
         "desc_en": "Extracts audio stream into high quality 320 kbps MP3 format.",
-        "desc_ru": "Извлекает звуковую дорожку в высококачественный MP3 320 кбит/с.",
+        "desc_ru": "Извлекает звуковую дорожку в MP3 320 кбит/с.",
         "args": ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
     },
     "audio_flac": {
@@ -310,7 +201,7 @@ VIDEO_PRESETS = {
         "name_en": "Audio Only: FLAC Lossless",
         "name_ru": "Только аудио: FLAC без потерь",
         "desc_en": "Extracts audio stream into lossless FLAC audio format.",
-        "desc_ru": "Извлекает звуковую дорожку в сжатый формат без потерь качества FLAC.",
+        "desc_ru": "Извлекает звуковую дорожку в сжатый формат без потерь FLAC.",
         "args": ["-x", "--audio-format", "flac"]
     },
     "default": {
@@ -343,17 +234,13 @@ PRESET_CLI_MAP = {
     "custom": "custom",
 }
 
-# ==========================================================================
-# Local File Conversion Presets (for FFmpeg converter tab)
-# ==========================================================================
-
 CONVERT_PRESETS = [
     {
         "id": "davinci_dnxhr_hq",
-        "name_en": "DaVinci Resolve: DNxHR HQ + PCM (.mov) [Recommended]",
-        "name_ru": "DaVinci Resolve: DNxHR HQ + PCM (.mov) [Рекомендуется]",
-        "desc_en": "Avid DNxHR HQ video codec with uncompressed 16-bit PCM audio in MOV container. Works reliably in DaVinci Resolve.",
-        "desc_ru": "Кодек Avid DNxHR HQ с несжатым PCM 16-бит аудио в MOV. Надёжно работает в бесплатном DaVinci.",
+        "name_en": "DaVinci Resolve: DNxHR HQ + PCM (.mov)",
+        "name_ru": "DaVinci Resolve: DNxHR HQ + PCM (.mov)",
+        "desc_en": "Avid DNxHR HQ video with 16-bit PCM audio in MOV.",
+        "desc_ru": "Кодек Avid DNxHR HQ с несжатым PCM 16-бит аудио в MOV.",
         "ext": "mov",
         "suffix": "_dnxhr",
         "ffmpeg_flags": ["-c:v", "dnxhd", "-profile:v", "dnxhr_hq", "-c:a", "pcm_s16le"]
@@ -362,71 +249,31 @@ CONVERT_PRESETS = [
         "id": "davinci_prores",
         "name_en": "DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
         "name_ru": "DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
-        "desc_en": "Apple ProRes HQ video codec with PCM 16-bit audio. Studio quality for video editing.",
-        "desc_ru": "Видеокодек Apple ProRes HQ с несжатым PCM 16-бит аудио. Студийный стандарт для видеомонтажа.",
+        "desc_en": "Apple ProRes HQ video codec with PCM 16-bit audio.",
+        "desc_ru": "Видеокодек Apple ProRes HQ с несжатым PCM 16-бит аудио.",
         "ext": "mov",
         "suffix": "_prores",
         "ffmpeg_flags": ["-c:v", "prores_ks", "-profile:v", "3", "-c:a", "pcm_s16le"]
     },
     {
-        "id": "davinci_h264",
-        "name_en": "DaVinci Resolve: H.264 + PCM Audio (.mov)",
-        "name_ru": "DaVinci Resolve: H.264 + PCM Аудио (.mov)",
-        "desc_en": "H.264 video with PCM audio in MOV container. Smaller file size while maintaining audio compatibility in DaVinci.",
-        "desc_ru": "Видео H.264 с PCM аудио в контейнере MOV. Меньший размер файла и рабочий звук в DaVinci.",
-        "ext": "mov",
-        "suffix": "_davinci",
-        "ffmpeg_flags": ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "pcm_s16le"]
-    },
-    {
         "id": "standard_mp4",
         "name_en": "Standard MP4 (H.264 + AAC)",
         "name_ru": "Стандартный MP4 (H.264 + AAC)",
-        "desc_en": "Universal MP4 container with H.264 video and AAC audio. Compatible with all smartphones, web, and TVs.",
-        "desc_ru": "Универсальный MP4 с H.264 видео и AAC аудио. Совместим со всеми смартфонами, сайтами и ТВ.",
+        "desc_en": "Universal MP4 container with H.264 video and AAC audio.",
+        "desc_ru": "Универсальный MP4 с H.264 видео и AAC аудио.",
         "ext": "mp4",
         "suffix": "_mp4",
         "ffmpeg_flags": ["-c:v", "libx264", "-c:a", "aac", "-b:a", "192k"]
     },
     {
-        "id": "hevc_mp4",
-        "name_en": "High Efficiency MP4 (H.265 / HEVC + AAC)",
-        "name_ru": "Высокоэффективный MP4 (H.265 / HEVC + AAC)",
-        "desc_en": "Encodes with x265 codec. Up to 50% smaller file size at high quality. Great for archiving 4K/8K media.",
-        "desc_ru": "Кодирование с кодеком x265. До 50% меньший размер файла при высоком качестве. Отлично для архива 4K/8K.",
-        "ext": "mp4",
-        "suffix": "_hevc",
-        "ffmpeg_flags": ["-c:v", "libx265", "-c:a", "aac", "-b:a", "192k"]
-    },
-    {
         "id": "fast_compress",
-        "name_en": "Fast Video Compress (H.264 CRF 28 - Web / Discord)",
-        "name_ru": "Быстрое сжатие видео (H.264 CRF 28 - Web / Discord)",
-        "desc_en": "Reduces file size dramatically for easy sharing via Discord, Telegram, or Email.",
-        "desc_ru": "Сильно уменьшает размер файла для быстрой отправки в Telegram, Discord или по почте.",
+        "name_en": "Fast Video Compress (H.264 CRF 28)",
+        "name_ru": "Быстрое сжатие видео (H.264 CRF 28)",
+        "desc_en": "Reduces file size dramatically for easy web sharing.",
+        "desc_ru": "Сильно уменьшает размер файла для быстрой отправки в сеть.",
         "ext": "mp4",
         "suffix": "_compressed",
         "ffmpeg_flags": ["-c:v", "libx264", "-crf", "28", "-preset", "faster", "-c:a", "aac", "-b:a", "128k"]
-    },
-    {
-        "id": "webm_vp9",
-        "name_en": "Open WebM (VP9 + Opus)",
-        "name_ru": "Открытый WebM (VP9 + Opus)",
-        "desc_en": "Converts file to open WebM media container for web browser streaming.",
-        "desc_ru": "Переводит файл в открытый формат WebM для публикаций в вебе и браузерах.",
-        "ext": "webm",
-        "suffix": "_webm",
-        "ffmpeg_flags": ["-c:v", "libvpx-vp9", "-crf", "30", "-b:v", "0", "-c:a", "libopus"]
-    },
-    {
-        "id": "mkv_av1",
-        "name_en": "Modern MKV (AV1 + AAC)",
-        "name_ru": "Современный MKV (AV1 + AAC)",
-        "desc_en": "Encodes video using open SVT-AV1 codec into Matroska MKV container.",
-        "desc_ru": "Кодирует видео современным открытым кодеком SVT-AV1 в контейнер MKV.",
-        "ext": "mkv",
-        "suffix": "_av1",
-        "ffmpeg_flags": ["-c:v", "libsvtav1", "-crf", "32", "-c:a", "aac"]
     },
     {
         "id": "audio_wav",
@@ -443,99 +290,238 @@ CONVERT_PRESETS = [
         "name_en": "Extract Audio: MP3 320 kbps (.mp3)",
         "name_ru": "Извлечь аудио: MP3 320 кбит/с (.mp3)",
         "desc_en": "Extracts audio track into high-bitrate MP3 audio file.",
-        "desc_ru": "Извлекает аудиодорожку в высококачественный MP3 файл 320 кбит/с.",
+        "desc_ru": "Извлекает аудиодорожку в MP3 файл 320 кбит/с.",
         "ext": "mp3",
         "suffix": "_audio",
         "ffmpeg_flags": ["-vn", "-ab", "320k"]
     },
     {
-        "id": "audio_flac",
-        "name_en": "Extract Audio: FLAC Lossless (.flac)",
-        "name_ru": "Извлечь аудио: FLAC без потерь (.flac)",
-        "desc_en": "Extracts audio track into lossless compressed FLAC audio format.",
-        "desc_ru": "Извлекает аудиодорожку в сжатый формат без потерь качества FLAC.",
-        "ext": "flac",
-        "suffix": "_audio",
-        "ffmpeg_flags": ["-vn", "-c:a", "flac"]
-    },
-    {
-        "id": "audio_aac",
-        "name_en": "Extract Audio: AAC / M4A 256 kbps (.m4a)",
-        "name_ru": "Извлечь аудио: AAC / M4A 256 кбит/с (.m4a)",
-        "desc_en": "Extracts audio track into AAC format inside M4A container (Apple/mobile standard).",
-        "desc_ru": "Извлекает аудиодорожку в формат AAC в контейнере M4A (стандарт Apple).",
-        "ext": "m4a",
-        "suffix": "_audio",
-        "ffmpeg_flags": ["-vn", "-c:a", "aac", "-b:a", "256k"]
-    },
-    {
-        "id": "gif_anim",
-        "name_en": "Create Animated GIF (.gif)",
-        "name_ru": "Создать анимированный GIF (.gif)",
-        "desc_en": "Converts video snippet into animated GIF image (15 FPS, max width 480px).",
-        "desc_ru": "Конвертирует видео в анимированный гиф-файл (15 FPS, макс. ширина 480px).",
-        "ext": "gif",
-        "suffix": "_anim",
-        "ffmpeg_flags": ["-vf", "fps=15,scale=480:-1:flags=lanczos", "-c:v", "gif"]
-    },
-    {
         "id": "custom",
         "name_en": "Custom FFmpeg command...",
         "name_ru": "Свой пресет FFmpeg...",
-        "desc_en": "Specify custom file extension and custom FFmpeg flags manually.",
-        "desc_ru": "Задать собственное расширение файла и произвольные флаги FFmpeg вручную.",
+        "desc_en": "Specify custom file extension and flags manually.",
+        "desc_ru": "Задать собственное расширение и флаги FFmpeg вручную.",
         "ext": "mov",
         "suffix": "_custom",
         "ffmpeg_flags": []
     }
 ]
 
-
 def get_ordered_video_preset_keys(cfg: dict) -> list[str]:
     goal = cfg.get("user_goal", "editing")
     if goal == "downloading":
-        return ["standard_mp4", "hevc_mp4", "default", "webm_vp9", "mkv_av1", "davinci_dnxhr", "davinci_prores", "davinci_h264", "audio_mp3", "audio_flac", "custom"]
+        return ["standard_mp4", "hevc_mp4", "default", "webm_vp9", "mkv_av1", "davinci_dnxhr", "davinci_prores", "audio_mp3", "audio_flac", "custom"]
     elif goal == "audio":
         return ["audio_mp3", "audio_flac", "standard_mp4", "default", "davinci_dnxhr", "custom"]
-    else:  # "editing" or "transcoding"
-        return ["davinci_dnxhr", "davinci_prores", "davinci_h264", "standard_mp4", "hevc_mp4", "default", "webm_vp9", "mkv_av1", "audio_mp3", "audio_flac", "custom"]
-
+    return ["davinci_dnxhr", "davinci_prores", "davinci_h264", "standard_mp4", "hevc_mp4", "default", "webm_vp9", "mkv_av1", "audio_mp3", "audio_flac", "custom"]
 
 def get_ordered_convert_presets(cfg: dict) -> list[dict]:
     goal = cfg.get("user_goal", "editing")
-    if goal == "downloading" or goal == "transcoding":
-        order = ["standard_mp4", "hevc_mp4", "fast_compress", "mkv_av1", "webm_vp9", "davinci_dnxhr_hq", "davinci_prores", "davinci_h264", "audio_mp3", "audio_wav", "audio_flac", "audio_aac", "gif_anim", "custom"]
+    if goal in ("downloading", "transcoding"):
+        order = ["standard_mp4", "fast_compress", "davinci_dnxhr_hq", "davinci_prores", "audio_mp3", "audio_wav", "custom"]
     elif goal == "audio":
-        order = ["audio_mp3", "audio_wav", "audio_flac", "audio_aac", "standard_mp4", "hevc_mp4", "davinci_dnxhr_hq", "custom"]
-    else:  # "editing"
-        order = ["davinci_dnxhr_hq", "davinci_prores", "davinci_h264", "standard_mp4", "hevc_mp4", "fast_compress", "audio_wav", "audio_mp3", "audio_flac", "audio_aac", "gif_anim", "custom"]
-
-    preset_dict = {p["id"]: p for p in CONVERT_PRESETS}
-    return [preset_dict[pid] for pid in order if pid in preset_dict]
-
+        order = ["audio_mp3", "audio_wav", "standard_mp4", "davinci_dnxhr_hq", "custom"]
+    else:
+        order = ["davinci_dnxhr_hq", "davinci_prores", "standard_mp4", "fast_compress", "audio_wav", "audio_mp3", "custom"]
+    p_dict = {p["id"]: p for p in CONVERT_PRESETS}
+    return [p_dict[pid] for pid in order if pid in p_dict]
 
 def get_proxy_args(cfg: dict, override_mode: str = None, override_url: str = None) -> list[str]:
     mode = override_mode if override_mode is not None else cfg.get("proxy_mode", "system")
     url = override_url if override_url is not None else cfg.get("proxy_url", "")
-
-    if mode == "custom" and url.strip():
+    if mode == "custom" and url and url.strip():
         return ["--proxy", url.strip()]
     elif mode == "none":
-        return ["--no-proxy"]
+        return ["--proxy", ""]
     return []
 
+# ==========================================================================
+# History Tracking Helpers
+# ==========================================================================
+
+def add_history_entry(op_type: str, source: str, target: str, status: str = "Done") -> None:
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    entries = []
+    if HISTORY_PATH.exists():
+        try:
+            entries = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            entries = []
+    entry = {
+        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "type": op_type,
+        "source": source,
+        "target": target,
+        "status": status
+    }
+    entries.insert(0, entry)
+    entries = entries[:50]
+    HISTORY_PATH.write_text(json.dumps(entries, indent=2, ensure_ascii=False), encoding="utf-8")
 
 # ==========================================================================
-# Signal Handlers (Disable Ctrl+C)
+# Dynamic Stage Parser Engine (Requirement 5)
 # ==========================================================================
 
-def setup_signal_handlers() -> None:
-    """Ignore SIGINT (Ctrl+C) so the application cannot be killed accidentally."""
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+class DynamicStageDetector:
+    """Extracts a concise, single-line description of the active stage from live process stdout."""
 
+    PATTERNS = [
+        (re.compile(r'\[(youtube|vk|twitch|generic|bilibili|soundcloud)[^\]]*\]\s*([^:]+):\s*(Downloading.*|Extracting.*)'),
+         lambda m: f"[{m.group(1).upper()}] {m.group(3)}"),
+        (re.compile(r'\[SponsorBlock\]\s*(.*)'), lambda m: f"[SponsorBlock] {m.group(1)}"),
+        (re.compile(r'\[Merger\]\s*(.*)'), lambda m: f"[Merger] {m.group(1)}"),
+        (re.compile(r'\[VideoConvertor\]\s*(.*)'), lambda m: f"[Convert] {m.group(1)}"),
+        (re.compile(r'\[ExtractAudio\]\s*(.*)'), lambda m: f"[AudioExtract] {m.group(1)}"),
+        (re.compile(r'\[Metadata\]\s*(.*)'), lambda m: f"[Metadata] {m.group(1)}"),
+        (re.compile(r'\[EmbedThumbnail\]\s*(.*)'), lambda m: f"[Thumbnail] {m.group(1)}"),
+        (re.compile(r'\[ThumbnailsConvertor\]\s*(.*)'), lambda m: f"[Thumbnail] {m.group(1)}"),
+        (re.compile(r'\[ModifyChapters\]\s*(.*)'), lambda m: f"[Chapters] {m.group(1)}"),
+        (re.compile(r'\[download\]\s+Destination:\s*(.+)'), lambda m: f"[Download] Saving {Path(m.group(1)).name}"),
+        (re.compile(r'\[download\]\s+(\d+(?:\.\d+)?%).*at\s+([^\s]+)\s+ETA\s+([^\s]+)'),
+         lambda m: f"[Download] {m.group(1)} (Speed: {m.group(2)}, ETA: {m.group(3)})"),
+        (re.compile(r'frame=\s*(\d+)\s+fps=\s*(\d+).*time=([^\s]+).*speed=\s*([^\s]+)'),
+         lambda m: f"[FFmpeg] Frame {m.group(1)} ({m.group(2)} fps, Time: {m.group(3)}, Speed: {m.group(4)})"),
+        (re.compile(r'size=\s*([^\s]+)\s+time=([^\s]+)\s+bitrate=\s*([^\s]+)'),
+         lambda m: f"[FFmpeg] Time: {m.group(2)} ({m.group(1)}, Bitrate: {m.group(3)})"),
+    ]
+
+    @classmethod
+    def detect(cls, line: str, current_stage: str) -> str:
+        s = line.strip()
+        if not s:
+            return current_stage
+        for regex, formatter in cls.PATTERNS:
+            m = regex.search(s)
+            if m:
+                try:
+                    return formatter(m)
+                except Exception:
+                    pass
+        if s.startswith("ERROR:"):
+            return f"[Error] {s[6:].strip()[:70]}"
+        elif s.startswith("WARNING:"):
+            return f"[Warning] {s[8:].strip()[:70]}"
+        return current_stage
 
 # ==========================================================================
-# i18n
+# Background Queue Manager (Requirement 6)
+# ==========================================================================
+
+class BackgroundTask:
+    def __init__(self, task_id: int, cmd: list[str], title: str, source: str = "", target: str = "", proc=None):
+        self.id = task_id
+        self.cmd = cmd
+        self.title = title
+        self.source = source
+        self.target = target
+        self.proc = proc
+        self.status = "running" if proc else "queued"
+        self.stage = "Initializing..."
+        self.pct = 0.0
+        self.log_lines = []
+        self.started_at = time.time()
+        self.finished_at = None
+        self.exit_code = None
+
+class BackgroundQueueManager:
+    def __init__(self, max_tasks: int = 3):
+        self.max_tasks = max_tasks
+        self.tasks: list[BackgroundTask] = []
+        self.lock = threading.Lock()
+        self.next_id = 1
+        self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
+        self.worker_thread.start()
+
+    def add_running_process(self, proc: subprocess.Popen, cmd: list[str], title: str, source: str, target: str, initial_logs: list[str]) -> BackgroundTask:
+        with self.lock:
+            task = BackgroundTask(self.next_id, cmd, title, source, target, proc=proc)
+            self.next_id += 1
+            task.log_lines = list(initial_logs)
+            task.status = "running"
+            self.tasks.append(task)
+            t = threading.Thread(target=self._monitor_proc, args=(task,), daemon=True)
+            t.start()
+            return task
+
+    def enqueue_cmd(self, cmd: list[str], title: str, source: str = "", target: str = "") -> BackgroundTask:
+        with self.lock:
+            task = BackgroundTask(self.next_id, cmd, title, source, target, proc=None)
+            self.next_id += 1
+            self.tasks.append(task)
+            return task
+
+    def cancel_task(self, task_id: int) -> bool:
+        with self.lock:
+            for t in self.tasks:
+                if t.id == task_id:
+                    if t.status == "running" and t.proc:
+                        try:
+                            t.proc.terminate()
+                        except Exception:
+                            pass
+                    t.status = "cancelled"
+                    t.finished_at = time.time()
+                    return True
+        return False
+
+    def get_summary(self) -> str:
+        with self.lock:
+            active = [t for t in self.tasks if t.status == "running"]
+            queued = [t for t in self.tasks if t.status == "queued"]
+            if not active and not queued:
+                return ""
+            if active:
+                t0 = active[0]
+                return f"[⏬ BG: {len(active)+len(queued)} active ({t0.pct:4.1f}%)]"
+            return f"[⏬ BG: {len(queued)} queued]"
+
+    def _monitor_proc(self, task: BackgroundTask):
+        proc = task.proc
+        re_pct = re.compile(r'(\d+(?:\.\d+)?)%')
+        while proc.poll() is None:
+            try:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").strip()
+                if text:
+                    task.log_lines.append(text)
+                    task.stage = DynamicStageDetector.detect(text, task.stage)
+                    m = re_pct.search(text)
+                    if m:
+                        try:
+                            task.pct = float(m.group(1))
+                        except ValueError:
+                            pass
+            except Exception:
+                break
+        proc.wait()
+        task.exit_code = proc.returncode
+        task.status = "done" if task.exit_code == 0 else f"failed ({task.exit_code})"
+        task.finished_at = time.time()
+        add_history_entry(task.title, task.source, task.target, "Success" if task.exit_code == 0 else "Failed")
+
+    def _worker_loop(self):
+        while True:
+            time.sleep(0.5)
+            with self.lock:
+                running = [t for t in self.tasks if t.status == "running"]
+                queued = [t for t in self.tasks if t.status == "queued"]
+                if len(running) < 1 and queued:
+                    next_task = queued[0]
+                    try:
+                        next_task.proc = subprocess.Popen(next_task.cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
+                        next_task.status = "running"
+                        t = threading.Thread(target=self._monitor_proc, args=(next_task,), daemon=True)
+                        t.start()
+                    except Exception as e:
+                        next_task.status = f"error ({e})"
+                        next_task.finished_at = time.time()
+
+BG_QUEUE = BackgroundQueueManager()
+
+# ==========================================================================
+# Strings & Localization
 # ==========================================================================
 
 STRINGS = {
@@ -546,8 +532,11 @@ STRINGS = {
         "tab_system": "System & Config",
 
         "tab_set_gen": "General",
-        "tab_set_conv": "Conversion",
-        "tab_set_ui": "Interface",
+        "tab_set_conv": "Video & Audio",
+        "tab_set_ui": "Interface & Theme",
+        "tab_set_app": "App & System Config",
+        "tab_set_presets": "Manage Presets",
+        "tab_set_defaults": "Download Defaults",
 
         "menu_video": "Download video (YouTube)",
         "menu_audio": "Download audio",
@@ -564,21 +553,18 @@ STRINGS = {
         "menu_update": "Update yt-dlp",
         "menu_exit": "Exit",
 
-        "footer_nav": "<- / -> switch tabs   up/down or j/k - navigate   Enter - select   Esc/q - back",
+        "footer_nav": "↑/↓ or j/k - navigate   Enter - select/focus   Esc/q - back   [Alt+Shift+P / F12] - Terminal",
         "footer_input": "Enter - confirm   Esc - cancel   Ctrl+Q - quit",
         "footer_message": "Enter/Esc - continue",
+        "footer_vertical_tabs": "↑/↓ - Switch category   Enter/→ - Edit options   Esc - Exit settings",
+        "footer_vertical_items": "↑/↓ - Select option   Enter - Change/Toggle   Esc/← - Back to categories",
 
         "video_title": "Download video",
         "video_prompt_url": "Paste the video URL:",
         "video_quality_subtitle": "Choose max quality",
         "quality_best": "Best available",
         "quality_custom": "Custom...",
-        "quality_custom_prompt": "Enter height in pixels, e.g. 1080:",
-        "quality_best_short": "best",
         "preset_subtitle": "Choose FFmpeg / Codec Preset",
-        "subs_choice_none": "No subtitles",
-        "subs_choice_yes": "Download subtitles",
-        "subs_langs_prompt": "Subtitle languages, comma separated:",
         "outdir_prompt": "Destination folder:",
         "confirm_title": "Confirmation",
         "confirm_start": "Start process",
@@ -592,244 +578,104 @@ STRINGS = {
 
         "batch_title": "Batch Convert Folder",
         "batch_prompt_folder": "Enter path to folder containing media files:",
-        "batch_no_files": "No media files (.mp4, .mkv, .mov, .avi, etc.) found in folder.",
+        "batch_no_files": "No media files found in folder.",
 
         "trim_title": "Trim Media File",
         "trim_prompt_file": "Enter path to video/audio file:",
-        "trim_prompt_start": "Start time (HH:MM:SS or seconds, e.g. 00:01:30):",
-        "trim_prompt_end": "End time / Duration (HH:MM:SS or seconds, e.g. 00:02:45):",
-        "trim_mode_copy": "Fast Stream Copy (-c copy, instant, no quality loss)",
+        "trim_prompt_start": "Start time (HH:MM:SS, e.g. 00:01:30):",
+        "trim_prompt_end": "End time (HH:MM:SS, e.g. 00:02:45):",
+        "trim_mode_copy": "Fast Stream Copy (-c copy, instant)",
         "trim_mode_reencode": "Re-encode using target preset",
 
         "probe_title": "Inspect Local File (FFprobe)",
         "probe_prompt_file": "Enter path to media file:",
-
         "history_title": "Operation History",
         "history_empty": "No operations recorded yet.",
 
-        "custom_ext_prompt": "Target file extension (e.g. mp4, mov, mkv, avi):",
-        "custom_flags_prompt": "Custom FFmpeg flags (e.g. -c:v libx264 -c:a pcm_s16le):",
+        "custom_ext_prompt": "Target file extension (e.g. mp4, mov, mkv):",
+        "custom_flags_prompt": "Custom FFmpeg flags (e.g. -c:v libx264 -c:a aac):",
 
-        # Advanced Video Options strings
-        "adv_title": "Advanced Download Settings",
-        "adv_audio_track": "Audio Track(s): {v}",
-        "adv_audio_default": "Default Track",
-        "adv_audio_all": "ALL Available Tracks (Multilingual)",
-        "adv_audio_ru": "Russian (ru)",
-        "adv_audio_en": "English (en)",
-        "adv_audio_custom": "Custom Lang Code",
-        "adv_audio_prompt": "Enter audio language code (e.g. es, ja, de):",
-        "adv_vcodec": "Video Codec Preference: {v}",
-        "adv_vcodec_auto": "Auto Best",
-        "adv_vcodec_av1": "Force AV1",
-        "adv_vcodec_vp9": "Force VP9",
-        "adv_vcodec_h264": "Force H.264 (AVC)",
-        "adv_sponsorblock": "SponsorBlock (Auto-cut Sponsors): {v}",
-        "adv_sb_off": "Disabled",
-        "adv_sb_sponsors": "Cut Sponsors Only",
-        "adv_sb_all": "Cut Sponsors + Promos + Intros",
-        "adv_geobypass": "Geo-Bypass (--geo-bypass): {v}",
-        "adv_ratelimit": "Download Speed Limit: {v}",
-        "adv_ratelimit_max": "Unlimited",
-        "adv_clip": "Time Clip / Section: {v}",
-        "adv_clip_full": "Full Video",
-        "adv_clip_prompt": "Enter time section (e.g. *00:01:00-00:03:30):",
-        "adv_live": "Live Stream Mode: {v}",
-        "adv_live_default": "Standard",
-        "adv_live_start": "Download Live Stream From Start",
-        "adv_write_extra": "Save Description & Cover Files: {v}",
-        "adv_embed_meta": "Embed Thumbnail & Metadata: {v}",
-        "adv_embed_chap": "Embed Video Chapters: {v}",
-        "adv_embed_subs": "Embed Subtitles into Video: {v}",
-        "adv_fps": "FPS Limit: {v}",
-        "adv_fps_max": "Max available",
-        "adv_proxy_mode": "Proxy Mode: {v}",
-        "adv_proxy_url_prompt": "Enter custom proxy URL (e.g. socks5://127.0.0.1:10808):",
-        "proxy_system": "System Proxy (Auto / OS settings)",
-        "proxy_custom": "Custom Proxy (URL)",
-        "proxy_none": "Disabled (Direct connection)",
-        "adv_proceed": "-> Proceed to Download ->",
+        "log_title": "Process Execution",
+        "log_footer_running": "q/Esc - Move to Background   F10 - Toggle Raw Logs   Ctrl+Q - Terminate",
+        "log_footer_done": "Enter/Esc - Return to menu",
+        "log_finished_ok": "Done (exit code 0).",
+        "log_finished_err": "Finished with exit code {v}.",
+        "bg_transferred": "Task transferred to background queue!",
 
-        "label_url": "URL:",
-        "label_input": "Input File:",
-        "label_output": "Output File:",
-        "label_quality": "Quality:",
-        "label_preset": "Codec Preset:",
-        "label_folder": "Folder:",
-        "label_format": "Format:",
-        "label_mode": "Mode:",
-        "label_langs": "Languages:",
-        "label_cmd": "Command:",
+        # Settings
+        "settings_title": "Settings & Configuration",
+        "settings_download_dir": "Download folder: {v}",
+        "settings_goal": "Primary Use-Case: {v}",
+        "settings_proxy": "Network Proxy: {v}",
+        "settings_language": "Language: {v}",
+        "settings_cookies": "Cookies: {v}",
+        "settings_preset": "Default Codec Preset: {v}",
+        "settings_audio_format": "Default Audio Format: {v}",
+        "settings_sub_langs": "Default Subtitle Languages: {v}",
+        "settings_theme": "Color Theme: {v}",
+        "settings_bg": "Terminal Background: {v}",
+        "settings_style": "Progress Bar Style: {v}",
+        "settings_bg_queue_max": "Max Background Tasks: {v}",
+        "settings_notify_bell": "Terminal Audio Bell on Finish: {v}",
+        "settings_auto_check_deps": "Auto-check Dependencies on Launch: {v}",
+        "settings_editor": "Default Text Editor ($EDITOR): {v}",
+        "settings_reset": "Reset all settings to factory defaults...",
 
-        # Download Presets system
         "download_mode_quick": "Quick Download (use default preset)",
         "download_mode_preset": "Choose a saved preset",
         "download_mode_manual": "Configure manually",
         "download_mode_subtitle": "How would you like to download this?",
-        "preset_none_quick": "No default preset is set yet. Configuring manually instead.",
+        "preset_none_quick": "No default preset set yet. Switching to manual setup.",
         "presets_list_title": "Download Presets",
-        "presets_list_subtitle": "Choose a saved preset",
         "preset_create_new": "+ Create new preset...",
-        "preset_no_presets": "You have no saved presets yet. Configure manually and save one first.",
         "preset_default_marker": "[default] ",
         "manual_title": "Manual Download Setup",
-        "cat_general": "General",
-        "cat_video": "Video",
-        "cat_audio": "Audio",
-        "cat_subtitles": "Subtitles",
-        "cat_thumbmeta": "Thumbnails & Metadata",
-        "cat_sponsorblock": "Post-processing & SponsorBlock",
-        "cat_network": "Network & Cookies",
-        "cat_playlist": "Playlist",
-        "cat_actions": "Save / Start",
-        "field_quality": "Max quality (height, e.g. 1080; empty = best): {v}",
-        "field_output_template": "Output filename template (empty = default): {v}",
-        "field_video_preset": "Codec / export preset: {v}",
-        "field_vcodec": "Video codec preference: {v}",
-        "field_fps": "FPS limit: {v}",
-        "field_audio_track": "Audio track(s): {v}",
-        "field_audio_only": "Audio only (extract audio, skip video): {v}",
-        "field_audio_format": "Audio format: {v}",
-        "field_subs_enabled": "Download subtitles: {v}",
-        "field_sub_langs": "Subtitle languages: {v}",
-        "field_auto_subs": "Include auto-generated subtitles: {v}",
-        "field_embed_subs": "Embed subtitles into video file: {v}",
-        "field_embed_metadata": "Embed thumbnail & metadata: {v}",
-        "field_embed_chapters": "Embed chapters: {v}",
-        "field_write_extra": "Save description & thumbnail as separate files: {v}",
-        "field_sponsorblock": "SponsorBlock: {v}",
-        "field_clip_range": "Time clip / section: {v}",
-        "field_proxy_mode": "Proxy: {v}",
-        "field_ratelimit": "Download speed limit: {v}",
-        "field_geobypass": "Geo-bypass: {v}",
-        "field_live_start": "Live stream from start: {v}",
-        "field_cookies_status": "Cookies (managed in Settings): {v}",
-        "field_playlist_items": "Playlist items (e.g. 1,3,5-8): {v}",
-        "field_playlist_start": "Playlist start index: {v}",
-        "field_playlist_end": "Playlist end index: {v}",
-        "field_download_archive": "Skip already-downloaded items (archive file): {v}",
-        "preset_action_save": "Save as new preset...",
-        "preset_action_save_existing": "Save changes to this preset",
-        "preset_action_run_once": "Download once, don't save",
-        "preset_action_cancel": "Cancel",
-        "preset_name_prompt": "Name for this preset:",
-        "preset_saved_as_default_q": "Also set as default preset for Quick Download?",
-        "preset_opt_use": "Use this preset now",
-        "preset_opt_edit": "Edit",
-        "preset_opt_duplicate": "Duplicate",
-        "preset_opt_delete": "Delete",
-        "preset_opt_set_default": "Set as default (Quick Download)",
-        "preset_opt_unset_default": "Unset as default",
-        "preset_opt_back": "Back",
-        "preset_confirm_delete": "Delete preset '{v}'? This cannot be undone.",
-        "preset_duplicate_suffix": " (copy)",
-        "settings_download_presets": "Manage Download Presets ({v} saved)",
+
         "val_yes": "YES",
         "val_no": "NO",
-        "val_best": "best",
         "val_default": "(default)",
         "val_custom_ffmpeg": "Custom FFmpeg preset",
 
-        "audio_title": "Download audio",
-        "audio_format_subtitle": "Choose audio format (WAV recommended for DaVinci Resolve)",
-
-        "playlist_title": "Download playlist",
+        "info_title": "Video Info",
+        "info_fetching": "Fetching URL metadata...",
+        "subs_title": "Download Subtitles",
+        "audio_title": "Download Audio",
+        "audio_format_subtitle": "Choose audio target format",
+        "playlist_title": "Download Playlist",
         "playlist_prompt_url": "Paste the playlist URL:",
-        "playlist_mode_video": "Video",
-        "playlist_mode_audio": "Audio only",
-
-        "info_title": "Video info",
-        "info_fetching": "Fetching info...",
-        "info_error": "Error fetching info:",
-        "info_not_installed": "yt-dlp is not installed.",
-        "info_parse_error": "Failed to parse yt-dlp response.",
-        "info_label_title": "Title:",
-        "info_label_uploader": "Channel:",
-        "info_label_duration": "Duration:",
-        "info_label_views": "Views:",
-        "info_label_date": "Date:",
-        "info_label_quality": "Available quality:",
-
-        "subs_title": "Download subtitles",
-
-        "log_title": "Process status",
-        "log_footer_running": "F10 - toggle raw logs   q/Esc - cancel process",
-        "log_footer_done": "Enter/Esc - back to menu",
-        "log_finished_ok": "Done (exit code 0).",
-        "log_finished_err": "Finished with exit code {v}.",
-
-        "cookies_title": "Cookies",
-        "cookies_status_none": "Not configured (no cookies sent)",
-        "cookies_status_file": "File ({v} entries): {f}",
-        "cookies_status_browser": "Browser: {v}",
-        "cookies_opt_view": "View cookies file",
-        "cookies_opt_add": "Add cookie entry",
-        "cookies_opt_edit_file": "Edit cookies file in $EDITOR",
-        "cookies_opt_set_path": "Change cookies file path",
-        "cookies_opt_browser": "Use cookies from browser instead",
-        "cookies_opt_disable": "Disable cookies",
-        "cookies_opt_back": "Back",
-        "cookies_browser_subtitle": "Choose browser",
-        "cookies_profile_prompt": "Browser profile (leave empty for default):",
-        "cookies_path_prompt": "Path to cookies.txt (Netscape format, used by yt-dlp --cookies):",
-        "cookies_domain_prompt": "Cookie domain, e.g. .youtube.com:",
-        "cookies_name_prompt": "Cookie name:",
-        "cookies_value_prompt": "Cookie value:",
-        "cookies_added": "Cookie added to {v}",
-        "cookies_none_found": "No cookies found in this file yet.",
-        "cookies_view_note": "(this is your yt-dlp --cookies file, Netscape format)",
-
-        "settings_title": "Settings",
-        "settings_download_dir": "Download folder: {v}",
-        "settings_audio_format": "Default audio format: {v}",
-        "settings_sub_langs": "Default subtitle languages: {v}",
-        "settings_language": "Language: {v}",
-        "settings_goal": "Primary Purpose / Use-case: {v}",
-        "settings_preset": "Default Video/FFmpeg Preset: {v}",
-        "settings_theme": "Color Theme: {v}",
-        "settings_bg": "Terminal Background: {v}",
-        "settings_proxy": "Network Proxy: {v}",
-        "settings_style": "Progress Bar Style: {v}",
-        "settings_cookies": "Cookies: {v}",
-        "settings_reset": "Reset settings to defaults...",
-        "settings_back": "Back",
-        "settings_new_download_dir": "New download folder:",
-        "settings_choose_audio_format": "Default audio format",
-        "settings_new_sub_langs": "Subtitle languages, comma separated:",
-        "settings_choose_language": "Choose language",
-        "settings_choose_preset": "Choose default video export preset",
-        "settings_choose_goal": "Choose primary usage goal (reorders presets)",
-        "settings_choose_theme": "Choose color theme",
-        "settings_reset_confirm": "Reset all settings to defaults and re-run setup wizard?",
-
         "update_title": "Update yt-dlp",
-        "update_via_pkg": "Via System Package Manager (pacman/apt/brew/winget)",
-        "update_via_pip": "Via Python Pip",
-        "update_via_ytdlp": "Via yt-dlp self-update (-U)",
+        "update_via_pkg": "System Package Manager",
+        "update_via_pip": "Python Pip",
+        "update_via_ytdlp": "yt-dlp Self-Update (-U)",
         "update_cancel": "Cancel",
 
-        "deps_title": "Warning",
-        "deps_missing_header": "Missing dependencies:",
-        "deps_install_header": "Install dependencies on your system:",
-        "deps_arch_install_prompt": "Would you like to automatically install missing dependencies via pacman now?",
-        "deps_note": "The menu will still open, but downloads/conversions won't work.",
+        "label_url": "URL:",
+        "label_input": "Input File:",
+        "label_output": "Output File:",
+        "label_preset": "Preset:",
+        "label_cmd": "Command:",
+        "label_folder": "Folder:",
+        "label_format": "Format:",
+        "label_langs": "Languages:",
 
-        # Wizard strings
-        "wizard_title": "MogDop's MediaCLI Setup Wizard",
-        "wizard_step1_title": "Step 1/4: Select Language",
-        "wizard_step2_title": "Step 2/4: Primary Goal / Use Case",
-        "wizard_step2_subtitle": "This determines default preset choices and ordering across the app",
-        "goal_editing": "Video Editing (DaVinci Resolve / Premiere / Video Editors)",
-        "goal_downloading": "General Video Downloading (YouTube / MP4)",
-        "goal_audio": "Audio & Music Extraction (MP3 / WAV)",
-        "goal_transcoding": "Local Media Transcoding / FFmpeg Conversions",
-        "wizard_step3_title": "Step 3/4: Default Download Directory",
-        "wizard_step4_title": "Step 4/4: Theme & Appearance",
-        "bg_option_title": "Terminal Background Mode",
-        "bg_option_keep": "Keep terminal default background (Transparent / Native)",
-        "bg_option_solid": "Use theme background color (Solid Dark)",
-        "wizard_done_title": "Setup Complete!",
-        "wizard_done_msg": "Your configuration has been saved. You can change settings anytime in Settings.",
+        "proxy_system": "System Proxy (Auto)",
+        "proxy_custom": "Custom Proxy",
+        "proxy_none": "Direct Connection (No proxy)",
+
+        "wizard_title": "MediaCLI First-Run Setup Wizard",
+        "wizard_step1_title": "Step 1/3: Interface Language",
+        "wizard_step2_title": "Step 2/3: Primary Use-Case",
+        "wizard_step3_title": "Step 3/3: Download Folder",
+        "wizard_done_title": "Setup Complete",
+        "wizard_done_msg": "Configuration saved! Press Enter to launch MediaCLI.",
+
+        "goal_editing": "Video Editing (DaVinci / Premiere)",
+        "goal_downloading": "General Media Downloading",
+        "goal_audio": "Audio Extraction & Archiving",
+        "goal_transcoding": "FFmpeg Transcoding & Encoding",
+
+        "bg_option_keep": "Transparent / Native Background",
+        "bg_option_solid": "Solid Theme Background",
     },
     "ru": {
         "app_title": "MogDop's MediaCLI",
@@ -838,16 +684,19 @@ STRINGS = {
         "tab_system": "Система",
 
         "tab_set_gen": "Основные",
-        "tab_set_conv": "Конвертация",
-        "tab_set_ui": "Интерфейс",
+        "tab_set_conv": "Видео и Аудио",
+        "tab_set_ui": "Интерфейс и Тема",
+        "tab_set_app": "Настройки программы",
+        "tab_set_presets": "Пресеты загрузки",
+        "tab_set_defaults": "Настройки по умолчанию",
 
-        "menu_video": "Скачать видео (YouTube)",
-        "menu_audio": "Скачать аудио",
+        "menu_video": "Скачать видео (YouTube/VK/др.)",
+        "menu_audio": "Скачать аудиодорожку",
         "menu_playlist": "Скачать плейлист",
         "menu_convert": "Конвертировать локальный файл (FFmpeg)",
         "menu_batch_convert": "Пакетная конвертация папки",
         "menu_trim": "Обрезать видео / аудио",
-        "menu_probe": "Анализ файла (FFprobe)",
+        "menu_probe": "Анализ медиафайла (FFprobe)",
         "menu_info": "Информация о ссылке",
         "menu_subs": "Скачать субтитры",
         "menu_history": "История операций",
@@ -856,21 +705,18 @@ STRINGS = {
         "menu_update": "Обновить yt-dlp",
         "menu_exit": "Выход",
 
-        "footer_nav": "<- / -> вкладки   up/down или j/k — навигация   Enter — выбор   Esc/q — назад",
+        "footer_nav": "↑/↓ или j/k — выбор   Enter — подтвердить   Esc/q — назад   [Alt+Shift+P / F12] — Терминал",
         "footer_input": "Enter — подтвердить   Esc — отмена   Ctrl+Q — выход",
         "footer_message": "Enter/Esc — продолжить",
+        "footer_vertical_tabs": "↑/↓ — Выбор категории   Enter/→ — Перейти к параметрам   Esc — Выход",
+        "footer_vertical_items": "↑/↓ — Выбор параметра   Enter — Изменить/Вкл   Esc/← — Назад к вкладкам",
 
         "video_title": "Скачать видео",
         "video_prompt_url": "Введите ссылку на видео:",
         "video_quality_subtitle": "Выберите максимальное качество",
         "quality_best": "Лучшее доступное",
         "quality_custom": "Указать вручную...",
-        "quality_custom_prompt": "Введите высоту в пикселях, например 1080:",
-        "quality_best_short": "лучшее",
         "preset_subtitle": "Выберите пресет FFmpeg / кодеков",
-        "subs_choice_none": "Без субтитров",
-        "subs_choice_yes": "Скачать субтитры",
-        "subs_langs_prompt": "Языки субтитров через запятую:",
         "outdir_prompt": "Папка для сохранения:",
         "confirm_title": "Подтверждение",
         "confirm_start": "Начать процесс",
@@ -879,252 +725,111 @@ STRINGS = {
         "convert_title": "Конвертировать локальный файл",
         "convert_prompt_file": "Введите полный путь к исходному файлу:",
         "convert_prompt_preset": "Выберите целевой пресет конвертации:",
-        "convert_prompt_outdir": "Папка назначения (пусто — сохранять в ту же папку):",
+        "convert_prompt_outdir": "Папка назначения (пусто — та же папка):",
         "convert_err_notfound": "Ошибка: Файл или папка '{f}' не существует!",
 
         "batch_title": "Пакетная конвертация папки",
-        "batch_prompt_folder": "Введите путь к папке с видео/аудио файлами:",
+        "batch_prompt_folder": "Введите путь к папке с файлами:",
         "batch_no_files": "В выбранной папке не найдено подходящих медиафайлов.",
 
         "trim_title": "Обрезать медиафайл",
-        "trim_prompt_file": "Введите путь к видео/аудиофайлу:",
-        "trim_prompt_start": "Время начала (ЧЧ:ММ:СС или секунды, например 00:01:30):",
-        "trim_prompt_end": "Время окончания / Длительность (ЧЧ:ММ:СС или секунды):",
-        "trim_mode_copy": "Быстрое копирование (-c copy, без потери качества)",
+        "trim_prompt_file": "Введите путь к файлу:",
+        "trim_prompt_start": "Время начала (ЧЧ:ММ:СС, например 00:01:30):",
+        "trim_prompt_end": "Время окончания (ЧЧ:ММ:СС):",
+        "trim_mode_copy": "Быстрое копирование (-c copy, без потерь)",
         "trim_mode_reencode": "Перекодировать с выбранным пресетом",
 
         "probe_title": "Анализ медиафайла (FFprobe)",
         "probe_prompt_file": "Введите путь к медиафайлу:",
-
         "history_title": "История операций",
         "history_empty": "Записей об операциях пока нет.",
 
-        "custom_ext_prompt": "Расширение итогового файла (например, mp4, mov, mkv, avi):",
+        "custom_ext_prompt": "Расширение итогового файла (например, mp4, mov):",
         "custom_flags_prompt": "Флаги FFmpeg (например, -c:v libx264 -c:a pcm_s16le):",
 
-        # Advanced Video Options strings
-        "adv_title": "Расширенные настройки скачивания",
-        "adv_audio_track": "Звуковая дорожка(и): {v}",
-        "adv_audio_default": "Дорожка по умолчанию",
-        "adv_audio_all": "ВСЕ доступные дорожки (Мультиязычный)",
-        "adv_audio_ru": "Русская (ru)",
-        "adv_audio_en": "Английская (en)",
-        "adv_audio_custom": "Указать код языка...",
-        "adv_audio_prompt": "Введите код языка звука (например: es, ja, de):",
-        "adv_vcodec": "Приоритет видеокодека: {v}",
-        "adv_vcodec_auto": "Авто (Лучший)",
-        "adv_vcodec_av1": "Принудительно AV1",
-        "adv_vcodec_vp9": "Принудительно VP9",
-        "adv_vcodec_h264": "Принудительно H.264 (AVC)",
-        "adv_sponsorblock": "SponsorBlock (Вырезка рекламы): {v}",
-        "adv_sb_off": "Отключено",
-        "adv_sb_sponsors": "Вырезать только интеграции",
-        "adv_sb_all": "Вырезать интеграции + заставки + интро",
-        "adv_geobypass": "Обход гео-ограничений (--geo-bypass): {v}",
-        "adv_ratelimit": "Ограничение скорости скачивания: {v}",
-        "adv_ratelimit_max": "Без ограничений",
-        "adv_clip": "Обрезка фрагмента / Таймкод: {v}",
-        "adv_clip_full": "Полное видео",
-        "adv_clip_prompt": "Введите интервал (например: *00:01:00-00:03:30):",
-        "adv_live": "Прямые эфиры / Стримы: {v}",
-        "adv_live_default": "Стандартно",
-        "adv_live_start": "Скачивать стрим с самого начала",
-        "adv_write_extra": "Сохранить обложку и описание отд. файлами: {v}",
-        "adv_embed_meta": "Вшить обложку и метаданные: {v}",
-        "adv_embed_chap": "Вшить главы (Chapters): {v}",
-        "adv_embed_subs": "Вшить субтитры в видео: {v}",
-        "adv_fps": "Ограничение FPS: {v}",
-        "adv_fps_max": "Максимальный",
-        "adv_proxy_mode": "Режим прокси: {v}",
-        "adv_proxy_url_prompt": "Введите URL прокси (например, socks5://127.0.0.1:10808):",
-        "proxy_system": "Системный прокси (Авто / Настройки ОС)",
-        "proxy_custom": "Свой прокси (URL)",
-        "proxy_none": "Отключить прокси (Прямое подключение)",
-        "adv_proceed": "-> Перейти к скачиванию ->",
+        "log_title": "Выполнение операции",
+        "log_footer_running": "q/Esc — В фоновую очередь   F10 — Полный лог   Ctrl+Q — Отмена",
+        "log_footer_done": "Enter/Esc — Назад в меню",
+        "log_finished_ok": "Успешно завершено (код 0).",
+        "log_finished_err": "Завершено с ошибкой (код {v}).",
+        "bg_transferred": "Задача переведена в фоновую очередь!",
 
-        "label_url": "URL:",
-        "label_input": "Исходный файл:",
-        "label_output": "Выходной файл:",
-        "label_quality": "Качество:",
-        "label_preset": "Пресет кодеков:",
-        "label_folder": "Папка:",
-        "label_format": "Формат:",
-        "label_mode": "Режим:",
-        "label_langs": "Языки:",
-        "label_cmd": "Команда:",
+        # Settings
+        "settings_title": "Настройки программы",
+        "settings_download_dir": "Папка загрузок: {v}",
+        "settings_goal": "Основная цель применения: {v}",
+        "settings_proxy": "Сетевой прокси: {v}",
+        "settings_language": "Язык интерфейса: {v}",
+        "settings_cookies": "Cookies: {v}",
+        "settings_preset": "Пресет видео/FFmpeg: {v}",
+        "settings_audio_format": "Формат аудио по умолчанию: {v}",
+        "settings_sub_langs": "Языки субтитров по умолчанию: {v}",
+        "settings_theme": "Цветовая тема: {v}",
+        "settings_bg": "Фон терминала: {v}",
+        "settings_style": "Стиль индикатора прогресса: {v}",
+        "settings_bg_queue_max": "Макс. фоновых задач в очереди: {v}",
+        "settings_notify_bell": "Звуковой сигнал терминала по завершении: {v}",
+        "settings_auto_check_deps": "Проверять зависимости при старте: {v}",
+        "settings_editor": "Текстовый редактор ($EDITOR): {v}",
+        "settings_reset": "Сбросить все настройки к заводским...",
 
-        # Download Presets system
         "download_mode_quick": "Быстрая загрузка (пресет по умолчанию)",
         "download_mode_preset": "Выбрать сохранённый пресет",
-        "download_mode_manual": "Настроить вручную",
+        "download_mode_manual": "Настроить параметры вручную",
         "download_mode_subtitle": "Как Вы хотите скачать это видео?",
-        "preset_none_quick": "Пресет по умолчанию ещё не задан. Переходим к ручной настройке.",
+        "preset_none_quick": "Пресет по умолчанию не задан. Переход к ручной настройке.",
         "presets_list_title": "Пресеты загрузки",
-        "presets_list_subtitle": "Выберите сохранённый пресет",
         "preset_create_new": "+ Создать новый пресет...",
-        "preset_no_presets": "У Вас пока нет сохранённых пресетов. Настройте вручную и сохраните первый.",
         "preset_default_marker": "[по умолчанию] ",
         "manual_title": "Ручная настройка загрузки",
-        "cat_general": "Основные",
-        "cat_video": "Видео",
-        "cat_audio": "Аудио",
-        "cat_subtitles": "Субтитры",
-        "cat_thumbmeta": "Обложка и метаданные",
-        "cat_sponsorblock": "Постобработка и SponsorBlock",
-        "cat_network": "Сеть и Cookies",
-        "cat_playlist": "Плейлист",
-        "cat_actions": "Сохранить / Начать",
-        "field_quality": "Макс. качество (высота, напр. 1080; пусто = лучшее): {v}",
-        "field_output_template": "Шаблон имени файла (пусто = по умолчанию): {v}",
-        "field_video_preset": "Пресет кодека / экспорта: {v}",
-        "field_vcodec": "Приоритет видеокодека: {v}",
-        "field_fps": "Ограничение FPS: {v}",
-        "field_audio_track": "Звуковая дорожка(и): {v}",
-        "field_audio_only": "Только аудио (извлечь звук, без видео): {v}",
-        "field_audio_format": "Формат аудио: {v}",
-        "field_subs_enabled": "Скачивать субтитры: {v}",
-        "field_sub_langs": "Языки субтитров: {v}",
-        "field_auto_subs": "Включая автоматические субтитры: {v}",
-        "field_embed_subs": "Вшить субтитры в видеофайл: {v}",
-        "field_embed_metadata": "Вшить обложку и метаданные: {v}",
-        "field_embed_chapters": "Вшить главы: {v}",
-        "field_write_extra": "Сохранить описание и обложку отдельными файлами: {v}",
-        "field_sponsorblock": "SponsorBlock: {v}",
-        "field_clip_range": "Обрезка фрагмента / Таймкод: {v}",
-        "field_proxy_mode": "Прокси: {v}",
-        "field_ratelimit": "Ограничение скорости скачивания: {v}",
-        "field_geobypass": "Обход гео-ограничений: {v}",
-        "field_live_start": "Стрим с самого начала: {v}",
-        "field_cookies_status": "Cookies (настраиваются в Настройках): {v}",
-        "field_playlist_items": "Элементы плейлиста (напр. 1,3,5-8): {v}",
-        "field_playlist_start": "Начальный индекс плейлиста: {v}",
-        "field_playlist_end": "Конечный индекс плейлиста: {v}",
-        "field_download_archive": "Пропускать уже скачанное (файл-архив): {v}",
-        "preset_action_save": "Сохранить как новый пресет...",
-        "preset_action_save_existing": "Сохранить изменения в этот пресет",
-        "preset_action_run_once": "Скачать один раз, не сохранять",
-        "preset_action_cancel": "Отмена",
-        "preset_name_prompt": "Название пресета:",
-        "preset_saved_as_default_q": "Сделать пресетом по умолчанию для быстрой загрузки?",
-        "preset_opt_use": "Использовать этот пресет",
-        "preset_opt_edit": "Редактировать",
-        "preset_opt_duplicate": "Дублировать",
-        "preset_opt_delete": "Удалить",
-        "preset_opt_set_default": "Сделать пресетом по умолчанию",
-        "preset_opt_unset_default": "Убрать пометку 'по умолчанию'",
-        "preset_opt_back": "Назад",
-        "preset_confirm_delete": "Удалить пресет '{v}'? Это действие необратимо.",
-        "preset_duplicate_suffix": " (копия)",
-        "settings_download_presets": "Управление пресетами загрузки ({v} шт.)",
+
         "val_yes": "ДА",
         "val_no": "НЕТ",
-        "val_best": "лучшее",
         "val_default": "(по умолчанию)",
         "val_custom_ffmpeg": "Свой пресет FFmpeg",
 
+        "info_title": "Информация о видео",
+        "info_fetching": "Запрос метаданных...",
+        "subs_title": "Скачать субтитры",
         "audio_title": "Скачать аудио",
-        "audio_format_subtitle": "Выберите формат аудио (WAV рекомендуется для DaVinci Resolve)",
-
+        "audio_format_subtitle": "Выберите целевой формат аудио",
         "playlist_title": "Скачать плейлист",
         "playlist_prompt_url": "Введите ссылку на плейлист:",
-        "playlist_mode_video": "Видео",
-        "playlist_mode_audio": "Только аудио",
-
-        "info_title": "Информация о видео",
-        "info_fetching": "Запрос информации...",
-        "info_error": "Ошибка при получении информации:",
-        "info_not_installed": "yt-dlp не установлен.",
-        "info_parse_error": "Не удалось разобрать ответ yt-dlp.",
-        "info_label_title": "Название:",
-        "info_label_uploader": "Канал:",
-        "info_label_duration": "Длительность:",
-        "info_label_views": "Просмотры:",
-        "info_label_date": "Дата:",
-        "info_label_quality": "Качество:",
-
-        "subs_title": "Скачать субтитры",
-
-        "log_title": "Статус процесса",
-        "log_footer_running": "F10 — логи вкл/выкл   q/Esc — отмена процесса",
-        "log_footer_done": "Enter/Esc — назад в меню",
-        "log_finished_ok": "Готово (код выхода 0).",
-        "log_finished_err": "Завершено с кодом выхода {v}.",
-
-        "cookies_title": "Cookies",
-        "cookies_status_none": "Не настроено (куки не отправляются)",
-        "cookies_status_file": "Файл ({v} записей): {f}",
-        "cookies_status_browser": "Браузер: {v}",
-        "cookies_opt_view": "Просмотреть файл cookies",
-        "cookies_opt_add": "Добавить запись cookie",
-        "cookies_opt_edit_file": "Редактировать файл в $EDITOR",
-        "cookies_opt_set_path": "Изменить путь к файлу cookies",
-        "cookies_opt_browser": "Использовать куки из браузера вместо этого",
-        "cookies_opt_disable": "Отключить куки",
-        "cookies_opt_back": "Назад",
-        "cookies_browser_subtitle": "Выберите браузер",
-        "cookies_profile_prompt": "Профиль браузера (пусто — по умолчанию):",
-        "cookies_path_prompt": "Путь к файлу cookies.txt (формат Netscape, используется yt-dlp --cookies):",
-        "cookies_domain_prompt": "Домен куки, например .youtube.com:",
-        "cookies_name_prompt": "Имя куки:",
-        "cookies_value_prompt": "Значение куки:",
-        "cookies_added": "Cookie добавлен в {v}",
-        "cookies_none_found": "В этом файле пока нет куки.",
-        "cookies_view_note": "(это твой файл yt-dlp --cookies, формат Netscape)",
-
-        "settings_title": "Настройки",
-        "settings_download_dir": "Папка загрузок: {v}",
-        "settings_audio_format": "Формат аудио по умолчанию: {v}",
-        "settings_sub_langs": "Языки субтитров по умолчанию: {v}",
-        "settings_language": "Язык: {v}",
-        "settings_goal": "Основная цель применения: {v}",
-        "settings_preset": "Пресет видео/FFmpeg: {v}",
-        "settings_theme": "Цветовая тема: {v}",
-        "settings_bg": "Фон терминала: {v}",
-        "settings_proxy": "Сетевой прокси: {v}",
-        "settings_style": "Стиль индикатора прогресса: {v}",
-        "settings_cookies": "Cookies: {v}",
-        "settings_reset": "Сбросить настройки к заводским...",
-        "settings_back": "Назад",
-        "settings_new_download_dir": "Новая папка загрузок:",
-        "settings_choose_audio_format": "Формат аудио по умолчанию",
-        "settings_new_sub_langs": "Языки субтитров через запятую:",
-        "settings_choose_language": "Выберите язык",
-        "settings_choose_preset": "Выберите пресет видео для скачивания",
-        "settings_choose_goal": "Основная цель (меняет порядок пресетов)",
-        "settings_choose_theme": "Выберите цветовую тему",
-        "settings_reset_confirm": "Сбросить все настройки к заводским и пройти настройку заново?",
-
         "update_title": "Обновить yt-dlp",
-        "update_via_pkg": "Через системный пакетный менеджер (pacman/apt/brew/winget)",
+        "update_via_pkg": "Через системный пакетный менеджер",
         "update_via_pip": "Через Python Pip",
         "update_via_ytdlp": "Через встроенный yt-dlp -U",
         "update_cancel": "Отмена",
 
-        "deps_title": "Внимание",
-        "deps_missing_header": "Не найдены зависимости:",
-        "deps_install_header": "Установка зависимостей в вашей системе:",
-        "deps_arch_install_prompt": "Установить отсутствующие зависимости прямо сейчас через pacman?",
-        "deps_note": "Меню всё равно откроется, но скачивание/конвертация не будет работать.",
+        "label_url": "URL:",
+        "label_input": "Исходный файл:",
+        "label_output": "Выходной файл:",
+        "label_preset": "Пресет:",
+        "label_cmd": "Команда:",
+        "label_folder": "Папка:",
+        "label_format": "Формат:",
+        "label_langs": "Языки:",
 
-        # Wizard strings
-        "wizard_title": "Мастер первичной настройки MogDop's MediaCLI",
-        "wizard_step1_title": "Шаг 1/4: Выбор языка",
-        "wizard_step2_title": "Шаг 2/4: Основная цель использования",
-        "wizard_step2_subtitle": "Это повлияет на приоритет и порядок пресетов во всей программе",
-        "goal_editing": "Видеомонтаж (DaVinci Resolve / Premiere / Видеоредакторы)",
-        "goal_downloading": "Обычная загрузка видео (YouTube / MP4)",
-        "goal_audio": "Извлечение аудио и музыки (MP3 / WAV)",
-        "goal_transcoding": "Конвертация локальных медиафайлов (FFmpeg)",
-        "wizard_step3_title": "Шаг 3/4: Папка загрузок по умолчанию",
-        "wizard_step4_title": "Шаг 4/4: Цветовая тема и внешний вид",
-        "bg_option_title": "Фон терминала",
-        "bg_option_keep": "Оставить фон терминала (Прозрачный / Системный)",
-        "bg_option_solid": "Использовать сплошной фон темы (Тёмный)",
-        "wizard_done_title": "Настройка завершена!",
-        "wizard_done_msg": "Конфигурация сохранена. Вы всегда можете изменить эти настройки в меню 'Настройки'.",
-    },
+        "proxy_system": "Системный прокси (Авто)",
+        "proxy_custom": "Свой прокси",
+        "proxy_none": "Прямое подключение (Без прокси)",
+
+        "wizard_title": "Мастер первоначальной настройки MediaCLI",
+        "wizard_step1_title": "Шаг 1/3: Язык интерфейса",
+        "wizard_step2_title": "Шаг 2/3: Основное назначение",
+        "wizard_step3_title": "Шаг 3/3: Папка для загрузок",
+        "wizard_done_title": "Настройка завершена",
+        "wizard_done_msg": "Параметры сохранены! Нажмите Enter для запуска.",
+
+        "goal_editing": "Видеомонтаж (DaVinci Resolve / Premiere)",
+        "goal_downloading": "Обычная загрузка видео из сети",
+        "goal_audio": "Извлечение и архивация аудио",
+        "goal_transcoding": "Локальная конвертация FFmpeg",
+
+        "bg_option_keep": "Прозрачный / Системный фон",
+        "bg_option_solid": "Сплошной темный фон темы",
+    }
 }
-
 
 def t(cfg: dict, key: str, **kwargs) -> str:
     lang = cfg.get("language", "en")
@@ -1132,31 +837,13 @@ def t(cfg: dict, key: str, **kwargs) -> str:
     text = table.get(key, STRINGS["en"].get(key, key))
     return text.format(**kwargs) if kwargs else text
 
-
 def get_preset_name(cfg: dict, preset_id: str) -> str:
     preset = VIDEO_PRESETS.get(preset_id, VIDEO_PRESETS["default"])
     lang = cfg.get("language", "en")
     return preset["name_ru"] if lang == "ru" else preset["name_en"]
 
-
-def get_install_command(missing_bins: list[str]) -> str:
-    pkgs = " ".join(missing_bins)
-    if sys.platform == "win32":
-        return f"winget install {' '.join(missing_bins)}"
-    elif sys.platform == "darwin":
-        return f"brew install {pkgs}"
-    else:
-        if shutil.which("pacman"):
-            return f"sudo pacman -S {pkgs}"
-        elif shutil.which("apt"):
-            return f"sudo apt update && sudo apt install {pkgs}"
-        elif shutil.which("dnf"):
-            return f"sudo dnf install {pkgs}"
-        return f"pip install {pkgs}"
-
-
 # ==========================================================================
-# Config
+# Config Loader & Cookie Handlers
 # ==========================================================================
 
 def load_config() -> dict:
@@ -1164,24 +851,13 @@ def load_config() -> dict:
     if CONFIG_PATH.exists():
         try:
             cfg.update(json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
-        except (json.JSONDecodeError, OSError):
+        except Exception:
             pass
     return cfg
-
 
 def save_config(cfg: dict) -> None:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_PATH.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
-def reset_config() -> dict:
-    if CONFIG_PATH.exists():
-        try:
-            CONFIG_PATH.unlink()
-        except OSError:
-            pass
-    return dict(DEFAULT_CONFIG)
-
 
 def cookie_args(cfg: dict) -> list[str]:
     mode = cfg.get("cookies_mode", "none")
@@ -1193,11 +869,6 @@ def cookie_args(cfg: dict) -> list[str]:
         return ["--cookies-from-browser", cfg["cookies_browser"]]
     return []
 
-
-# ==========================================================================
-# Cookies file helpers
-# ==========================================================================
-
 def parse_cookies_file(path: str) -> list[dict]:
     p = parse_user_path(path)
     if not p.exists():
@@ -1208,42 +879,152 @@ def parse_cookies_file(path: str) -> list[dict]:
         if not line or line.startswith("#"):
             continue
         parts = line.split("\t")
-        if len(parts) != 7:
-            continue
-        domain, flag, cpath, secure, expiration, name, value = parts
-        cookies.append({
-            "domain": domain, "flag": flag, "path": cpath, "secure": secure,
-            "expiration": expiration, "name": name, "value": value,
-        })
+        if len(parts) == 7:
+            cookies.append({"domain": parts[0], "name": parts[5], "value": parts[6]})
     return cookies
 
-
-def append_cookie_entry(path: str, domain: str, name: str, value: str) -> None:
-    p = parse_user_path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    if not p.exists():
-        p.write_text(
-            "# Netscape HTTP Cookie File\n"
-            "# Generated by MogDop's MediaCLI, used by yt-dlp's --cookies option.\n\n"
-        )
-    flag = "TRUE" if domain.startswith(".") else "FALSE"
-    expiration = str(int(time.time()) + 10 * 365 * 24 * 3600)
-    line = "\t".join([domain, flag, "/", "FALSE", expiration, name, value])
-    with p.open("a", encoding="utf-8") as f:
-        f.write(line + "\n")
-
-
 # ==========================================================================
-# Dependency check
+# Schema with CLI Argument Annotations (Requirement 4)
 # ==========================================================================
 
-def missing_dependencies() -> list[tuple[str, str]]:
-    deps = [("yt-dlp", "yt-dlp"), ("ffmpeg", "ffmpeg"), ("ffprobe", "ffmpeg")]
-    return [(bin_, pkg) for bin_, pkg in deps if not shutil.which(bin_)]
+DOWNLOAD_PRESET_CATEGORIES = [
+    {"title_key": "tab_set_gen", "fields": [
+        {"key": "quality", "label": "Max Quality (height in px, e.g. 1080)", "cli": "-f bestvideo[height<=?]", "type": "text"},
+        {"key": "output_template", "label": "Filename Output Template", "cli": "-o template", "type": "text"},
+        {"key": "restrict_filenames", "label": "Restrict Filenames (ASCII only, no spaces)", "cli": "--restrict-filenames", "type": "bool"},
+        {"key": "retries", "label": "Connection Retries", "cli": "--retries N", "type": "text"},
+        {"key": "concurrent_fragments", "label": "Concurrent Fragment Downloads", "cli": "--concurrent-fragments N", "type": "choice", "choices": [("", "(default)"), ("4", "4"), ("8", "8"), ("16", "16")]},
+    ]},
+    {"title_key": "tab_set_conv", "fields": [
+        {"key": "video_preset", "label": "Video Codec Export Preset", "cli": "--recode-video / --postprocessor-args", "type": "video_preset"},
+        {"key": "vcodec", "label": "Video Codec Preference", "cli": "-f bestvideo[vcodec^=?]", "type": "choice", "choices": [("auto", "Auto"), ("av1", "Force AV1"), ("vp9", "Force VP9"), ("h264", "Force H.264")]},
+        {"key": "fps_limit", "label": "FPS Limit", "cli": "-f bestvideo[fps<=?]", "type": "choice", "choices": [("", "Max"), ("60", "60 FPS"), ("30", "30 FPS")]},
+        {"key": "audio_only", "label": "Extract Audio Only", "cli": "-x / --extract-audio", "type": "bool"},
+        {"key": "audio_format", "label": "Audio Format", "cli": "--audio-format fmt", "type": "choice", "choices": [(a, a.upper()) for a in AUDIO_FORMATS]},
+        {"key": "audio_quality", "label": "Audio Quality", "cli": "--audio-quality Q", "type": "choice", "choices": [("0", "Best (0)"), ("2", "High (2)"), ("5", "Medium (5)"), ("9", "Smallest (9)")]},
+    ]},
+    {"title_key": "cat_subtitles", "fields": [
+        {"key": "subs_enabled", "label": "Download Subtitles", "cli": "--write-subs", "type": "bool"},
+        {"key": "sub_langs", "label": "Subtitle Languages", "cli": "--sub-langs langs", "type": "text"},
+        {"key": "auto_subs", "label": "Include Auto-Generated Subtitles", "cli": "--write-auto-subs", "type": "bool"},
+        {"key": "embed_subs", "label": "Embed Subtitles into Video Container", "cli": "--embed-subs", "type": "bool"},
+    ]},
+    {"title_key": "cat_thumbmeta", "fields": [
+        {"key": "embed_metadata", "label": "Embed Metadata & Cover Art", "cli": "--embed-metadata --embed-thumbnail", "type": "bool"},
+        {"key": "embed_chapters", "label": "Embed Chapters", "cli": "--embed-chapters", "type": "bool"},
+        {"key": "write_extra", "label": "Save Description & Thumbnail as Files", "cli": "--write-description --write-thumbnail", "type": "bool"},
+        {"key": "sponsorblock", "label": "SponsorBlock (Cut Sponsorships)", "cli": "--sponsorblock-remove categories", "type": "choice", "choices": [("off", "Disabled"), ("sponsors", "Sponsors Only"), ("sponsors_promo", "Sponsors + Intros + Promos")]},
+    ]},
+    {"title_key": "tab_system", "fields": [
+        {"key": "proxy_mode", "label": "Proxy Mode", "cli": "--proxy url", "type": "proxy_mode"},
+        {"key": "ratelimit", "label": "Speed Rate Limit", "cli": "--limit-rate rate", "type": "choice", "choices": [("", "Unlimited"), ("10M", "10 MB/s"), ("5M", "5 MB/s"), ("2M", "2 MB/s")]},
+        {"key": "geobypass", "label": "Bypass Geographic Restrictions", "cli": "--geo-bypass", "type": "bool"},
+        {"key": "live_start", "label": "Download Live Streams from Start", "cli": "--live-from-start", "type": "bool"},
+    ]}
+]
 
+def _builtin_preset_defaults(cfg: dict) -> dict:
+    return {
+        "quality": "",
+        "video_preset": cfg.get("video_preset", "davinci_dnxhr"),
+        "custom_ext": "mp4",
+        "custom_flags": "-c:v libx264 -c:a aac",
+        "vcodec": "auto",
+        "fps_limit": "",
+        "audio_only": False,
+        "audio_format": cfg.get("audio_format", "mp3"),
+        "audio_quality": "0",
+        "subs_enabled": False,
+        "sub_langs": cfg.get("sub_langs", "ru,en"),
+        "auto_subs": False,
+        "embed_subs": False,
+        "embed_metadata": True,
+        "embed_chapters": True,
+        "write_extra": False,
+        "sponsorblock": "off",
+        "proxy_mode": cfg.get("proxy_mode", "system"),
+        "proxy_url": cfg.get("proxy_url", ""),
+        "ratelimit": "",
+        "geobypass": False,
+        "live_start": False,
+        "concurrent_fragments": "",
+        "retries": "",
+        "restrict_filenames": False,
+        "output_template": "",
+    }
+
+def get_effective_default_fields(cfg: dict) -> dict:
+    fields = _builtin_preset_defaults(cfg)
+    fields.update(cfg.get("preset_defaults") or {})
+    return fields
+
+def build_ytdlp_args_from_preset(preset: dict, cfg: dict, out_dir: Path, for_playlist: bool = False) -> list[str]:
+    f = preset.get("fields", {})
+    cmd: list[str] = []
+
+    if f.get("restrict_filenames"):
+        cmd += ["--restrict-filenames"]
+    if f.get("retries"):
+        cmd += ["--retries", str(f["retries"])]
+    if f.get("concurrent_fragments"):
+        cmd += ["--concurrent-fragments", str(f["concurrent_fragments"])]
+
+    if f.get("audio_only"):
+        cmd += ["-x", "--audio-format", f.get("audio_format", "mp3"), "--audio-quality", str(f.get("audio_quality", "0"))]
+    else:
+        quality = f.get("quality", "")
+        fps_suffix = f"[fps<={f['fps_limit']}]" if f.get("fps_limit") else ""
+        q_str = f"[height<={quality}]" if quality else ""
+        vc_filter = {"av1": "[vcodec^=av01]", "vp9": "[vcodec^=vp9]", "h264": "[vcodec^=avc1]"}.get(f.get("vcodec", "auto"), "")
+        fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio/best{q_str}{fps_suffix}"
+        cmd += ["-f", fmt]
+
+        v_preset = f.get("video_preset", "davinci_dnxhr")
+        if v_preset == "custom":
+            ext = (f.get("custom_ext") or "mp4").strip(".")
+            flags = f.get("custom_flags") or "-c:v libx264 -c:a aac"
+            cmd += ["--recode-video", ext, "--postprocessor-args", f"ffmpeg:{flags}"]
+        elif v_preset in VIDEO_PRESETS:
+            cmd += VIDEO_PRESETS[v_preset]["args"]
+
+    if f.get("geobypass"):
+        cmd += ["--geo-bypass"]
+
+    # Fixed proxy handling: append proxy arguments ONLY once
+    cmd += get_proxy_args(cfg, override_mode=f.get("proxy_mode"), override_url=f.get("proxy_url"))
+
+    if f.get("ratelimit"):
+        cmd += ["--limit-rate", str(f["ratelimit"])]
+    if f.get("live_start"):
+        cmd += ["--live-from-start"]
+    if f.get("write_extra"):
+        cmd += ["--write-description", "--write-thumbnail"]
+
+    sb = f.get("sponsorblock", "off")
+    if sb != "off":
+        cats = "sponsor" if sb == "sponsors" else "sponsor,selfpromo,interaction"
+        cmd += ["--sponsorblock-remove", cats]
+
+    if not f.get("audio_only"):
+        if f.get("embed_metadata", True):
+            cmd += ["--embed-metadata", "--embed-thumbnail"]
+        if f.get("embed_chapters", True):
+            cmd += ["--embed-chapters"]
+
+    if f.get("subs_enabled"):
+        cmd += ["--write-subs", "--sub-langs", f.get("sub_langs", "ru,en")]
+        if f.get("auto_subs"):
+            cmd += ["--write-auto-subs"]
+        if f.get("embed_subs"):
+            cmd += ["--embed-subs"]
+
+    template = f.get("output_template") or ("%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s" if for_playlist else "%(title)s.%(ext)s")
+    cmd += ["-o", str(out_dir / template)]
+    cmd += cookie_args(cfg)
+    return cmd
 
 # ==========================================================================
-# Low-level curses widgets with Tabbed Navigation
+# Curses Drawing & Overlay Widgets
 # ==========================================================================
 
 def safe_addstr(stdscr, y: int, x: int, text: str, max_w: int, attr=curses.A_NORMAL) -> None:
@@ -1254,16 +1035,16 @@ def safe_addstr(stdscr, y: int, x: int, text: str, max_w: int, attr=curses.A_NOR
     except curses.error:
         pass
 
-
 def draw_header(stdscr, title: str, w: int) -> None:
     safe_addstr(stdscr, 0, 2, title, w - 4, curses.A_BOLD)
     safe_addstr(stdscr, 1, 0, "-" * w, w)
 
-
 def draw_footer(stdscr, text: str, w: int, h: int) -> None:
     safe_addstr(stdscr, h - 2, 0, "-" * w, w)
-    safe_addstr(stdscr, h - 1, 2, text, w - 4, curses.A_DIM)
-
+    safe_addstr(stdscr, h - 1, 2, text, w - 24, curses.A_DIM)
+    bg_sum = BG_QUEUE.get_summary()
+    if bg_sum:
+        safe_addstr(stdscr, h - 1, max(2, w - len(bg_sum) - 2), bg_sum, len(bg_sum) + 2, curses.color_pair(3) | curses.A_BOLD if curses else curses.A_BOLD)
 
 def render_progress_bar(pct: float, bar_w: int, style: str = "blocks") -> str:
     pct = max(0.0, min(100.0, pct))
@@ -1271,120 +1052,591 @@ def render_progress_bar(pct: float, bar_w: int, style: str = "blocks") -> str:
     filled = int(inner_w * (pct / 100.0))
     filled = max(0, min(inner_w, filled))
     unfilled = inner_w - filled
-
     if style == "blocks":
         bar = "█" * filled + "░" * unfilled
     elif style == "dots":
         bar = "●" * filled + "○" * unfilled
     elif style == "minimal":
         bar = "#" * filled + "-" * unfilled
-    else:  # "classic"
+    else:
         arrow = ">" if filled < inner_w else ""
         spaces = " " * max(0, unfilled - len(arrow))
         bar = "=" * filled + arrow + spaces
-
     return f"[{bar}]"
 
+# ==========================================================================
+# Embedded Overlay Terminal (Requirement 7)
+# ==========================================================================
 
-def run_menu_tabbed(stdscr, title: str, tabs: list[dict], footer: str,
-                       start_tab: int = 0, start_index: int = 0,
-                       ascii_art: list[str] = None) -> tuple[int | None, int | None]:
-    tab_idx = start_tab
-    item_idx = start_index
+class EmbeddedTerminal:
+    """A floating terminal overlay accessible via Alt+Shift+P or F12 from any screen."""
+
+    def __init__(self):
+        self.history_lines: list[str] = [
+            "MediaCLI Interactive Console. Type 'help' or '?' for commands.",
+            "Press Alt+Shift+P, F12, or Esc to minimize. Type 'exit' to close.",
+            ""
+        ]
+        self.cmd_history: list[str] = []
+        self.cmd_idx: int = 0
+        self.current_buf: list[str] = []
+
+    def open(self, stdscr, cfg: dict):
+        curses.curs_set(1)
+        while True:
+            h, w = stdscr.getmaxyx()
+            stdscr.erase()
+
+            # Draw outer box
+            for y in range(h):
+                safe_addstr(stdscr, y, 0, "|" if 0 < y < h - 1 else "+", 1, curses.A_DIM)
+                safe_addstr(stdscr, y, w - 1, "|" if 0 < y < h - 1 else "+", 1, curses.A_DIM)
+            safe_addstr(stdscr, 0, 0, "+" + "=" * (w - 2) + "+", w, curses.A_BOLD)
+            safe_addstr(stdscr, h - 1, 0, "+" + "=" * (w - 2) + "+", w, curses.A_BOLD)
+
+            title = " [ MediaCLI Terminal Overlay — Alt+Shift+P / F12 / Esc to minimize ] "
+            safe_addstr(stdscr, 0, max(2, (w - len(title)) // 2), title, w - 4, curses.color_pair(4) | curses.A_BOLD if curses else curses.A_BOLD)
+
+            # Output lines
+            max_log_rows = h - 4
+            visible_lines = self.history_lines[-max_log_rows:]
+            for idx, line in enumerate(visible_lines):
+                safe_addstr(stdscr, 1 + idx, 2, line, w - 4)
+
+            # Prompt line
+            prompt = "mediacli> "
+            safe_addstr(stdscr, h - 2, 2, "-" * (w - 4), w - 4, curses.A_DIM)
+            safe_addstr(stdscr, h - 2, 2, prompt, len(prompt), curses.color_pair(5) | curses.A_BOLD if curses else curses.A_BOLD)
+            input_text = "".join(self.current_buf)
+            safe_addstr(stdscr, h - 2, 2 + len(prompt), input_text, w - len(prompt) - 4)
+
+            try:
+                stdscr.move(h - 2, min(w - 2, 2 + len(prompt) + len(self.current_buf)))
+            except curses.error:
+                pass
+            stdscr.refresh()
+
+            key = stdscr.getch()
+
+            if key in (curses.KEY_F12, 276):
+                curses.curs_set(0)
+                return
+            if key == 27:  # Esc or Alt sequence
+                stdscr.nodelay(True)
+                next_k = stdscr.getch()
+                stdscr.nodelay(False)
+                if next_k in (ord('P'), ord('p'), 80, 112, -1):
+                    curses.curs_set(0)
+                    return
+                if next_k != -1:
+                    curses.ungetch(next_k)
+                curses.curs_set(0)
+                return
+
+            if key in (curses.KEY_ENTER, 10, 13):
+                cmd_line = "".join(self.current_buf).strip()
+                self.current_buf = []
+                if not cmd_line:
+                    continue
+                self.cmd_history.append(cmd_line)
+                self.cmd_idx = len(self.cmd_history)
+                self.history_lines.append(f"mediacli> {cmd_line}")
+
+                if cmd_line.lower() in ("exit", "quit", "close"):
+                    curses.curs_set(0)
+                    return
+                elif cmd_line.lower() in ("clear", "cls"):
+                    self.history_lines = []
+                else:
+                    self._dispatch_command(cmd_line, cfg)
+
+            elif key in (curses.KEY_UP, ord('k')):
+                if self.cmd_history and self.cmd_idx > 0:
+                    self.cmd_idx -= 1
+                    self.current_buf = list(self.cmd_history[self.cmd_idx])
+            elif key in (curses.KEY_DOWN, ord('j')):
+                if self.cmd_history and self.cmd_idx < len(self.cmd_history) - 1:
+                    self.cmd_idx += 1
+                    self.current_buf = list(self.cmd_history[self.cmd_idx])
+                else:
+                    self.cmd_idx = len(self.cmd_history)
+                    self.current_buf = []
+            elif key in (curses.KEY_BACKSPACE, 127, 8):
+                if self.current_buf:
+                    self.current_buf.pop()
+            elif 32 <= key <= 126:
+                self.current_buf.append(chr(key))
+
+    def _dispatch_command(self, cmd_line: str, cfg: dict):
+        parts = cmd_line.split()
+        if not parts:
+            return
+        cmd = parts[0].lower()
+        args = parts[1:]
+
+        if cmd in ("help", "?"):
+            self.history_lines += [
+                "Available Terminal Commands:",
+                "  config list / get <k> / set <k> <v> - Inspect and modify settings",
+                "  preset list / show <id> / delete <id> - Manage download presets",
+                "  queue [list|cancel <id>]            - View/cancel background tasks",
+                "  history [list|clear]               - View or wipe operation history",
+                "  cookies [list|add <dom> <k> <v>]   - Manage cookies.txt file",
+                "  proxy [status|set <mode> [url]]    - Change active network proxy",
+                "  theme <name>                       - Switch color theme directly",
+                "  doctor                             - Diagnose dependencies & tools",
+                "  dl <url> [-q 1080] [-p preset]     - Queue download to background",
+                "  convert <file> [-p preset]         - Convert local media file",
+                "  probe <file>                       - Print stream details with ffprobe",
+                "  clear / cls                        - Clear console buffer",
+                "  exit / quit                        - Close terminal overlay"
+            ]
+
+        elif cmd == "config":
+            if not args or args[0] == "list":
+                for k, v in sorted(cfg.items()):
+                    if not isinstance(v, (list, dict)):
+                        self.history_lines.append(f"  {k} = {v}")
+            elif args[0] == "get" and len(args) > 1:
+                self.history_lines.append(f"  {args[1]} = {cfg.get(args[1], '<not set>')}")
+            elif args[0] == "set" and len(args) > 2:
+                key = args[1]
+                val = " ".join(args[2:])
+                if val.lower() == "true": val = True
+                elif val.lower() == "false": val = False
+                elif val.isdigit(): val = int(val)
+                cfg[key] = val
+                save_config(cfg)
+                apply_theme(cfg)
+                self.history_lines.append(f"  [✓] Set {key} = {val}")
+            else:
+                self.history_lines.append("  Usage: config [list | get <key> | set <key> <value>]")
+
+        elif cmd == "preset":
+            presets = cfg.get("download_presets", [])
+            if not args or args[0] == "list":
+                self.history_lines.append(f"Saved Presets ({len(presets)}):")
+                for p in presets:
+                    def_marker = " [DEFAULT]" if p["id"] == cfg.get("default_download_preset") else ""
+                    self.history_lines.append(f"  - {p['id']}: {p['name']}{def_marker}")
+            elif args[0] == "show" and len(args) > 1:
+                p = next((p for p in presets if p["id"] == args[1] or p["name"] == args[1]), None)
+                if p:
+                    self.history_lines.append(f"Preset {p['name']} ({p['id']}):")
+                    for fk, fv in p.get("fields", {}).items():
+                        self.history_lines.append(f"    {fk}: {fv}")
+                else:
+                    self.history_lines.append(f"  [!] Preset '{args[1]}' not found.")
+            elif args[0] == "delete" and len(args) > 1:
+                cfg["download_presets"] = [p for p in presets if p["id"] != args[1] and p["name"] != args[1]]
+                save_config(cfg)
+                self.history_lines.append(f"  [✓] Deleted preset {args[1]}")
+            else:
+                self.history_lines.append("  Usage: preset [list | show <id> | delete <id>]")
+
+        elif cmd in ("queue", "bg"):
+            if not args or args[0] == "list":
+                if not BG_QUEUE.tasks:
+                    self.history_lines.append("  Background queue is empty.")
+                for t in BG_QUEUE.tasks:
+                    self.history_lines.append(f"  [{t.id}] {t.title} | Status: {t.status} | Stage: {t.stage} ({t.pct:.1f}%)")
+            elif args[0] == "cancel" and len(args) > 1:
+                tid = int(args[1]) if args[1].isdigit() else -1
+                if BG_QUEUE.cancel_task(tid):
+                    self.history_lines.append(f"  [✓] Cancelled background task #{tid}")
+                else:
+                    self.history_lines.append(f"  [!] Task #{tid} not found.")
+
+        elif cmd == "history":
+            if not args or args[0] == "list":
+                if not HISTORY_PATH.exists():
+                    self.history_lines.append("  No history entries.")
+                else:
+                    entries = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))[:10]
+                    for e in entries:
+                        self.history_lines.append(f"  [{e.get('time')}] {e.get('type')} ({e.get('status')}): {e.get('source')}")
+            elif args[0] == "clear":
+                HISTORY_PATH.write_text("[]", encoding="utf-8")
+                self.history_lines.append("  [✓] Operation history cleared.")
+
+        elif cmd == "cookies":
+            cfile = cfg.get("cookies_file") or DEFAULT_COOKIES_FILE
+            if not args or args[0] == "list":
+                cookies = parse_cookies_file(cfile)
+                self.history_lines.append(f"Cookies in {cfile} ({len(cookies)}):")
+                for c in cookies[:8]:
+                    self.history_lines.append(f"  {c['domain']} -> {c['name']}")
+            elif args[0] == "add" and len(args) >= 4:
+                domain, name, val = args[1], args[2], args[3]
+                p = parse_user_path(cfile)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                exp = str(int(time.time()) + 3600*24*365)
+                flag = "TRUE" if domain.startswith(".") else "FALSE"
+                with p.open("a", encoding="utf-8") as f:
+                    f.write(f"{domain}\t{flag}\t/\tFALSE\t{exp}\t{name}\t{val}\n")
+                self.history_lines.append(f"  [✓] Cookie added: {domain} {name}")
+
+        elif cmd == "theme":
+            if args and args[0] in THEMES:
+                cfg["theme"] = args[0]
+                save_config(cfg)
+                apply_theme(cfg)
+                self.history_lines.append(f"  [✓] Theme changed to {args[0]}")
+            else:
+                self.history_lines.append(f"  Available themes: {', '.join(THEMES.keys())}")
+
+        elif cmd == "doctor":
+            bins = ["yt-dlp", "ffmpeg", "ffprobe", "atomicparsley", "deno"]
+            self.history_lines.append("System Diagnostics:")
+            for b in bins:
+                path = shutil.which(b)
+                status = f"FOUND ({path})" if path else "MISSING"
+                self.history_lines.append(f"  - {b:15s}: {status}")
+
+        elif cmd in ("dl", "download") and args:
+            url = args[0]
+            out_dir = parse_user_path(cfg["download_dir"])
+            fields = get_effective_default_fields(cfg)
+            preset_obj = {"id": "cli", "name": "Terminal DL", "fields": fields}
+            cmd_list = ["yt-dlp", *build_ytdlp_args_from_preset(preset_obj, cfg, out_dir), url]
+            task = BG_QUEUE.enqueue_cmd(cmd_list, "Download Video", source=url, target=str(out_dir))
+            self.history_lines.append(f"  [✓] Download enqueued to background as Task #{task.id}")
+
+        else:
+            self.history_lines.append(f"  [!] Unknown command: '{cmd}'. Type 'help' for instructions.")
+
+TERMINAL_OVERLAY = EmbeddedTerminal()
+
+def check_terminal_hotkey(stdscr, key: int) -> bool:
+    if key in (curses.KEY_F12, 276):
+        return True
+    if key == 27:  # Esc or Alt sequence
+        stdscr.nodelay(True)
+        next_k = stdscr.getch()
+        stdscr.nodelay(False)
+        if next_k in (ord('P'), ord('p'), 80, 112):
+            return True
+        if next_k != -1:
+            curses.ungetch(next_k)
+    return False
+
+# ==========================================================================
+# Vertical Split Settings Screen (Requirement 2 & 3 & 4)
+# ==========================================================================
+
+def screen_settings_vertical(stdscr, cfg: dict) -> None:
+    """Vertical split settings with Categories on Left and Options on Right."""
+    left_idx = 0
+    right_idx = 0
+    in_right_pane = False
     curses.curs_set(0)
+
+    categories = [
+        {"id": "gen", "title": t(cfg, "tab_set_gen")},
+        {"id": "conv", "title": t(cfg, "tab_set_conv")},
+        {"id": "ui", "title": t(cfg, "tab_set_ui")},
+        {"id": "app", "title": t(cfg, "tab_set_app")},
+        {"id": "presets", "title": t(cfg, "tab_set_presets")},
+        {"id": "defaults", "title": t(cfg, "tab_set_defaults")},
+    ]
 
     while True:
         stdscr.erase()
         h, w = stdscr.getmaxyx()
-        draw_header(stdscr, title, w)
-        row = 2
+        draw_header(stdscr, t(cfg, "settings_title"), w)
 
-        # Render ASCII Art if provided and screen height is sufficient
-        if ascii_art and h >= 24 and w >= 82:
-            art_x = max(2, (w - max(len(line) for line in ascii_art)) // 2)
-            for line in ascii_art:
-                safe_addstr(stdscr, row, art_x, line, w - 4, curses.A_BOLD)
-                row += 1
-            row += 1
+        left_w = 26
+        divider_x = left_w + 2
 
-        # Render Tab Bar
-        tab_x = 4
-        for t_i, tab in enumerate(tabs):
-            t_name = f" [ {tab['title']} ] "
-            if t_i == tab_idx:
-                safe_addstr(stdscr, row, tab_x, t_name, w - tab_x, HL_ATTR)
-            else:
-                safe_addstr(stdscr, row, tab_x, t_name, w - tab_x, curses.A_DIM)
-            tab_x += len(t_name) + 2
-        row += 2
+        # Draw left categories
+        for i, cat in enumerate(categories):
+            y = 3 + i
+            is_sel = (i == left_idx)
+            attr = HL_ATTR if (is_sel and not in_right_pane) else (curses.A_BOLD if is_sel else curses.A_NORMAL)
+            marker = "► " if is_sel else "  "
+            safe_addstr(stdscr, y, 2, f"{marker}{cat['title']}", left_w, attr)
 
-        # Current Active Tab
-        current_tab = tabs[tab_idx]
-        items = current_tab["items"]
-        descriptions = current_tab.get("descriptions", [])
-        item_idx = min(item_idx, len(items) - 1) if items else 0
+        # Draw vertical separator
+        for y in range(2, h - 2):
+            safe_addstr(stdscr, y, divider_x, "|", 1, curses.A_DIM)
 
-        # Description block reservation
-        desc_text = descriptions[item_idx] if descriptions and 0 <= item_idx < len(descriptions) else ""
-        desc_lines = desc_text.split("\n") if desc_text else []
-        reserved_bottom_rows = 3 + (len(desc_lines) + 2 if desc_lines else 0)
+        # Generate current right items
+        active_cat = categories[left_idx]["id"]
+        right_items: list[tuple[str, str, str]] = []  # (Label, CLI Flag Hint, Key)
 
-        for i, item in enumerate(items):
-            y = row + i
-            if y >= h - reserved_bottom_rows:
+        if active_cat == "gen":
+            right_items = [
+                (t(cfg, "settings_download_dir", v=cfg["download_dir"]), "-o / --output", "download_dir"),
+                (t(cfg, "settings_goal", v=cfg.get("user_goal", "editing")), "workflow optimization", "user_goal"),
+                (t(cfg, "settings_proxy", v=(cfg.get("proxy_url") if cfg.get("proxy_mode") == "custom" else t(cfg, f"proxy_{cfg.get('proxy_mode', 'system')}"))), "--proxy", "proxy_mode"),
+                (t(cfg, "settings_language", v="English" if cfg.get("language") == "en" else "Русский"), "i18n locale", "language"),
+                (t(cfg, "settings_cookies", v=cfg.get("cookies_mode", "none")), "--cookies / --cookies-from-browser", "cookies"),
+            ]
+        elif active_cat == "conv":
+            right_items = [
+                (t(cfg, "settings_preset", v=get_preset_name(cfg, cfg.get("video_preset", "davinci_dnxhr"))), "--recode-video / --postprocessor-args", "video_preset"),
+                (t(cfg, "settings_audio_format", v=cfg["audio_format"]), "--audio-format", "audio_format"),
+                (t(cfg, "settings_sub_langs", v=cfg["sub_langs"]), "--sub-langs", "sub_langs"),
+            ]
+        elif active_cat == "ui":
+            theme_name = THEMES.get(cfg.get("theme", "cyan"), THEMES["cyan"])["name_ru" if cfg.get("language")=="ru" else "name_en"]
+            right_items = [
+                (t(cfg, "settings_theme", v=theme_name), "curses color pair", "theme"),
+                (t(cfg, "settings_bg", v=t(cfg, "bg_option_keep" if cfg.get("use_terminal_bg", True) else "bg_option_solid")), "use_default_colors()", "use_terminal_bg"),
+                (t(cfg, "settings_style", v=cfg.get("progress_style", "blocks")), "ASCII/Unicode style", "progress_style"),
+            ]
+        elif active_cat == "app":
+            right_items = [
+                (t(cfg, "settings_bg_queue_max", v=cfg.get("bg_queue_max", 3)), "FIFO Queue slots", "bg_queue_max"),
+                (t(cfg, "settings_notify_bell", v="YES" if cfg.get("notify_bell", True) else "NO"), "\\a terminal bell", "notify_bell"),
+                (t(cfg, "settings_auto_check_deps", v="YES" if cfg.get("auto_check_deps", True) else "NO"), "startup pacman check", "auto_check_deps"),
+                (t(cfg, "settings_editor", v=cfg.get("default_editor") or os.environ.get("EDITOR", "nano")), "$EDITOR path", "editor"),
+                (t(cfg, "settings_reset"), "factory wipe", "reset"),
+            ]
+        elif active_cat == "presets":
+            right_items = [(f"Manage Presets ({len(cfg.get('download_presets', []))} saved)", "CRUD manager", "open_presets")]
+        elif active_cat == "defaults":
+            right_items = [(t(cfg, "tab_set_defaults"), "Global download template", "open_defaults")]
+
+        # Render right items
+        right_x = divider_x + 3
+        right_w = w - right_x - 2
+        right_idx = min(right_idx, max(0, len(right_items) - 1))
+
+        for idx, (label, cli_hint, _) in enumerate(right_items):
+            y = 3 + idx
+            if y >= h - 4:
                 break
-            is_divider = item.startswith("---") or item.startswith("===")
-            if is_divider:
-                safe_addstr(stdscr, y, 4, item, w - 8, curses.A_DIM)
-                continue
+            is_item_sel = (idx == right_idx and in_right_pane)
+            attr = HL_ATTR if is_item_sel else curses.A_NORMAL
+            marker = "> " if is_item_sel else "  "
 
-            attr = HL_ATTR if i == item_idx else curses.A_NORMAL
-            marker = "> " if i == item_idx else "  "
-            safe_addstr(stdscr, y, 4, f"{marker}{item}", w - 8, attr)
+            # Render item with dimmed CLI argument hint
+            safe_addstr(stdscr, y, right_x, f"{marker}{label}", right_w - len(cli_hint) - 3, attr)
+            safe_addstr(stdscr, y, w - len(cli_hint) - 4, f"[{cli_hint}]", len(cli_hint) + 2, curses.A_DIM)
 
-        # Render Description box at bottom
-        if desc_lines:
-            desc_y = h - 2 - len(desc_lines) - 2
-            safe_addstr(stdscr, desc_y, 2, "-" * (w - 4), w - 4, curses.A_DIM)
-            safe_addstr(stdscr, desc_y + 1, 4, "Info:", w - 8, curses.A_BOLD)
-            for dl_idx, dl in enumerate(desc_lines):
-                safe_addstr(stdscr, desc_y + 2 + dl_idx, 4, dl, w - 8, curses.A_DIM)
-
-        draw_footer(stdscr, footer, w, h)
+        footer_msg = t(cfg, "footer_vertical_items" if in_right_pane else "footer_vertical_tabs")
+        draw_footer(stdscr, footer_msg, w, h)
         stdscr.refresh()
 
         key = stdscr.getch()
 
-        if key == 17:  # Ctrl+Q
-            return None, None
-        if key == 3:   # Ctrl+C
+        if check_terminal_hotkey(stdscr, key):
+            TERMINAL_OVERLAY.open(stdscr, cfg)
             continue
 
-        if key in (curses.KEY_LEFT, ord('h')):
-            tab_idx = (tab_idx - 1) % len(tabs)
-            item_idx = 0
-        elif key in (curses.KEY_RIGHT, ord('l')):
-            tab_idx = (tab_idx + 1) % len(tabs)
-            item_idx = 0
-        elif key in (curses.KEY_UP, ord('k')):
-            if items:
-                item_idx = (item_idx - 1) % len(items)
-                while items[item_idx].startswith("---") or items[item_idx].startswith("==="):
-                    item_idx = (item_idx - 1) % len(items)
-        elif key in (curses.KEY_DOWN, ord('j')):
-            if items:
-                item_idx = (item_idx + 1) % len(items)
-                while items[item_idx].startswith("---") or items[item_idx].startswith("==="):
-                    item_idx = (item_idx + 1) % len(items)
-        elif key in (curses.KEY_ENTER, 10, 13):
-            return tab_idx, item_idx
-        elif key in (27, ord('q')):
-            return None, None
+        if not in_right_pane:
+            if key in (curses.KEY_UP, ord('k')):
+                left_idx = (left_idx - 1) % len(categories)
+                right_idx = 0
+            elif key in (curses.KEY_DOWN, ord('j')):
+                left_idx = (left_idx + 1) % len(categories)
+                right_idx = 0
+            elif key in (curses.KEY_ENTER, 10, 13, curses.KEY_RIGHT, ord('l')):
+                in_right_pane = True
+                right_idx = 0
+            elif key in (27, ord('q')):
+                return
+        else:
+            if key in (curses.KEY_UP, ord('k')):
+                right_idx = (right_idx - 1) % len(right_items) if right_items else 0
+            elif key in (curses.KEY_DOWN, ord('j')):
+                right_idx = (right_idx + 1) % len(right_items) if right_items else 0
+            elif key in (27, curses.KEY_LEFT, ord('h')):
+                in_right_pane = False
+            elif key in (curses.KEY_ENTER, 10, 13):
+                if right_items:
+                    target_key = right_items[right_idx][2]
+                    _handle_setting_edit(stdscr, cfg, target_key)
 
+def _handle_setting_edit(stdscr, cfg: dict, key: str):
+    if key == "download_dir":
+        val = text_input(stdscr, t(cfg, "settings_title"), "New Download Directory:", t(cfg, "footer_input"), default=cfg["download_dir"])
+        if val: cfg["download_dir"] = val; save_config(cfg)
+    elif key == "user_goal":
+        goals = ["editing", "downloading", "audio", "transcoding"]
+        labels = [t(cfg, f"goal_{g}") for g in goals]
+        gi = run_menu(stdscr, t(cfg, "settings_title"), labels, t(cfg, "footer_nav"))
+        if gi is not None: cfg["user_goal"] = goals[gi]; save_config(cfg)
+    elif key == "proxy_mode":
+        modes = ["system", "custom", "none"]
+        pi = run_menu(stdscr, t(cfg, "settings_title"), [t(cfg, f"proxy_{m}") for m in modes], t(cfg, "footer_nav"))
+        if pi is not None:
+            cfg["proxy_mode"] = modes[pi]
+            if modes[pi] == "custom":
+                pr = text_input(stdscr, t(cfg, "settings_title"), "Proxy URL (e.g. socks5://127.0.0.1:10808):", t(cfg, "footer_input"), default=cfg.get("proxy_url", ""))
+                if pr is not None: cfg["proxy_url"] = pr.strip()
+            save_config(cfg)
+    elif key == "language":
+        cfg["language"] = "ru" if cfg.get("language") == "en" else "en"
+        save_config(cfg)
+    elif key == "cookies":
+        screen_cookies(stdscr, cfg)
+    elif key == "video_preset":
+        keys = get_ordered_video_preset_keys(cfg)
+        labels = [VIDEO_PRESETS[k]["name_ru" if cfg.get("language")=="ru" else "name_en"] for k in keys]
+        pi = run_menu(stdscr, t(cfg, "settings_title"), labels, t(cfg, "footer_nav"))
+        if pi is not None: cfg["video_preset"] = keys[pi]; save_config(cfg)
+    elif key == "audio_format":
+        fi = run_menu(stdscr, t(cfg, "settings_title"), [a.upper() for a in AUDIO_FORMATS], t(cfg, "footer_nav"))
+        if fi is not None: cfg["audio_format"] = AUDIO_FORMATS[fi]; save_config(cfg)
+    elif key == "sub_langs":
+        val = text_input(stdscr, t(cfg, "settings_title"), "Subtitle languages (comma separated):", t(cfg, "footer_input"), default=cfg["sub_langs"])
+        if val is not None: cfg["sub_langs"] = val.strip(); save_config(cfg)
+    elif key == "theme":
+        t_keys = list(THEMES.keys())
+        labels = [THEMES[k]["name_ru" if cfg.get("language")=="ru" else "name_en"] for k in t_keys]
+        ti = run_menu(stdscr, t(cfg, "settings_title"), labels, t(cfg, "footer_nav"))
+        if ti is not None: cfg["theme"] = t_keys[ti]; apply_theme(cfg); save_config(cfg)
+    elif key == "use_terminal_bg":
+        cfg["use_terminal_bg"] = not cfg.get("use_terminal_bg", True)
+        apply_theme(cfg); save_config(cfg)
+    elif key == "progress_style":
+        styles = ["blocks", "classic", "dots", "minimal"]
+        si = run_menu(stdscr, t(cfg, "settings_title"), styles, t(cfg, "footer_nav"))
+        if si is not None: cfg["progress_style"] = styles[si]; save_config(cfg)
+    elif key == "notify_bell":
+        cfg["notify_bell"] = not cfg.get("notify_bell", True); save_config(cfg)
+    elif key == "auto_check_deps":
+        cfg["auto_check_deps"] = not cfg.get("auto_check_deps", True); save_config(cfg)
+    elif key == "bg_queue_max":
+        val = text_input(stdscr, t(cfg, "settings_title"), "Max parallel background queue size (1-5):", t(cfg, "footer_input"), default=str(cfg.get("bg_queue_max", 3)))
+        if val and val.isdigit(): cfg["bg_queue_max"] = int(val); save_config(cfg)
+    elif key == "open_presets":
+        screen_manage_download_presets(stdscr, cfg)
+    elif key == "open_defaults":
+        fields = get_effective_default_fields(cfg)
+        result = screen_manual_preset_config(stdscr, cfg, fields)
+        if result and result[0] == "save":
+            cfg["preset_defaults"] = result[1]
+            save_config(cfg)
+    elif key == "reset":
+        confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")], t(cfg, "footer_nav"), subtitle="Factory reset configuration?")
+        if confirm == 0:
+            cfg.clear()
+            cfg.update(DEFAULT_CONFIG)
+            save_config(cfg)
 
-def run_menu(stdscr, title: str, items: list[str], footer: str, subtitle: str = "",
-             start_index: int = 0, descriptions: list[str] = None) -> int | None:
-    """Standard single-list menu widget."""
+# ==========================================================================
+# Core Foreground Process Runner with Live Single-Line Dynamic Stage
+# ==========================================================================
+
+def run_with_log(stdscr, cfg: dict, cmd: list[str], op_type: str = "Task", source: str = "", target: str = "") -> None:
+    curses.curs_set(0)
+    style = cfg.get("progress_style", "blocks")
+
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
+    except FileNotFoundError:
+        show_message(stdscr, t(cfg, "log_title"), ["Executable not found. Please install dependencies."], t(cfg, "footer_message"))
+        return
+
+    stdscr.nodelay(True)
+    lines: list[str] = [f"[cmd] {' '.join(cmd)}", ""]
+    current_stage = "Initializing process..."
+    pct = 0.0
+    speed_str = ""
+    show_logs = False
+    buf = ""
+    re_pct = re.compile(r'(\d+(?:\.\d+)?)%')
+    re_speed = re.compile(r'(?:at|speed=)\s*([^\s]+)')
+
+    while proc.poll() is None:
+        try:
+            key = stdscr.getch()
+        except curses.error:
+            key = -1
+
+        if check_terminal_hotkey(stdscr, key):
+            TERMINAL_OVERLAY.open(stdscr, cfg)
+            continue
+
+        if key in (getattr(curses, "KEY_F10", 274), 274):
+            show_logs = not show_logs
+
+        # Requirement 6: Press 'q' or 'Esc' to transfer process to background queue
+        if key in (ord('q'), 27):
+            BG_QUEUE.add_running_process(proc, cmd, op_type, source, target, lines)
+            stdscr.nodelay(False)
+            show_message(stdscr, t(cfg, "log_title"), [t(cfg, "bg_transferred")], t(cfg, "footer_message"))
+            return
+
+        if key == 17:  # Ctrl+Q terminate
+            proc.terminate()
+            break
+
+        readable, _, _ = select.select([proc.stdout], [], [], 0.05)
+        if readable:
+            chunk = proc.stdout.read(4096)
+            if chunk:
+                text_chunk = chunk.decode("utf-8", errors="replace")
+                buf += text_chunk
+                for line in text_chunk.splitlines():
+                    current_stage = DynamicStageDetector.detect(line, current_stage)
+                    m = re_pct.search(line)
+                    if m:
+                        try: pct = float(m.group(1))
+                        except ValueError: pass
+                    ms = re_speed.search(line)
+                    if ms: speed_str = ms.group(1)
+                while "\n" in buf:
+                    p, buf = buf.split("\n", 1)
+                    if p.strip(): lines.append(p.strip())
+
+        h, w = stdscr.getmaxyx()
+        stdscr.erase()
+        draw_header(stdscr, t(cfg, "log_title"), w)
+
+        if show_logs:
+            log_h = max(0, h - 4)
+            for idx, line in enumerate(lines[-log_h:]):
+                safe_addstr(stdscr, 3 + idx, 2, line, w - 4)
+        else:
+            # Single-line prominent stage at TOP (Requirement 5)
+            safe_addstr(stdscr, 3, 4, f"Active Stage: {current_stage}", w - 8, curses.color_pair(4) | curses.A_BOLD if curses else curses.A_BOLD)
+            safe_addstr(stdscr, 4, 4, "-" * (w - 8), w - 8, curses.A_DIM)
+
+            safe_addstr(stdscr, 6, 4, f"Operation : {op_type}", w - 8)
+            if source: safe_addstr(stdscr, 7, 4, f"Source    : {source}", w - 8, curses.A_DIM)
+
+            bar_str = render_progress_bar(pct, min(44, max(20, w - 24)), style)
+            safe_addstr(stdscr, 9, 4, f"Progress  : {bar_str} {pct:5.1f}% {('(' + speed_str + ')') if speed_str else ''}", w - 8, curses.A_BOLD)
+
+            safe_addstr(stdscr, 12, 4, "[Press F10 for raw logs | 'q' to move to background queue]", w - 8, curses.A_DIM)
+
+        draw_footer(stdscr, t(cfg, "log_footer_running"), w, h)
+        stdscr.refresh()
+
+    proc.wait()
+    stdscr.nodelay(False)
+    rc = proc.returncode
+    status_msg = t(cfg, "log_finished_ok") if rc == 0 else t(cfg, "log_finished_err", v=rc)
+    lines.append(status_msg)
+
+    if cfg.get("notify_bell", True):
+        sys.stdout.write("\a")
+        sys.stdout.flush()
+
+    add_history_entry(op_type, source, target, "Success" if rc == 0 else f"Failed ({rc})")
+
+    h, w = stdscr.getmaxyx()
+    stdscr.erase()
+    draw_header(stdscr, t(cfg, "log_title"), w)
+    log_h = max(0, h - 4)
+    for idx, line in enumerate(lines[-log_h:]):
+        safe_addstr(stdscr, 3 + idx, 2, line, w - 4)
+    draw_footer(stdscr, t(cfg, "log_footer_done"), w, h)
+    stdscr.refresh()
+    while True:
+        k = stdscr.getch()
+        if k in (curses.KEY_ENTER, 10, 13, 27, ord('q'), 17):
+            break
+
+# ==========================================================================
+# Curses Base Menus & Action Dialogs
+# ==========================================================================
+
+def run_menu(stdscr, title: str, items: list[str], footer: str, subtitle: str = "", start_index: int = 0, descriptions: list[str] = None) -> int | None:
     idx = min(start_index, len(items) - 1) if items else 0
     curses.curs_set(0)
     while True:
@@ -1392,63 +1644,34 @@ def run_menu(stdscr, title: str, items: list[str], footer: str, subtitle: str = 
         h, w = stdscr.getmaxyx()
         draw_header(stdscr, title, w)
         row = 2
-
         if subtitle:
-            sub_lines = subtitle.split("\n")
-            for j, sline in enumerate(sub_lines):
-                safe_addstr(stdscr, row + j, 2, sline, w - 4, curses.A_DIM)
-            row += len(sub_lines) + 1
-
-        desc_text = descriptions[idx] if descriptions and 0 <= idx < len(descriptions) else ""
-        desc_lines = desc_text.split("\n") if desc_text else []
-        reserved_bottom_rows = 3 + (len(desc_lines) + 2 if desc_lines else 0)
+            for sline in subtitle.splitlines():
+                safe_addstr(stdscr, row, 2, sline, w - 4, curses.A_DIM)
+                row += 1
+            row += 1
 
         for i, item in enumerate(items):
             y = row + i
-            if y >= h - reserved_bottom_rows:
-                break
-            if item.startswith("---") or item.startswith("==="):
-                safe_addstr(stdscr, y, 4, item, w - 8, curses.A_DIM)
-                continue
-
+            if y >= h - 4: break
             attr = HL_ATTR if i == idx else curses.A_NORMAL
             marker = "> " if i == idx else "  "
             safe_addstr(stdscr, y, 4, f"{marker}{item}", w - 8, attr)
-
-        if desc_lines:
-            desc_y = h - 2 - len(desc_lines) - 2
-            safe_addstr(stdscr, desc_y, 2, "-" * (w - 4), w - 4, curses.A_DIM)
-            safe_addstr(stdscr, desc_y + 1, 4, "Info / Description:", w - 8, curses.A_BOLD)
-            for dl_idx, dl in enumerate(desc_lines):
-                safe_addstr(stdscr, desc_y + 2 + dl_idx, 4, dl, w - 8, curses.A_DIM)
 
         draw_footer(stdscr, footer, w, h)
         stdscr.refresh()
 
         key = stdscr.getch()
-
-        if key == 17:  # Ctrl+Q
-            return None
-        if key == 3:   # Ctrl+C
-            continue
-
-        if not items:
-            if key in (27, ord('q')):
-                return None
+        if check_terminal_hotkey(stdscr, key):
+            TERMINAL_OVERLAY.open(stdscr, load_config())
             continue
         if key in (curses.KEY_UP, ord('k')):
-            idx = (idx - 1) % len(items)
-            while items[idx].startswith("---") or items[idx].startswith("==="):
-                idx = (idx - 1) % len(items)
+            idx = (idx - 1) % len(items) if items else 0
         elif key in (curses.KEY_DOWN, ord('j')):
-            idx = (idx + 1) % len(items)
-            while items[idx].startswith("---") or items[idx].startswith("==="):
-                idx = (idx + 1) % len(items)
+            idx = (idx + 1) % len(items) if items else 0
         elif key in (curses.KEY_ENTER, 10, 13):
             return idx
         elif key in (27, ord('q')):
             return None
-
 
 def text_input(stdscr, title: str, prompt: str, footer: str, default: str = "") -> str | None:
     buf = list(default)
@@ -1458,35 +1681,25 @@ def text_input(stdscr, title: str, prompt: str, footer: str, default: str = "") 
         h, w = stdscr.getmaxyx()
         draw_header(stdscr, title, w)
         safe_addstr(stdscr, 3, 4, prompt, w - 8)
-        input_str = "".join(buf)
-        safe_addstr(stdscr, 5, 4, "> " + input_str, w - 8)
+        safe_addstr(stdscr, 5, 4, "> " + "".join(buf), w - 8)
         draw_footer(stdscr, footer, w, h)
-        cursor_x = min(6 + len(buf), w - 1)
         try:
-            stdscr.move(5, cursor_x)
-        except curses.error:
-            pass
+            stdscr.move(5, min(w - 1, 6 + len(buf)))
+        except curses.error: pass
         stdscr.refresh()
 
         key = stdscr.getch()
-
-        if key == 17 or key == 27:
-            curses.curs_set(0)
-            return None
-        if key == 3:
+        if check_terminal_hotkey(stdscr, key):
+            TERMINAL_OVERLAY.open(stdscr, load_config())
             continue
-
+        if key in (27, 17):
+            curses.curs_set(0); return None
         if key in (curses.KEY_ENTER, 10, 13):
-            curses.curs_set(0)
-            return "".join(buf)
+            curses.curs_set(0); return "".join(buf)
         if key in (curses.KEY_BACKSPACE, 127, 8):
-            if buf:
-                buf.pop()
-        elif key == curses.KEY_RESIZE:
-            continue
+            if buf: buf.pop()
         elif 32 <= key <= 126:
             buf.append(chr(key))
-
 
 def show_message(stdscr, title: str, lines: list[str], footer: str) -> None:
     curses.curs_set(0)
@@ -1495,2148 +1708,392 @@ def show_message(stdscr, title: str, lines: list[str], footer: str) -> None:
         h, w = stdscr.getmaxyx()
         draw_header(stdscr, title, w)
         for i, line in enumerate(lines):
-            y = 3 + i
-            if y >= h - 2:
-                break
-            safe_addstr(stdscr, y, 4, line, w - 8)
+            safe_addstr(stdscr, 3 + i, 4, line, w - 8)
         draw_footer(stdscr, footer, w, h)
         stdscr.refresh()
         key = stdscr.getch()
+        if check_terminal_hotkey(stdscr, key):
+            TERMINAL_OVERLAY.open(stdscr, load_config())
+            continue
         if key in (curses.KEY_ENTER, 10, 13, 27, ord('q'), 17):
             return
 
+def screen_manual_preset_config(stdscr, cfg: dict, fields: dict) -> tuple[str, dict] | None:
+    cat_idx = 0
+    item_idx = 0
+    in_items = False
 
-def run_external(stdscr, cmd: list[str]) -> None:
-    """Suspends curses and runs cmd on the raw terminal."""
-    curses.def_prog_mode()
-    curses.endwin()
-    print("\n[cmd]", " ".join(cmd), "\n")
-    try:
-        subprocess.run(cmd, check=False)
-    except FileNotFoundError:
-        print("[!] Command not found.")
-    except KeyboardInterrupt:
-        print("\n[!] Interrupted.")
-    input("\nPress Enter to return to the menu...")
-    curses.reset_prog_mode()
-    stdscr.clear()
-    curses.curs_set(0)
-
-
-def parse_sec(h: str, m: str, s: str) -> float:
-    return int(h) * 3600 + int(m) * 60 + float(s)
-
-
-def run_with_log(stdscr, cfg: dict, cmd: list[str], op_type: str = "Task",
-                 source: str = "", target: str = "") -> None:
-    """Multi-stage process executor with dynamic active stages and live progress indicators."""
-    curses.curs_set(0)
-    lang = cfg.get("language", "en")
-    style = cfg.get("progress_style", "blocks")
-
-    # Inject Proxy ONLY into yt-dlp commands (NEVER FFmpeg)
-    if cmd and "yt-dlp" in cmd[0]:
-        p_args = get_proxy_args(cfg)
-        for pa in p_args:
-            if pa not in cmd:
-                cmd.append(pa)
-
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
-    except FileNotFoundError:
-        show_message(stdscr, t(cfg, "log_title"), [t(cfg, "info_not_installed")], t(cfg, "footer_message"))
-        return
-
-    # Build Dynamic Stages List (ONLY include stages active in command)
-    stages = []
-    if "yt-dlp" in cmd[0]:
-        stages.append({"id": "meta", "name_en": "1. Extracting URL & Media Metadata", "name_ru": "1. Анализ ссылки и метаданных", "status": "active"})
-        if "--skip-download" not in cmd:
-            stages.append({"id": "video", "name_en": "2. Downloading Video Stream", "name_ru": "2. Загрузка видеопотока", "status": "pending"})
-            if "--audio-multistreams" in cmd or "mergeall" in " ".join(cmd):
-                stages.append({"id": "audio", "name_en": "3. Downloading Audio Stream(s)", "name_ru": "3. Загрузка аудиопотоков", "status": "pending"})
-            if "--recode-video" in cmd or "--postprocessor-args" in cmd or "--merge-output-format" in cmd:
-                stages.append({"id": "merge", "name_en": "4. Stream Merging & Codec Processing", "name_ru": "4. Обработка кодеков и сведение FFmpeg", "status": "pending"})
-            if "--embed-metadata" in cmd or "--embed-chapters" in cmd or "--embed-subs" in cmd:
-                stages.append({"id": "embed", "name_en": "5. Embedding Chapters, Metadata & Subs", "name_ru": "5. Вшивание глав, метаданных и субтитров", "status": "pending"})
-    else:  # FFmpeg
-        stages.append({"id": "init", "name_en": "1. Analyzing Input File & Streams", "name_ru": "1. Анализ исходного файла и потоков", "status": "active"})
-        stages.append({"id": "transcode", "name_en": "2. Transcoding Video & Audio (FFmpeg)", "name_ru": "2. Перекодирование медиапотоков (FFmpeg)", "status": "pending"})
-        stages.append({"id": "finish", "name_en": "3. Finalizing Container & Output File", "name_ru": "3. Завершение и запись файла", "status": "pending"})
-
-    stdscr.nodelay(True)
-    lines: list[str] = [f"[cmd] {' '.join(cmd)}", ""]
-    current = ""
-    buf = ""
-    eof = False
-    show_logs = False
-
-    # Progress tracking states
-    pct = 0.0
-    total_sec = 0.0
-    curr_sec = 0.0
-    speed_str = ""
-    fps_str = ""
-    frame_str = ""
-    size_str = ""
-    spinner_frames = ["|", "/", "-", "\\"]
-    spinner_idx = 0
-
-    re_pct = re.compile(r'(\d+(?:\.\d+)?)%')
-    re_dur = re.compile(r'Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)')
-    re_time = re.compile(r'time=(\d+):(\d+):(\d+(?:\.\d+)?)')
-    re_speed = re.compile(r'speed=\s*(\S+)')
-    re_fps = re.compile(r'fps=\s*(\d+)')
-    re_frame = re.compile(r'frame=\s*(\d+)')
-    re_size = re.compile(r'(?:Lsize|size)=\s*(\S+)')
-
-    def update_stage_and_progress(text: str):
-        nonlocal pct, total_sec, curr_sec, speed_str, fps_str, frame_str, size_str
-
-        # Stage Transition Parsing
-        if "yt-dlp" in cmd[0]:
-            if "[download] Destination:" in text or "[download]" in text:
-                for st in stages:
-                    if st["id"] == "meta":
-                        st["status"] = "done"
-                    elif st["id"] == "video":
-                        st["status"] = "active"
-            elif "[Merger]" in text or "[ffmpeg]" in text or "[VideoConvertor]" in text or "Converting" in text:
-                for st in stages:
-                    if st["id"] in ("meta", "video", "audio"):
-                        st["status"] = "done"
-                    elif st["id"] == "merge":
-                        st["status"] = "active"
-            elif "[Metadata]" in text or "[EmbedSubtitle]" in text or "[Thumb]" in text or "[Exec]" in text:
-                for st in stages:
-                    if st["id"] in ("meta", "video", "audio", "merge"):
-                        st["status"] = "done"
-                    elif st["id"] == "embed":
-                        st["status"] = "active"
-        else:  # FFmpeg
-            if "frame=" in text or "time=" in text:
-                stages[0]["status"] = "done"
-                if len(stages) > 1:
-                    stages[1]["status"] = "active"
-            elif "[out#0" in text or "video:" in text:
-                for st in stages[:-1]:
-                    st["status"] = "done"
-                stages[-1]["status"] = "active"
-
-        # Regex Parsing
-        m_dur = re_dur.search(text)
-        if m_dur:
-            total_sec = parse_sec(*m_dur.groups())
-
-        m_time = re_time.search(text)
-        if m_time:
-            curr_sec = parse_sec(*m_time.groups())
-            if total_sec > 0:
-                pct = min(100.0, (curr_sec / total_sec) * 100.0)
-
-        m_pct = re_pct.search(text)
-        if m_pct:
-            try:
-                pct = float(m_pct.group(1))
-            except ValueError:
-                pass
-
-        m_speed = re_speed.search(text)
-        if m_speed:
-            speed_str = m_speed.group(1)
-
-        m_fps = re_fps.search(text)
-        if m_fps:
-            fps_str = m_fps.group(1)
-
-        m_frame = re_frame.search(text)
-        if m_frame:
-            frame_str = m_frame.group(1)
-
-        m_size = re_size.search(text)
-        if m_size:
-            size_str = m_size.group(1)
-
-    f10_key = getattr(curses, "KEY_F10", 274)
-
-    while not eof:
-        spinner_idx = (spinner_idx + 1) % len(spinner_frames)
-        try:
-            key = stdscr.getch()
-        except curses.error:
-            key = -1
-
-        if key in (f10_key, 274):
-            show_logs = not show_logs
-
-        if key in (ord('q'), 27, 17) and proc.poll() is None:
-            proc.terminate()
-
-        readable, _, _ = select.select([proc.stdout], [], [], 0.05)
-        if readable:
-            chunk = proc.stdout.read(4096)
-            if chunk == b"":
-                eof = True
-            else:
-                text_chunk = chunk.decode("utf-8", errors="replace")
-                buf += text_chunk
-                update_stage_and_progress(text_chunk)
-                while True:
-                    idx_r = buf.find("\r")
-                    idx_n = buf.find("\n")
-                    if idx_r == -1 and idx_n == -1:
-                        current = buf
-                        buf = ""
-                        break
-                    if idx_n != -1 and (idx_r == -1 or idx_n < idx_r):
-                        piece = buf[:idx_n]
-                        if piece:
-                            lines.append(piece)
-                            update_stage_and_progress(piece)
-                        buf = buf[idx_n + 1:]
-                        current = ""
-                    else:
-                        piece = buf[:idx_r]
-                        if piece:
-                            update_stage_and_progress(piece)
-                        current = piece
-                        buf = buf[idx_r + 1:]
-
-        h, w = stdscr.getmaxyx()
+    while True:
         stdscr.erase()
-        draw_header(stdscr, t(cfg, "log_title"), w)
+        h, w = stdscr.getmaxyx()
+        draw_header(stdscr, t(cfg, "manual_title"), w)
 
-        if show_logs:
-            log_h = max(0, h - 4)
-            display = (lines + ([current] if current else []))[-log_h:] if log_h else []
-            for i, line in enumerate(display):
-                safe_addstr(stdscr, 3 + i, 2, line, w - 4)
+        left_w = 26
+        divider_x = left_w + 2
+
+        # Draw left categories
+        for i, cat in enumerate(DOWNLOAD_PRESET_CATEGORIES):
+            y = 3 + i
+            is_sel = (i == cat_idx)
+            attr = HL_ATTR if (is_sel and not in_items) else (curses.A_BOLD if is_sel else curses.A_NORMAL)
+            safe_addstr(stdscr, y, 2, f"{'► ' if is_sel else '  '}{t(cfg, cat['title_key'])}", left_w, attr)
+
+        # Action category at bottom left
+        is_act_sel = (cat_idx == len(DOWNLOAD_PRESET_CATEGORIES))
+        safe_addstr(stdscr, 3 + len(DOWNLOAD_PRESET_CATEGORIES) + 1, 2, f"{'► ' if is_act_sel else '  '}[ Save / Start ]", left_w, HL_ATTR if is_act_sel else curses.A_BOLD)
+
+        for y in range(2, h - 2):
+            safe_addstr(stdscr, y, divider_x, "|", 1, curses.A_DIM)
+
+        right_x = divider_x + 3
+        right_w = w - right_x - 2
+
+        # Render items
+        if cat_idx < len(DOWNLOAD_PRESET_CATEGORIES):
+            flds = DOWNLOAD_PRESET_CATEGORIES[cat_idx]["fields"]
+            item_idx = min(item_idx, len(flds) - 1)
+            for idx, fld in enumerate(flds):
+                y = 3 + idx
+                is_sel = (idx == item_idx and in_items)
+                val = fields.get(fld["key"], "(default)")
+                label = f"{fld['label']}: {val}"
+                cli_hint = fld.get("cli", "")
+                safe_addstr(stdscr, y, right_x, f"{'> ' if is_sel else '  '}{label}", right_w - len(cli_hint) - 3, HL_ATTR if is_sel else curses.A_NORMAL)
+                safe_addstr(stdscr, y, w - len(cli_hint) - 4, f"[{cli_hint}]", len(cli_hint) + 2, curses.A_DIM)
         else:
-            y = 3
-            safe_addstr(stdscr, y, 4, f"Operation: {op_type}", w - 8, curses.A_BOLD)
-            if source:
-                safe_addstr(stdscr, y + 1, 4, f"Source: {source}", w - 8, curses.A_DIM)
-            y += 3
+            actions = ["Save as Default Preset", "Download Once (Run)", "Cancel"]
+            item_idx = min(item_idx, len(actions) - 1)
+            for idx, act in enumerate(actions):
+                y = 3 + idx
+                is_sel = (idx == item_idx and in_items)
+                safe_addstr(stdscr, y, right_x, f"{'> ' if is_sel else '  '}{act}", right_w, HL_ATTR if is_sel else curses.A_NORMAL)
 
-            safe_addstr(stdscr, y, 4, "Execution Stages:", w - 8, curses.A_BOLD)
-            y += 1
-
-            for st in stages:
-                st_name = st["name_ru"] if lang == "ru" else st["name_en"]
-                status = st["status"]
-
-                if status == "done":
-                    icon = "[✓]"
-                    attr = curses.A_DIM
-                elif status == "active":
-                    icon = f"[{spinner_frames[spinner_idx]}]"
-                    attr = curses.A_BOLD
-                else:
-                    icon = "[ ]"
-                    attr = curses.A_DIM
-
-                safe_addstr(stdscr, y, 6, f"{icon} {st_name}", w - 10, attr)
-                y += 1
-
-                if status == "active":
-                    bar_str = render_progress_bar(pct, min(40, max(20, w - 30)), style)
-                    prog_str = f"     {bar_str} {pct:5.1f}%"
-                    if speed_str or fps_str:
-                        prog_str += f" ({speed_str or fps_str or ''})"
-                    safe_addstr(stdscr, y, 6, prog_str, w - 10, curses.A_BOLD)
-                    y += 1
-
-            y += 1
-            safe_addstr(stdscr, y, 4, "[Press F10 to show/hide raw terminal log]", w - 8, curses.A_DIM)
-
-        draw_footer(stdscr, t(cfg, "log_footer_running"), w, h)
+        draw_footer(stdscr, t(cfg, "footer_vertical_items" if in_items else "footer_vertical_tabs"), w, h)
         stdscr.refresh()
 
-    proc.wait()
-    stdscr.nodelay(False)
-    rc = proc.returncode
-
-    if rc == 0:
-        for st in stages:
-            st["status"] = "done"
-
-    status = "Success" if rc == 0 else f"Failed ({rc})"
-    status_msg = t(cfg, "log_finished_ok") if rc == 0 else t(cfg, "log_finished_err", v=rc)
-    lines += ["", status_msg]
-
-    if source or target:
-        add_history_entry(op_type, source, target, status)
-
-    h, w = stdscr.getmaxyx()
-    stdscr.erase()
-    draw_header(stdscr, t(cfg, "log_title"), w)
-    log_h = max(0, h - 4)
-    for i, line in enumerate(lines[-log_h:]):
-        safe_addstr(stdscr, 3 + i, 2, line, w - 4)
-    draw_footer(stdscr, t(cfg, "log_footer_done"), w, h)
-    stdscr.refresh()
-    curses.curs_set(0)
-    while True:
-        k = stdscr.getch()
-        if k in (curses.KEY_ENTER, 10, 13, 27, ord('q'), 17):
-            break
-    stdscr.clear()
-
-
-# ==========================================================================
-# First-Run Wizard
-# ==========================================================================
-
-def run_first_run_wizard(stdscr, cfg: dict) -> dict:
-    """Step-by-step onboarding wizard for first-time users."""
-    apply_theme(cfg)
-
-    # Step 1: Language
-    lang_idx = run_menu(stdscr, t(cfg, "wizard_title"), ["English", "Русский"], t(cfg, "footer_nav"),
-                        subtitle=t(cfg, "wizard_step1_title"))
-    if lang_idx is not None:
-        cfg["language"] = "en" if lang_idx == 0 else "ru"
-
-    # Step 2: Usage Goal / Purpose
-    goals = ["editing", "downloading", "audio", "transcoding"]
-    goal_labels = [
-        t(cfg, "goal_editing"),
-        t(cfg, "goal_downloading"),
-        t(cfg, "goal_audio"),
-        t(cfg, "goal_transcoding"),
-    ]
-    g_idx = run_menu(stdscr, t(cfg, "wizard_title"), goal_labels, t(cfg, "footer_nav"),
-                     subtitle=f"{t(cfg, 'wizard_step2_title')}\n{t(cfg, 'wizard_step2_subtitle')}")
-    if g_idx is not None:
-        cfg["user_goal"] = goals[g_idx]
-        if cfg["user_goal"] == "editing":
-            cfg["video_preset"] = "davinci_dnxhr"
-        elif cfg["user_goal"] in ("downloading", "transcoding"):
-            cfg["video_preset"] = "standard_mp4"
-
-    # Step 3: Default download dir
-    out = text_input(stdscr, t(cfg, "wizard_title"), t(cfg, "settings_new_download_dir"),
-                     t(cfg, "footer_input"), default=cfg["download_dir"])
-    if out:
-        cfg["download_dir"] = out
-
-    # Step 4: Color Theme
-    lang = cfg.get("language", "en")
-    theme_keys = list(THEMES.keys())
-    theme_labels = [THEMES[k]["name_ru"] if lang == "ru" else THEMES[k]["name_en"] for k in theme_keys]
-    th_idx = run_menu(stdscr, t(cfg, "wizard_title"), theme_labels, t(cfg, "footer_nav"),
-                      subtitle=t(cfg, "wizard_step4_title"))
-    if th_idx is not None:
-        cfg["theme"] = theme_keys[th_idx]
-
-    # Step 4b: Keep terminal background toggle
-    bg_idx = run_menu(stdscr, t(cfg, "wizard_title"),
-                      [t(cfg, "bg_option_keep"), t(cfg, "bg_option_solid")], t(cfg, "footer_nav"),
-                      subtitle=t(cfg, "bg_option_title"))
-    if bg_idx is not None:
-        cfg["use_terminal_bg"] = (bg_idx == 0)
-
-    apply_theme(cfg)
-    cfg["first_run_completed"] = True
-    save_config(cfg)
-
-    show_message(stdscr, t(cfg, "wizard_done_title"), [t(cfg, "wizard_done_msg")], t(cfg, "footer_message"))
-    return cfg
-
-
-# ==========================================================================
-# Action screens
-# ==========================================================================
-
-def select_preset_menu(stdscr, cfg: dict) -> tuple[str | None, list[str]]:
-    lang = cfg.get("language", "en")
-    preset_keys = get_ordered_video_preset_keys(cfg)
-    items = [VIDEO_PRESETS[pk]["name_ru"] if lang == "ru" else VIDEO_PRESETS[pk]["name_en"] for pk in preset_keys]
-    descs = [VIDEO_PRESETS[pk]["desc_ru"] if lang == "ru" else VIDEO_PRESETS[pk]["desc_en"] for pk in preset_keys]
-
-    curr_preset = cfg.get("video_preset", "davinci_dnxhr")
-    default_idx = preset_keys.index(curr_preset) if curr_preset in preset_keys else 0
-
-    pi = run_menu(stdscr, t(cfg, "video_title"), items, t(cfg, "footer_nav"),
-                  subtitle=t(cfg, "preset_subtitle"), start_index=default_idx, descriptions=descs)
-    if pi is None:
-        return None, []
-
-    selected_key = preset_keys[pi]
-    if selected_key == "custom":
-        ext = text_input(stdscr, t(cfg, "video_title"), t(cfg, "custom_ext_prompt"), t(cfg, "footer_input"), default="mp4")
-        if not ext:
-            return None, []
-        flags = text_input(stdscr, t(cfg, "video_title"), t(cfg, "custom_flags_prompt"), t(cfg, "footer_input"), default="-c:v libx264 -c:a aac")
-        if flags is None:
-            return None, []
-        return "custom", ["--recode-video", ext.strip("."), "--postprocessor-args", f"ffmpeg:{flags}"]
-
-    return selected_key, VIDEO_PRESETS[selected_key]["args"]
-
-
-def configure_advanced_video_options(stdscr, cfg: dict) -> dict | None:
-    """Sub-menu for configuring advanced YouTube download flags with grouped dividers and Proceed at top."""
-    adv = {
-        "audio_track": "default",      # "default" | "all" | "ru" | "en" | "custom"
-        "custom_audio_lang": "",
-        "vcodec": "auto",              # "auto" | "av1" | "vp9" | "h264"
-        "sponsorblock": "off",         # "off" | "sponsors" | "sponsors_promo"
-        "geobypass": False,
-        "ratelimit": "",               # "" | "10M" | "5M" | "2M"
-        "clip_range": "",              # "" or "*00:01:00-00:02:30"
-        "live_start": False,
-        "write_extra": False,
-        "embed_metadata": True,
-        "embed_chapters": True,
-        "embed_subs": False,
-        "fps_limit": "",               # "" | "30" | "60"
-        "proxy_mode": cfg.get("proxy_mode", "system"), # "system" | "custom" | "none"
-        "proxy_url": cfg.get("proxy_url", ""),
-    }
-
-    while True:
-        # Format Labels
-        if adv["audio_track"] == "all":
-            aud_str = t(cfg, "adv_audio_all")
-        elif adv["audio_track"] == "ru":
-            aud_str = t(cfg, "adv_audio_ru")
-        elif adv["audio_track"] == "en":
-            aud_str = t(cfg, "adv_audio_en")
-        elif adv["audio_track"] == "custom":
-            aud_str = f"{t(cfg, 'adv_audio_custom')} ({adv['custom_audio_lang']})"
-        else:
-            aud_str = t(cfg, "adv_audio_default")
-
-        vcodec_map = {"auto": t(cfg, "adv_vcodec_auto"), "av1": t(cfg, "adv_vcodec_av1"),
-                      "vp9": t(cfg, "adv_vcodec_vp9"), "h264": t(cfg, "adv_vcodec_h264")}
-        vcodec_str = vcodec_map.get(adv["vcodec"], t(cfg, "adv_vcodec_auto"))
-
-        sb_map = {"off": t(cfg, "adv_sb_off"), "sponsors": t(cfg, "adv_sb_sponsors"), "sponsors_promo": t(cfg, "adv_sb_all")}
-        sb_str = sb_map.get(adv["sponsorblock"], t(cfg, "adv_sb_off"))
-
-        clip_str = adv["clip_range"] if adv["clip_range"] else t(cfg, "adv_clip_full")
-        fps_str = adv["fps_limit"] + " FPS" if adv["fps_limit"] else t(cfg, "adv_fps_max")
-        rate_str = adv["ratelimit"] if adv["ratelimit"] else t(cfg, "adv_ratelimit_max")
-
-        proxy_mode_map = {
-            "system": t(cfg, "proxy_system"),
-            "custom": f"{t(cfg, 'proxy_custom')} [{adv['proxy_url'] or 'Not set'}]",
-            "none": t(cfg, "proxy_none")
-        }
-        proxy_str = proxy_mode_map.get(adv["proxy_mode"], t(cfg, "proxy_system"))
-
-        # Items list with Proceed at TOP and dividers
-        items = [
-            t(cfg, "adv_proceed"),
-            "--- Audio & Video Codecs ---",
-            t(cfg, "adv_audio_track", v=aud_str),
-            t(cfg, "adv_vcodec", v=vcodec_str),
-            t(cfg, "adv_fps", v=fps_str),
-            "--- SponsorBlock & Clipping ---",
-            t(cfg, "adv_sponsorblock", v=sb_str),
-            t(cfg, "adv_clip", v=clip_str),
-            t(cfg, "adv_ratelimit", v=rate_str),
-            "--- Metadata & Embeds ---",
-            t(cfg, "adv_embed_meta", v=("YES" if adv["embed_metadata"] else "NO")),
-            t(cfg, "adv_embed_chap", v=("YES" if adv["embed_chapters"] else "NO")),
-            t(cfg, "adv_embed_subs", v=("YES" if adv["embed_subs"] else "NO")),
-            t(cfg, "adv_write_extra", v=("YES" if adv["write_extra"] else "NO")),
-            "--- Network & Proxy ---",
-            t(cfg, "adv_geobypass", v=("YES" if adv["geobypass"] else "NO")),
-            t(cfg, "adv_proxy_mode", v=proxy_str),
-        ]
-
-        choice = run_menu(stdscr, t(cfg, "adv_title"), items, t(cfg, "footer_nav"))
-        if choice is None:
-            return None
-        if choice == 0:  # Proceed is at TOP!
-            return adv
-
-        if choice == 2:  # Audio Tracks
-            a_opts = [t(cfg, "adv_audio_default"), t(cfg, "adv_audio_all"), t(cfg, "adv_audio_ru"), t(cfg, "adv_audio_en"), t(cfg, "adv_audio_custom")]
-            ai = run_menu(stdscr, t(cfg, "adv_title"), a_opts, t(cfg, "footer_nav"))
-            if ai is not None:
-                keys = ["default", "all", "ru", "en", "custom"]
-                adv["audio_track"] = keys[ai]
-                if keys[ai] == "custom":
-                    clang = text_input(stdscr, t(cfg, "adv_title"), t(cfg, "adv_audio_prompt"), t(cfg, "footer_input"))
-                    if clang:
-                        adv["custom_audio_lang"] = clang.strip()
-
-        elif choice == 3:  # Video Codec
-            vc_opts = [t(cfg, "adv_vcodec_auto"), t(cfg, "adv_vcodec_av1"), t(cfg, "adv_vcodec_vp9"), t(cfg, "adv_vcodec_h264")]
-            vci = run_menu(stdscr, t(cfg, "adv_title"), vc_opts, t(cfg, "footer_nav"))
-            if vci is not None:
-                adv["vcodec"] = ["auto", "av1", "vp9", "h264"][vci]
-
-        elif choice == 4:  # FPS Limit
-            fps_opts = [t(cfg, "adv_fps_max"), "60 FPS", "30 FPS"]
-            fi = run_menu(stdscr, t(cfg, "adv_title"), fps_opts, t(cfg, "footer_nav"))
-            if fi is not None:
-                adv["fps_limit"] = ["", "60", "30"][fi]
-
-        elif choice == 6:  # SponsorBlock
-            sb_opts = [t(cfg, "adv_sb_off"), t(cfg, "adv_sb_sponsors"), t(cfg, "adv_sb_all")]
-            sbi = run_menu(stdscr, t(cfg, "adv_title"), sb_opts, t(cfg, "footer_nav"))
-            if sbi is not None:
-                adv["sponsorblock"] = ["off", "sponsors", "sponsors_promo"][sbi]
-
-        elif choice == 7:  # Time clip
-            c_val = text_input(stdscr, t(cfg, "adv_title"), t(cfg, "adv_clip_prompt"), t(cfg, "footer_input"), default=adv["clip_range"])
-            if c_val is not None:
-                adv["clip_range"] = c_val.strip()
-
-        elif choice == 8:  # Rate limit
-            rl_opts = [t(cfg, "adv_ratelimit_max"), "10M", "5M", "2M"]
-            rli = run_menu(stdscr, t(cfg, "adv_title"), rl_opts, t(cfg, "footer_nav"))
-            if rli is not None:
-                adv["ratelimit"] = ["", "10M", "5M", "2M"][rli]
-
-        elif choice == 10:  # Embed Metadata
-            adv["embed_metadata"] = not adv["embed_metadata"]
-        elif choice == 11:  # Embed Chapters
-            adv["embed_chapters"] = not adv["embed_chapters"]
-        elif choice == 12:  # Embed Subtitles
-            adv["embed_subs"] = not adv["embed_subs"]
-        elif choice == 13:  # Write extra files
-            adv["write_extra"] = not adv["write_extra"]
-
-        elif choice == 15:  # Geo-bypass
-            adv["geobypass"] = not adv["geobypass"]
-        elif choice == 16:  # Proxy Mode
-            p_opts = [t(cfg, "proxy_system"), t(cfg, "proxy_custom"), t(cfg, "proxy_none")]
-            pi = run_menu(stdscr, t(cfg, "adv_title"), p_opts, t(cfg, "footer_nav"))
-            if pi is not None:
-                modes = ["system", "custom", "none"]
-                adv["proxy_mode"] = modes[pi]
-                if modes[pi] == "custom":
-                    pr = text_input(stdscr, t(cfg, "adv_title"), t(cfg, "adv_proxy_url_prompt"), t(cfg, "footer_input"), default=adv["proxy_url"])
-                    if pr is not None:
-                        adv["proxy_url"] = pr.strip()
-
-
-# ==========================================================================
-# Download Presets (superset of VIDEO_PRESETS: codec preset + subs + meta +
-# sponsorblock + network + cookies + playlist options, saved & reusable)
-# ==========================================================================
-
-def default_preset_fields() -> dict:
-    """Returns the default flat field dict backing a new Download Preset.
-
-    Kept flat (not nested per-category) on purpose: the declarative
-    DOWNLOAD_PRESET_CATEGORIES schema below renders/edits any field the same way
-    regardless of which category it's displayed under, so nesting would only add
-    bookkeeping without simplifying the renderer.
-    """
-    return {
-        "quality": "",                 # "" = best, else height in px, e.g. "1080"
-        "video_preset": "davinci_dnxhr",  # VIDEO_PRESETS key, or "custom"
-        "custom_ext": "mp4",
-        "custom_flags": "-c:v libx264 -c:a aac",
-        "vcodec": "auto",              # "auto" | "av1" | "vp9" | "h264"
-        "fps_limit": "",               # "" | "60" | "30"
-        "audio_track": "default",      # "default" | "all" | "ru" | "en" | "custom"
-        "custom_audio_lang": "",
-        "audio_only": False,
-        "audio_format": "mp3",
-        "subs_enabled": False,
-        "sub_langs": "ru,en",
-        "auto_subs": False,
-        "embed_subs": False,
-        "embed_metadata": True,
-        "embed_chapters": True,
-        "write_extra": False,
-        "sponsorblock": "off",         # "off" | "sponsors" | "sponsors_promo"
-        "clip_range": "",
-        "proxy_mode": "system",        # "system" | "custom" | "none"
-        "proxy_url": "",
-        "ratelimit": "",
-        "geobypass": False,
-        "live_start": False,
-        "output_template": "",
-        "playlist_items": "",
-        "playlist_start": "",
-        "playlist_end": "",
-        "download_archive": False,
-    }
-
-
-def new_preset_id() -> str:
-    return f"p{int(time.time() * 1000)}"
-
-
-def build_ytdlp_args_from_preset(preset: dict, cfg: dict, out_dir: Path, for_playlist: bool = False) -> list[str]:
-    """Deterministically builds the yt-dlp argument list (excluding the 'yt-dlp'
-    binary and the URL itself) from a Download Preset, analogous to how
-    VIDEO_PRESETS[key]["args"] is spliced into `cmd` elsewhere in this file.
-
-    Design decision: the scriptable CLI (`build_parser`, `-p/--preset` on the
-    `video`/`playlist` subcommands) intentionally keeps pointing at the legacy
-    VIDEO_PRESETS/PRESET_CLI_MAP table, not at cfg["download_presets"]. Reasons:
-      1. Backward compatibility — existing shell scripts/aliases using -p must
-         keep working unchanged (see requirement to not break cli_video/cli_playlist).
-      2. Download Presets are named, user-saved, TUI-managed objects tied to a
-         user's local config.json; a `-p` value from the CLI has no such identity
-         to look up before the config is loaded in a scripting context.
-    This function is exposed at module level, though, so a future
-    `--download-preset NAME` CLI flag could resolve a name against
-    cfg["download_presets"] and call this same function without touching -p.
-    """
-    f = preset["fields"]
-    cmd: list[str] = []
-
-    if f.get("audio_only"):
-        cmd += ["-x", "--audio-format", f.get("audio_format", "mp3"), "--audio-quality", "0"]
-    else:
-        quality = f.get("quality", "")
-        fps_suffix = f"[fps<={f['fps_limit']}]" if f.get("fps_limit") else ""
-        q_str = f"[height<={quality}]" if quality else ""
-        vc_filter = {"av1": "[vcodec^=av01]", "vp9": "[vcodec^=vp9]", "h264": "[vcodec^=avc1]"}.get(f.get("vcodec", "auto"), "")
-
-        track = f.get("audio_track", "default")
-        if track == "all":
-            cmd += ["--audio-multistreams"]
-            fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+mergeall[format_id*=audio]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio/best"
-        elif track in ("ru", "en"):
-            fmt = (f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language={track}]/"
-                   f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language^={track}]/"
-                   f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio")
-        elif track == "custom" and f.get("custom_audio_lang"):
-            clang = f["custom_audio_lang"].strip()
-            fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio[language={clang}]/bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio"
-        else:
-            fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio/best{q_str}{fps_suffix}"
-        cmd += ["-f", fmt]
-
-        video_preset_id = f.get("video_preset", "davinci_dnxhr")
-        if video_preset_id == "custom":
-            ext = (f.get("custom_ext") or "mp4").strip(".")
-            flags = f.get("custom_flags") or "-c:v libx264 -c:a aac"
-            cmd += ["--recode-video", ext, "--postprocessor-args", f"ffmpeg:{flags}"]
-        else:
-            cmd += VIDEO_PRESETS.get(video_preset_id, VIDEO_PRESETS["davinci_dnxhr"])["args"]
-
-    if f.get("geobypass"):
-        cmd += ["--geo-bypass"]
-    cmd += get_proxy_args(cfg, override_mode=f.get("proxy_mode"), override_url=f.get("proxy_url"))
-    if f.get("ratelimit"):
-        cmd += ["--limit-rate", f["ratelimit"]]
-    if f.get("live_start"):
-        cmd += ["--live-from-start"]
-    if f.get("write_extra"):
-        cmd += ["--write-description", "--write-thumbnail"]
-
-    sb = f.get("sponsorblock", "off")
-    if sb == "sponsors":
-        cmd += ["--sponsorblock-remove", "sponsor"]
-    elif sb == "sponsors_promo":
-        cmd += ["--sponsorblock-remove", "sponsor,selfpromo,interaction"]
-
-    if f.get("clip_range"):
-        clip_val = f["clip_range"].strip()
-        if not clip_val.startswith("*"):
-            clip_val = f"*{clip_val}"
-        cmd += ["--download-sections", clip_val]
-
-    if not f.get("audio_only"):
-        if f.get("embed_metadata", True):
-            cmd += ["--embed-metadata", "--embed-thumbnail", "--convert-thumbnails", "jpg"]
-        if f.get("embed_chapters", True):
-            cmd += ["--embed-chapters"]
-
-    if f.get("subs_enabled"):
-        cmd += ["--write-subs", "--sub-langs", f.get("sub_langs") or cfg.get("sub_langs", "ru,en")]
-        if f.get("auto_subs"):
-            cmd += ["--write-auto-subs"]
-        if f.get("embed_subs"):
-            cmd += ["--embed-subs"]
-
-    if for_playlist:
-        cmd += ["--yes-playlist"]
-        if f.get("playlist_items"):
-            cmd += ["--playlist-items", f["playlist_items"]]
-        if f.get("playlist_start"):
-            cmd += ["--playlist-start", f["playlist_start"]]
-        if f.get("playlist_end"):
-            cmd += ["--playlist-end", f["playlist_end"]]
-        if f.get("download_archive"):
-            cmd += ["--download-archive", str(out_dir / "download_archive.txt")]
-        template = f.get("output_template") or "%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s"
-    else:
-        template = f.get("output_template") or "%(title)s.%(ext)s"
-
-    cmd += ["-o", str(out_dir / template)]
-    cmd += cookie_args(cfg)
-    return cmd
-
-
-def preset_preview_line(cfg: dict, preset: dict) -> str:
-    """Short one-line preview of a preset's key parameters, used as a subtitle/
-    description in preset-selection menus."""
-    f = preset["fields"]
-    lang = cfg.get("language", "en")
-    parts = []
-    parts.append((f["quality"] + "p") if f.get("quality") else t(cfg, "val_best"))
-    if f.get("audio_only"):
-        parts.append(f.get("audio_format", "mp3").upper())
-    elif f.get("video_preset") == "custom":
-        parts.append(t(cfg, "val_custom_ffmpeg"))
-    else:
-        parts.append(get_preset_name(cfg, f.get("video_preset", "davinci_dnxhr")))
-    if f.get("subs_enabled"):
-        parts.append(f"Subs: {f.get('sub_langs', '')}" if lang == "en" else f"Субтитры: {f.get('sub_langs', '')}")
-    if f.get("sponsorblock", "off") != "off":
-        parts.append("SponsorBlock")
-    return " | ".join(parts)
-
-
-# Declarative schema for the manual-configuration screen. Each category is
-# rendered as one tab (run_menu_tabbed); each field is one line inside that tab.
-# type: "bool" -> toggled in place; "text" -> text_input; "choice" -> run_menu
-# over `choices` (list of (value, label_key)); other values are special-cased
-# in edit_preset_field() below (video_preset / audio_track / proxy_mode).
-DOWNLOAD_PRESET_CATEGORIES = [
-    {"title_key": "cat_general", "fields": [
-        {"key": "quality", "label_key": "field_quality", "type": "text"},
-        {"key": "output_template", "label_key": "field_output_template", "type": "text"},
-    ]},
-    {"title_key": "cat_video", "fields": [
-        {"key": "video_preset", "label_key": "field_video_preset", "type": "video_preset"},
-        {"key": "vcodec", "label_key": "field_vcodec", "type": "choice", "choices": [
-            ("auto", "adv_vcodec_auto"), ("av1", "adv_vcodec_av1"), ("vp9", "adv_vcodec_vp9"), ("h264", "adv_vcodec_h264")]},
-        {"key": "fps_limit", "label_key": "field_fps", "type": "choice", "value_suffix": " FPS", "choices": [
-            ("", "adv_fps_max"), ("60", None), ("30", None)]},
-    ]},
-    {"title_key": "cat_audio", "fields": [
-        {"key": "audio_only", "label_key": "field_audio_only", "type": "bool"},
-        {"key": "audio_format", "label_key": "field_audio_format", "type": "choice",
-         "choices": [(a, a) for a in AUDIO_FORMATS]},
-        {"key": "audio_track", "label_key": "field_audio_track", "type": "audio_track"},
-    ]},
-    {"title_key": "cat_subtitles", "fields": [
-        {"key": "subs_enabled", "label_key": "field_subs_enabled", "type": "bool"},
-        {"key": "sub_langs", "label_key": "field_sub_langs", "type": "text"},
-        {"key": "auto_subs", "label_key": "field_auto_subs", "type": "bool"},
-        {"key": "embed_subs", "label_key": "field_embed_subs", "type": "bool"},
-    ]},
-    {"title_key": "cat_thumbmeta", "fields": [
-        {"key": "embed_metadata", "label_key": "field_embed_metadata", "type": "bool"},
-        {"key": "embed_chapters", "label_key": "field_embed_chapters", "type": "bool"},
-        {"key": "write_extra", "label_key": "field_write_extra", "type": "bool"},
-    ]},
-    {"title_key": "cat_sponsorblock", "fields": [
-        {"key": "sponsorblock", "label_key": "field_sponsorblock", "type": "choice", "choices": [
-            ("off", "adv_sb_off"), ("sponsors", "adv_sb_sponsors"), ("sponsors_promo", "adv_sb_all")]},
-        {"key": "clip_range", "label_key": "field_clip_range", "type": "text"},
-    ]},
-    {"title_key": "cat_network", "fields": [
-        {"key": "proxy_mode", "label_key": "field_proxy_mode", "type": "proxy_mode"},
-        {"key": "ratelimit", "label_key": "field_ratelimit", "type": "choice", "choices": [
-            ("", "adv_ratelimit_max"), ("10M", None), ("5M", None), ("2M", None)]},
-        {"key": "geobypass", "label_key": "field_geobypass", "type": "bool"},
-        {"key": "live_start", "label_key": "field_live_start", "type": "bool"},
-        {"key": "cookies_status", "label_key": "field_cookies_status", "type": "cookies_readonly"},
-    ]},
-    {"title_key": "cat_playlist", "fields": [
-        {"key": "playlist_items", "label_key": "field_playlist_items", "type": "text"},
-        {"key": "playlist_start", "label_key": "field_playlist_start", "type": "text"},
-        {"key": "playlist_end", "label_key": "field_playlist_end", "type": "text"},
-        {"key": "download_archive", "label_key": "field_download_archive", "type": "bool"},
-    ]},
-]
-
-
-def format_preset_field_value(cfg: dict, fld: dict, fields: dict) -> str:
-    """Renders the current value of one declarative preset field for display."""
-    key = fld["key"]
-    ftype = fld["type"]
-    if ftype == "bool":
-        return t(cfg, "val_yes") if fields.get(key) else t(cfg, "val_no")
-    if ftype == "text":
-        val = fields.get(key, "")
-        return val if val else t(cfg, "val_default")
-    if ftype == "choice":
-        cur = fields.get(key)
-        for value, label_key in fld["choices"]:
-            if value == cur:
-                if label_key is None:
-                    return t(cfg, "val_default") if not value else f"{value}{fld.get('value_suffix', '')}"
-                return t(cfg, label_key)
-        return t(cfg, "val_default")
-    if ftype == "video_preset":
-        if fields.get(key) == "custom":
-            return t(cfg, "val_custom_ffmpeg")
-        return get_preset_name(cfg, fields.get(key, "davinci_dnxhr"))
-    if ftype == "audio_track":
-        track = fields.get(key, "default")
-        label_map = {"default": "adv_audio_default", "all": "adv_audio_all", "ru": "adv_audio_ru", "en": "adv_audio_en"}
-        if track == "custom":
-            return f"{t(cfg, 'adv_audio_custom')} ({fields.get('custom_audio_lang', '')})"
-        return t(cfg, label_map.get(track, "adv_audio_default"))
-    if ftype == "proxy_mode":
-        mode = fields.get(key, "system")
-        if mode == "custom":
-            return f"{t(cfg, 'proxy_custom')} [{fields.get('proxy_url') or '—'}]"
-        return t(cfg, {"system": "proxy_system", "none": "proxy_none"}.get(mode, "proxy_system"))
-    if ftype == "cookies_readonly":
-        return cookies_status_line(cfg)
-    return str(fields.get(key, ""))
-
-
-def edit_preset_field(stdscr, cfg: dict, fld: dict, fields: dict) -> None:
-    """Dispatches to the right small widget to edit one declarative preset field,
-    mutating `fields` in place. Shared by the manual-configuration screen so no
-    category needs its own hand-written edit block."""
-    key = fld["key"]
-    ftype = fld["type"]
-
-    if ftype == "bool":
-        fields[key] = not fields.get(key, False)
-
-    elif ftype == "text":
-        val = text_input(stdscr, t(cfg, "manual_title"), t(cfg, fld["label_key"], v=""),
-                          t(cfg, "footer_input"), default=str(fields.get(key, "")))
-        if val is not None:
-            fields[key] = val.strip()
-
-    elif ftype == "choice":
-        suffix = fld.get("value_suffix", "")
-        labels = [(t(cfg, lk) if lk is not None else (t(cfg, "val_default") if not v else f"{v}{suffix}"))
-                  for v, lk in fld["choices"]]
-        cur = fields.get(key)
-        start = next((i for i, (v, _) in enumerate(fld["choices"]) if v == cur), 0)
-        ci = run_menu(stdscr, t(cfg, "manual_title"), labels, t(cfg, "footer_nav"), start_index=start)
-        if ci is not None:
-            fields[key] = fld["choices"][ci][0]
-
-    elif ftype == "video_preset":
-        preset_keys = get_ordered_video_preset_keys(cfg)
-        lang = cfg.get("language", "en")
-        labels = [VIDEO_PRESETS[pk]["name_ru"] if lang == "ru" else VIDEO_PRESETS[pk]["name_en"] for pk in preset_keys]
-        descs = [VIDEO_PRESETS[pk]["desc_ru"] if lang == "ru" else VIDEO_PRESETS[pk]["desc_en"] for pk in preset_keys]
-        start = preset_keys.index(fields.get(key, "davinci_dnxhr")) if fields.get(key) in preset_keys else 0
-        pi = run_menu(stdscr, t(cfg, "manual_title"), labels, t(cfg, "footer_nav"),
-                      subtitle=t(cfg, "preset_subtitle"), start_index=start, descriptions=descs)
-        if pi is not None:
-            selected = preset_keys[pi]
-            fields[key] = selected
-            if selected == "custom":
-                ext = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "custom_ext_prompt"),
-                                  t(cfg, "footer_input"), default=fields.get("custom_ext", "mp4"))
-                if ext:
-                    fields["custom_ext"] = ext.strip(".")
-                flags = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "custom_flags_prompt"),
-                                    t(cfg, "footer_input"), default=fields.get("custom_flags", "-c:v libx264 -c:a aac"))
-                if flags is not None:
-                    fields["custom_flags"] = flags
-
-    elif ftype == "audio_track":
-        a_opts = [t(cfg, "adv_audio_default"), t(cfg, "adv_audio_all"), t(cfg, "adv_audio_ru"),
-                  t(cfg, "adv_audio_en"), t(cfg, "adv_audio_custom")]
-        keys = ["default", "all", "ru", "en", "custom"]
-        start = keys.index(fields.get(key, "default")) if fields.get(key) in keys else 0
-        ai = run_menu(stdscr, t(cfg, "manual_title"), a_opts, t(cfg, "footer_nav"), start_index=start)
-        if ai is not None:
-            fields[key] = keys[ai]
-            if keys[ai] == "custom":
-                clang = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "adv_audio_prompt"),
-                                    t(cfg, "footer_input"), default=fields.get("custom_audio_lang", ""))
-                if clang:
-                    fields["custom_audio_lang"] = clang.strip()
-
-    elif ftype == "proxy_mode":
-        p_opts = [t(cfg, "proxy_system"), t(cfg, "proxy_custom"), t(cfg, "proxy_none")]
-        modes = ["system", "custom", "none"]
-        start = modes.index(fields.get(key, "system")) if fields.get(key) in modes else 0
-        pi = run_menu(stdscr, t(cfg, "manual_title"), p_opts, t(cfg, "footer_nav"), start_index=start)
-        if pi is not None:
-            fields[key] = modes[pi]
-            if modes[pi] == "custom":
-                pr = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "adv_proxy_url_prompt"),
-                                 t(cfg, "footer_input"), default=fields.get("proxy_url", ""))
-                if pr is not None:
-                    fields["proxy_url"] = pr.strip()
-
-    elif ftype == "cookies_readonly":
-        pass  # informational only; managed from Settings -> Cookies
-
-
-def screen_manual_preset_config(stdscr, cfg: dict, fields: dict, for_playlist: bool = False) -> tuple[str, dict] | None:
-    """Tabbed manual configuration screen over DOWNLOAD_PRESET_CATEGORIES.
-
-    Returns ("save", fields), ("run_once", fields), or None (cancelled).
-    `fields` is mutated in place as the user edits it.
-    """
-    categories = DOWNLOAD_PRESET_CATEGORIES if for_playlist else DOWNLOAD_PRESET_CATEGORIES[:-1]
-    current_tab, current_item = 0, 0
-
-    while True:
-        tabs = []
-        for cat in categories:
-            items = [t(cfg, fld["label_key"], v=format_preset_field_value(cfg, fld, fields)) for fld in cat["fields"]]
-            tabs.append({"title": t(cfg, cat["title_key"]), "items": items})
-        tabs.append({"title": t(cfg, "cat_actions"),
-                     "items": [t(cfg, "preset_action_save"), t(cfg, "preset_action_run_once"), t(cfg, "preset_action_cancel")]})
-
-        t_idx, i_idx = run_menu_tabbed(stdscr, t(cfg, "manual_title"), tabs, t(cfg, "footer_nav"),
-                                       start_tab=current_tab, start_index=current_item)
-        if t_idx is None:
-            return None
-        current_tab, current_item = t_idx, i_idx
-
-        if t_idx == len(tabs) - 1:  # Actions tab
-            if i_idx == 0:
-                return "save", fields
-            elif i_idx == 1:
-                return "run_once", fields
-            else:
+        key = stdscr.getch()
+        if check_terminal_hotkey(stdscr, key):
+            TERMINAL_OVERLAY.open(stdscr, cfg)
+            continue
+
+        if not in_items:
+            max_cats = len(DOWNLOAD_PRESET_CATEGORIES) + 1
+            if key in (curses.KEY_UP, ord('k')):
+                cat_idx = (cat_idx - 1) % max_cats
+                item_idx = 0
+            elif key in (curses.KEY_DOWN, ord('j')):
+                cat_idx = (cat_idx + 1) % max_cats
+                item_idx = 0
+            elif key in (curses.KEY_ENTER, 10, 13, curses.KEY_RIGHT, ord('l')):
+                in_items = True
+                item_idx = 0
+            elif key in (27, ord('q')):
                 return None
-
-        fld = categories[t_idx]["fields"][i_idx]
-        edit_preset_field(stdscr, cfg, fld, fields)
-
-
-def prompt_save_preset(stdscr, cfg: dict, fields: dict, default_name: str = "") -> dict | None:
-    """Prompts for a name and optionally 'set as default', appends the preset to
-    cfg["download_presets"], persists cfg, and returns the new preset dict."""
-    name = text_input(stdscr, t(cfg, "manual_title"), t(cfg, "preset_name_prompt"),
-                       t(cfg, "footer_input"), default=default_name)
-    if not name:
-        return None
-    preset = {"id": new_preset_id(), "name": name.strip(), "fields": dict(fields)}
-    cfg.setdefault("download_presets", []).append(preset)
-
-    make_default = run_menu(stdscr, t(cfg, "manual_title"),
-                             [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")], t(cfg, "footer_nav"),
-                             subtitle=t(cfg, "preset_saved_as_default_q"))
-    if make_default == 0:
-        cfg["default_download_preset"] = preset["id"]
-    save_config(cfg)
-    return preset
-
+        else:
+            max_len = len(actions) if cat_idx == len(DOWNLOAD_PRESET_CATEGORIES) else len(DOWNLOAD_PRESET_CATEGORIES[cat_idx]["fields"])
+            if key in (curses.KEY_UP, ord('k')):
+                item_idx = (item_idx - 1) % max_len
+            elif key in (curses.KEY_DOWN, ord('j')):
+                item_idx = (item_idx + 1) % max_len
+            elif key in (27, curses.KEY_LEFT, ord('h')):
+                in_items = False
+            elif key in (curses.KEY_ENTER, 10, 13):
+                if cat_idx == len(DOWNLOAD_PRESET_CATEGORIES):
+                    return ("save" if item_idx == 0 else ("run" if item_idx == 1 else None), fields)
+                fld = DOWNLOAD_PRESET_CATEGORIES[cat_idx]["fields"][item_idx]
+                if fld["type"] == "bool":
+                    fields[fld["key"]] = not fields.get(fld["key"], False)
+                elif fld["type"] == "text":
+                    val = text_input(stdscr, "Preset Config", fld["label"], t(cfg, "footer_input"), default=str(fields.get(fld["key"], "")))
+                    if val is not None: fields[fld["key"]] = val.strip()
+                elif fld["type"] == "choice":
+                    c_idx = run_menu(stdscr, fld["label"], [c[1] for c in fld["choices"]], t(cfg, "footer_nav"))
+                    if c_idx is not None: fields[fld["key"]] = fld["choices"][c_idx][0]
 
 def screen_manage_download_presets(stdscr, cfg: dict) -> None:
-    """CRUD screen for Download Presets, reachable from Settings."""
-    idx = 0
     while True:
         presets = cfg.get("download_presets", [])
-        default_id = cfg.get("default_download_preset")
-        items = [t(cfg, "preset_create_new")]
-        for p in presets:
-            marker = t(cfg, "preset_default_marker") if p["id"] == default_id else ""
-            items.append(f"{marker}{p['name']}")
-        descs = [""] + [preset_preview_line(cfg, p) for p in presets]
-
-        idx = min(idx, len(items) - 1)
-        sel = run_menu(stdscr, t(cfg, "presets_list_title"), items, t(cfg, "footer_nav"),
-                       subtitle=t(cfg, "presets_list_subtitle"), start_index=idx, descriptions=descs)
-        if sel is None:
-            return
-        idx = sel
-
-        if sel == 0:  # Create new
-            fields = default_preset_fields()
-            result = screen_manual_preset_config(stdscr, cfg, fields, for_playlist=True)
-            if result and result[0] in ("save", "run_once"):
-                prompt_save_preset(stdscr, cfg, result[1])
-            continue
-
-        preset = presets[sel - 1]
-        opt_labels = [t(cfg, "preset_opt_edit"), t(cfg, "preset_opt_duplicate")]
-        if preset["id"] == default_id:
-            opt_labels.append(t(cfg, "preset_opt_unset_default"))
+        items = [t(cfg, "preset_create_new")] + [f"{'[DEFAULT] ' if p['id']==cfg.get('default_download_preset') else ''}{p['name']}" for p in presets]
+        sel = run_menu(stdscr, t(cfg, "presets_list_title"), items, t(cfg, "footer_nav"))
+        if sel is None or sel == -1: return
+        if sel == 0:
+            fields = get_effective_default_fields(cfg)
+            res = screen_manual_preset_config(stdscr, cfg, fields)
+            if res and res[0] in ("save", "run"):
+                name = text_input(stdscr, "Preset Name", "Enter name for new preset:", t(cfg, "footer_input"))
+                if name:
+                    p_obj = {"id": f"p{int(time.time()*1000)}", "name": name.strip(), "fields": res[1]}
+                    cfg.setdefault("download_presets", []).append(p_obj)
+                    save_config(cfg)
         else:
-            opt_labels.append(t(cfg, "preset_opt_set_default"))
-        opt_labels += [t(cfg, "preset_opt_delete"), t(cfg, "preset_opt_back")]
-
-        oi = run_menu(stdscr, preset["name"], opt_labels, t(cfg, "footer_nav"),
-                      subtitle=preset_preview_line(cfg, preset))
-        if oi is None or oi == len(opt_labels) - 1:
-            continue
-
-        if oi == 0:  # Edit
-            fields = dict(preset["fields"])
-            result = screen_manual_preset_config(stdscr, cfg, fields, for_playlist=True)
-            if result and result[0] in ("save", "run_once"):
-                preset["fields"] = fields
+            p = presets[sel - 1]
+            acts = ["Set as Default", "Delete Preset", "Back"]
+            ai = run_menu(stdscr, p["name"], acts, t(cfg, "footer_nav"))
+            if ai == 0:
+                cfg["default_download_preset"] = p["id"]
                 save_config(cfg)
-        elif oi == 1:  # Duplicate
-            new_p = {"id": new_preset_id(), "name": preset["name"] + t(cfg, "preset_duplicate_suffix"),
-                     "fields": dict(preset["fields"])}
-            cfg["download_presets"].append(new_p)
-            save_config(cfg)
-        elif oi == 2:  # Set/unset default
-            cfg["default_download_preset"] = None if preset["id"] == default_id else preset["id"]
-            save_config(cfg)
-        elif oi == 3:  # Delete
-            confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
-                               t(cfg, "footer_nav"), subtitle=t(cfg, "preset_confirm_delete", v=preset["name"]))
-            if confirm == 0:
-                cfg["download_presets"] = [p for p in cfg["download_presets"] if p["id"] != preset["id"]]
-                if cfg.get("default_download_preset") == preset["id"]:
-                    cfg["default_download_preset"] = None
+            elif ai == 1:
+                cfg["download_presets"] = [pr for pr in cfg["download_presets"] if pr["id"] != p["id"]]
                 save_config(cfg)
-                idx = 0
-
-
-def choose_download_preset(stdscr, cfg: dict) -> dict | None:
-    """Lists cfg["download_presets"] for selection, with a per-item preview."""
-    presets = cfg.get("download_presets", [])
-    if not presets:
-        show_message(stdscr, t(cfg, "presets_list_title"), [t(cfg, "preset_no_presets")], t(cfg, "footer_message"))
-        return None
-    labels = [p["name"] for p in presets]
-    descs = [preset_preview_line(cfg, p) for p in presets]
-    pi = run_menu(stdscr, t(cfg, "presets_list_title"), labels, t(cfg, "footer_nav"),
-                  subtitle=t(cfg, "presets_list_subtitle"), descriptions=descs)
-    return presets[pi] if pi is not None else None
-
-
-def run_download_with_preset(stdscr, cfg: dict, url: str, preset: dict, out_dir_str: str,
-                             for_playlist: bool = False, op_type: str = "Download Video") -> None:
-    """Builds the final yt-dlp command from a preset, shows the confirmation
-    screen, and (on confirm) runs it via run_with_log — shared by Quick / Preset
-    / Manual (run-once) paths in screen_video and screen_playlist."""
-    expanded_out = parse_user_path(out_dir_str)
-    expanded_out.mkdir(parents=True, exist_ok=True)
-    args = build_ytdlp_args_from_preset(preset, cfg, expanded_out, for_playlist=for_playlist)
-    cmd = ["yt-dlp", *args, url]
-
-    cmd_str = " ".join(cmd)
-    subtitle = (f"{t(cfg, 'label_url')} {url}\n"
-                f"{preset_preview_line(cfg, preset)}\n"
-                f"{t(cfg, 'label_folder')} {out_dir_str}\n"
-                f"{t(cfg, 'label_cmd')} {cmd_str}")
-    confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
-                       t(cfg, "footer_nav"), subtitle=subtitle)
-    if confirm == 0:
-        run_with_log(stdscr, cfg, cmd, op_type=op_type, source=url, target=str(expanded_out))
-
 
 def screen_video(stdscr, cfg: dict) -> None:
-    """Entry point: URL first, then a 3-way choice — Quick Download (default
-    preset) / Choose a saved preset / Configure manually — per the Download
-    Presets UX spec. `screen_playlist` mirrors this same flow for consistency."""
     url = text_input(stdscr, t(cfg, "video_title"), t(cfg, "video_prompt_url"), t(cfg, "footer_input"))
-    if not url:
-        return
+    if not url: return
 
-    mode_labels = [t(cfg, "download_mode_quick"), t(cfg, "download_mode_preset"), t(cfg, "download_mode_manual")]
-    mode = run_menu(stdscr, t(cfg, "video_title"), mode_labels, t(cfg, "footer_nav"),
-                    subtitle=t(cfg, "download_mode_subtitle"))
-    if mode is None:
-        return
+    modes = [t(cfg, "download_mode_quick"), t(cfg, "download_mode_preset"), t(cfg, "download_mode_manual")]
+    m = run_menu(stdscr, t(cfg, "video_title"), modes, t(cfg, "footer_nav"), subtitle=t(cfg, "download_mode_subtitle"))
+    if m is None: return
 
-    if mode == 0:  # Quick Download
-        default_id = cfg.get("default_download_preset")
-        preset = next((p for p in cfg.get("download_presets", []) if p["id"] == default_id), None)
-        if preset is None:
-            show_message(stdscr, t(cfg, "video_title"), [t(cfg, "preset_none_quick")], t(cfg, "footer_message"))
-            mode = 2
-        else:
-            out_dir_str = cfg.get("download_dir", DEFAULT_DOWNLOAD_DIR)
-            run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, op_type="Download Video")
-            return
-
-    if mode == 1:  # Choose a saved preset
-        preset = choose_download_preset(stdscr, cfg)
-        if preset is None:
-            return
-        out_dir_str = text_input(stdscr, t(cfg, "video_title"), t(cfg, "outdir_prompt"),
-                                  t(cfg, "footer_input"), default=cfg["download_dir"])
-        if out_dir_str is None:
-            return
-        run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, op_type="Download Video")
-        return
-
-    # mode == 2: Configure manually
-    fields = default_preset_fields()
-    result = screen_manual_preset_config(stdscr, cfg, fields, for_playlist=False)
-    if result is None:
-        return
-    action, fields = result
-
-    out_dir_str = text_input(stdscr, t(cfg, "video_title"), t(cfg, "outdir_prompt"),
-                              t(cfg, "footer_input"), default=cfg["download_dir"])
-    if out_dir_str is None:
-        return
-
-    if action == "save":
-        preset = prompt_save_preset(stdscr, cfg, fields)
-        if preset is None:
-            preset = {"id": "", "name": "", "fields": fields}
-    else:
-        preset = {"id": "", "name": "", "fields": fields}
-
-    run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, op_type="Download Video")
-
-
-def screen_convert(stdscr, cfg: dict) -> None:
-    """Dedicated screen for converting local media files using FFmpeg."""
-    file_path_str = text_input(stdscr, t(cfg, "convert_title"), t(cfg, "convert_prompt_file"), t(cfg, "footer_input"))
-    if not file_path_str:
-        return
-
-    inp_path = parse_user_path(file_path_str)
-    if not inp_path.exists() or not inp_path.is_file():
-        show_message(stdscr, t(cfg, "convert_title"), [t(cfg, "convert_err_notfound", f=str(inp_path))], t(cfg, "footer_message"))
-        return
-
-    lang = cfg.get("language", "en")
-    presets_list = get_ordered_convert_presets(cfg)
-    preset_items = [p["name_ru"] if lang == "ru" else p["name_en"] for p in presets_list]
-    preset_descs = [p["desc_ru"] if lang == "ru" else p["desc_en"] for p in presets_list]
-
-    pi = run_menu(stdscr, t(cfg, "convert_title"), preset_items, t(cfg, "footer_nav"),
-                  subtitle=t(cfg, "convert_prompt_preset"), descriptions=preset_descs)
-    if pi is None:
-        return
-
-    preset = presets_list[pi]
-
-    if preset["id"] == "custom":
-        ext = text_input(stdscr, t(cfg, "convert_title"), t(cfg, "custom_ext_prompt"), t(cfg, "footer_input"), default="mov")
-        if not ext:
-            return
-        flags_str = text_input(stdscr, t(cfg, "convert_title"), t(cfg, "custom_flags_prompt"), t(cfg, "footer_input"), default="-c:v libx264 -c:a pcm_s16le")
-        if flags_str is None:
-            return
-        ext = ext.strip(".")
-        flags = flags_str.split()
-        suffix = "_custom"
-    else:
-        ext = preset["ext"]
-        flags = preset["ffmpeg_flags"]
-        suffix = preset["suffix"]
-
-    out_dir_str = text_input(stdscr, t(cfg, "convert_title"), t(cfg, "convert_prompt_outdir"),
-                             t(cfg, "footer_input"), default=str(inp_path.parent))
-    if out_dir_str is None:
-        return
-
-    out_dir = parse_user_path(out_dir_str) if out_dir_str.strip() else inp_path.parent
+    out_dir = parse_user_path(cfg.get("download_dir", DEFAULT_DOWNLOAD_DIR))
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    out_file = out_dir / f"{inp_path.stem}{suffix}.{ext}"
+    if m == 0:  # Quick Download
+        def_id = cfg.get("default_download_preset")
+        preset = next((p for p in cfg.get("download_presets", []) if p["id"] == def_id), None)
+        if not preset:
+            preset = {"id": "default", "name": "Default", "fields": get_effective_default_fields(cfg)}
+        cmd = ["yt-dlp", *build_ytdlp_args_from_preset(preset, cfg, out_dir), url]
+        run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(out_dir))
+    elif m == 1:  # Saved preset
+        presets = cfg.get("download_presets", [])
+        if not presets:
+            show_message(stdscr, t(cfg, "video_title"), ["No presets saved yet."], t(cfg, "footer_message"))
+            return
+        pi = run_menu(stdscr, t(cfg, "video_title"), [p["name"] for p in presets], t(cfg, "footer_nav"))
+        if pi is not None:
+            cmd = ["yt-dlp", *build_ytdlp_args_from_preset(presets[pi], cfg, out_dir), url]
+            run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(out_dir))
+    else:  # Manual
+        fields = get_effective_default_fields(cfg)
+        res = screen_manual_preset_config(stdscr, cfg, fields)
+        if res:
+            preset_obj = {"id": "manual", "name": "Manual", "fields": res[1]}
+            cmd = ["yt-dlp", *build_ytdlp_args_from_preset(preset_obj, cfg, out_dir), url]
+            run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(out_dir))
 
-    cmd = ["ffmpeg", "-y", "-i", str(inp_path), *flags, str(out_file)]
+def screen_convert(stdscr, cfg: dict) -> None:
+    fpath = text_input(stdscr, t(cfg, "convert_title"), t(cfg, "convert_prompt_file"), t(cfg, "footer_input"))
+    if not fpath: return
+    p = parse_user_path(fpath)
+    if not p.exists() or not p.is_file():
+        show_message(stdscr, t(cfg, "convert_title"), [t(cfg, "convert_err_notfound", f=str(p))], t(cfg, "footer_message"))
+        return
 
-    preset_name = preset["name_ru"] if lang == "ru" else preset["name_en"]
-    cmd_str = " ".join(cmd)
-    subtitle = (f"{t(cfg, 'label_input')} {inp_path.name}\n"
-                f"{t(cfg, 'label_output')} {out_file.name}\n"
-                f"{t(cfg, 'label_preset')} {preset_name}\n"
-                f"{t(cfg, 'label_cmd')} {cmd_str}")
-
-    confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
-                        t(cfg, "footer_nav"), subtitle=subtitle)
-    if confirm == 0:
-        run_with_log(stdscr, cfg, cmd, op_type="Convert File", source=inp_path.name, target=out_file.name)
-
+    presets = get_ordered_convert_presets(cfg)
+    pi = run_menu(stdscr, t(cfg, "convert_title"), [pr["name_ru" if cfg.get("language")=="ru" else "name_en"] for pr in presets], t(cfg, "footer_nav"))
+    if pi is None: return
+    preset = presets[pi]
+    out_file = p.parent / f"{p.stem}{preset['suffix']}.{preset['ext']}"
+    cmd = ["ffmpeg", "-y", "-i", str(p), *preset["ffmpeg_flags"], str(out_file)]
+    run_with_log(stdscr, cfg, cmd, op_type="Convert File", source=p.name, target=out_file.name)
 
 def screen_batch_convert(stdscr, cfg: dict) -> None:
-    """Batch convert all media files in a selected directory."""
-    folder_str = text_input(stdscr, t(cfg, "batch_title"), t(cfg, "batch_prompt_folder"), t(cfg, "footer_input"))
-    if not folder_str:
+    folder = text_input(stdscr, t(cfg, "batch_title"), t(cfg, "batch_prompt_folder"), t(cfg, "footer_input"))
+    if not folder: return
+    p = parse_user_path(folder)
+    if not p.exists() or not p.is_dir():
+        show_message(stdscr, t(cfg, "batch_title"), [t(cfg, "convert_err_notfound", f=str(p))], t(cfg, "footer_message"))
         return
 
-    folder_path = parse_user_path(folder_str)
-    if not folder_path.exists() or not folder_path.is_dir():
-        show_message(stdscr, t(cfg, "batch_title"), [t(cfg, "convert_err_notfound", f=str(folder_path))], t(cfg, "footer_message"))
-        return
-
-    media_exts = {".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv", ".m4v", ".ts", ".mp3", ".wav", ".flac"}
-    files = [p for p in folder_path.iterdir() if p.is_file() and p.suffix.lower() in media_exts]
-
+    files = [f for f in p.iterdir() if f.is_file() and f.suffix.lower() in (".mp4", ".mkv", ".mov", ".avi", ".webm", ".flv")]
     if not files:
         show_message(stdscr, t(cfg, "batch_title"), [t(cfg, "batch_no_files")], t(cfg, "footer_message"))
         return
 
-    lang = cfg.get("language", "en")
-    presets_list = get_ordered_convert_presets(cfg)
-    preset_items = [p["name_ru"] if lang == "ru" else p["name_en"] for p in presets_list]
-    preset_descs = [p["desc_ru"] if lang == "ru" else p["desc_en"] for p in presets_list]
-
-    pi = run_menu(stdscr, t(cfg, "batch_title"), preset_items, t(cfg, "footer_nav"),
-                  subtitle=f"Found {len(files)} files. Select preset:", descriptions=preset_descs)
-    if pi is None:
-        return
-
-    preset = presets_list[pi]
-    out_dir = folder_path / f"converted_{preset['id']}"
+    presets = get_ordered_convert_presets(cfg)
+    pi = run_menu(stdscr, t(cfg, "batch_title"), [pr["name_ru" if cfg.get("language")=="ru" else "name_en"] for pr in presets], t(cfg, "footer_nav"))
+    if pi is None: return
+    preset = presets[pi]
+    out_dir = p / f"converted_{preset['id']}"
     out_dir.mkdir(parents=True, exist_ok=True)
-
     for f in files:
-        out_file = out_dir / f"{f.stem}{preset['suffix']}.{preset['ext']}"
-        cmd = ["ffmpeg", "-y", "-i", str(f), *preset["ffmpeg_flags"], str(out_file)]
-        run_with_log(stdscr, cfg, cmd, op_type=f"Batch ({f.name})", source=f.name, target=out_file.name)
-
+        out_f = out_dir / f"{f.stem}{preset['suffix']}.{preset['ext']}"
+        cmd = ["ffmpeg", "-y", "-i", str(f), *preset["ffmpeg_flags"], str(out_f)]
+        run_with_log(stdscr, cfg, cmd, op_type=f"Batch ({f.name})", source=f.name, target=out_f.name)
 
 def screen_trim(stdscr, cfg: dict) -> None:
-    """Trim media file using FFmpeg start and end times."""
-    file_path_str = text_input(stdscr, t(cfg, "trim_title"), t(cfg, "trim_prompt_file"), t(cfg, "footer_input"))
-    if not file_path_str:
-        return
-
-    inp_path = parse_user_path(file_path_str)
-    if not inp_path.exists() or not inp_path.is_file():
-        show_message(stdscr, t(cfg, "trim_title"), [t(cfg, "convert_err_notfound", f=str(inp_path))], t(cfg, "footer_message"))
-        return
-
-    start_time = text_input(stdscr, t(cfg, "trim_title"), t(cfg, "trim_prompt_start"), t(cfg, "footer_input"), default="00:00:00")
-    if not start_time:
-        return
-
-    end_time = text_input(stdscr, t(cfg, "trim_title"), t(cfg, "trim_prompt_end"), t(cfg, "footer_input"))
-    if end_time is None:
-        return
-
+    fpath = text_input(stdscr, t(cfg, "trim_title"), t(cfg, "trim_prompt_file"), t(cfg, "footer_input"))
+    if not fpath: return
+    p = parse_user_path(fpath)
+    if not p.exists(): return
+    start_t = text_input(stdscr, t(cfg, "trim_title"), t(cfg, "trim_prompt_start"), t(cfg, "footer_input"), default="00:00:00")
+    if not start_t: return
+    end_t = text_input(stdscr, t(cfg, "trim_title"), t(cfg, "trim_prompt_end"), t(cfg, "footer_input"))
+    if end_t is None: return
     mode = run_menu(stdscr, t(cfg, "trim_title"), [t(cfg, "trim_mode_copy"), t(cfg, "trim_mode_reencode")], t(cfg, "footer_nav"))
-    if mode is None:
-        return
-
-    out_file = inp_path.parent / f"{inp_path.stem}_trimmed{inp_path.suffix}"
-
-    cmd = ["ffmpeg", "-y", "-ss", start_time.strip()]
-    if end_time.strip():
-        cmd += ["-to", end_time.strip()]
-    cmd += ["-i", str(inp_path)]
-
-    if mode == 0:
-        cmd += ["-c", "copy", str(out_file)]
-    else:
-        preset = CONVERT_PRESETS[0]
-        cmd += [*preset["ffmpeg_flags"], str(out_file)]
-
-    confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
-                        t(cfg, "footer_nav"), subtitle=f"Command: {' '.join(cmd)}")
-    if confirm == 0:
-        run_with_log(stdscr, cfg, cmd, op_type="Trim File", source=inp_path.name, target=out_file.name)
-
+    if mode is None: return
+    out_f = p.parent / f"{p.stem}_trimmed{p.suffix}"
+    cmd = ["ffmpeg", "-y", "-ss", start_t.strip()]
+    if end_t.strip(): cmd += ["-to", end_t.strip()]
+    cmd += ["-i", str(p)]
+    if mode == 0: cmd += ["-c", "copy", str(out_f)]
+    else: cmd += ["-c:v", "libx264", "-c:a", "aac", str(out_f)]
+    run_with_log(stdscr, cfg, cmd, op_type="Trim Media", source=p.name, target=out_f.name)
 
 def screen_probe(stdscr, cfg: dict) -> None:
-    """Inspect local media file metadata using FFprobe."""
-    file_path_str = text_input(stdscr, t(cfg, "probe_title"), t(cfg, "probe_prompt_file"), t(cfg, "footer_input"))
-    if not file_path_str:
-        return
-
-    inp_path = parse_user_path(file_path_str)
-    if not inp_path.exists() or not inp_path.is_file():
-        show_message(stdscr, t(cfg, "probe_title"), [t(cfg, "convert_err_notfound", f=str(inp_path))], t(cfg, "footer_message"))
-        return
-
-    cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", str(inp_path)]
-    lines = []
+    fpath = text_input(stdscr, t(cfg, "probe_title"), t(cfg, "probe_prompt_file"), t(cfg, "footer_input"))
+    if not fpath: return
+    p = parse_user_path(fpath)
+    if not p.exists(): return
+    cmd = ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", str(p)]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)
         if res.returncode == 0:
             data = json.loads(res.stdout)
-            fmt = data.get("format", {})
-            lines.append(f"File: {inp_path.name}")
-            lines.append(f"Size: {int(fmt.get('size', 0)) / (1024*1024):.2f} MB")
-            lines.append(f"Duration: {float(fmt.get('duration', 0)):.2f} sec")
-            lines.append(f"Bitrate: {int(fmt.get('bit_rate', 0)) // 1000} kbps")
-            lines.append("")
-            lines.append("Streams:")
-
-            for i, st in enumerate(data.get("streams", [])):
-                codec_type = st.get("codec_type", "unknown").upper()
-                codec_name = st.get("codec_name", "unknown")
-                if codec_type == "VIDEO":
-                    w = st.get("width")
-                    h = st.get("height")
-                    fps = st.get("r_frame_rate", "?")
-                    lines.append(f"  [{i}] {codec_type}: {codec_name} ({w}x{h}, {fps} fps)")
-                elif codec_type == "AUDIO":
-                    sr = st.get("sample_rate")
-                    ch = st.get("channels")
-                    lines.append(f"  [{i}] {codec_type}: {codec_name} ({sr} Hz, {ch} channels)")
-                else:
-                    lines.append(f"  [{i}] {codec_type}: {codec_name}")
-        else:
-            lines = ["FFprobe error:", res.stderr]
+            lines = [f"File: {p.name}", f"Duration: {float(data.get('format', {}).get('duration', 0)):.2f}s", "Streams:"]
+            for s in data.get("streams", []):
+                lines.append(f"  [{s.get('codec_type')}] {s.get('codec_name')} ({s.get('width', '')}x{s.get('height', '')})")
+            show_message(stdscr, t(cfg, "probe_title"), lines, t(cfg, "footer_message"))
     except Exception as e:
-        lines = [f"Failed to run FFprobe: {e}"]
-
-    show_message(stdscr, t(cfg, "probe_title"), lines, t(cfg, "footer_message"))
-
-
-def screen_history(stdscr, cfg: dict) -> None:
-    """Display recent operations history."""
-    if not HISTORY_PATH.exists():
-        show_message(stdscr, t(cfg, "history_title"), [t(cfg, "history_empty")], t(cfg, "footer_message"))
-        return
-
-    try:
-        entries = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        entries = []
-
-    if not entries:
-        show_message(stdscr, t(cfg, "history_title"), [t(cfg, "history_empty")], t(cfg, "footer_message"))
-        return
-
-    lines = []
-    for item in entries[:25]:
-        lines.append(f"[{item.get('time')}] {item.get('type')} ({item.get('status')})")
-        lines.append(f"  Src: {item.get('source')}")
-        lines.append(f"  Dst: {item.get('target')}")
-        lines.append("")
-
-    show_message(stdscr, t(cfg, "history_title"), lines, t(cfg, "footer_message"))
-
+        show_message(stdscr, t(cfg, "probe_title"), [f"Error: {e}"], t(cfg, "footer_message"))
 
 def screen_audio(stdscr, cfg: dict) -> None:
     url = text_input(stdscr, t(cfg, "audio_title"), t(cfg, "video_prompt_url"), t(cfg, "footer_input"))
-    if not url:
-        return
-
-    fi = run_menu(stdscr, t(cfg, "audio_title"), AUDIO_FORMATS, t(cfg, "footer_nav"),
-                  subtitle=t(cfg, "audio_format_subtitle"))
-    if fi is None:
-        return
-    audio_format = AUDIO_FORMATS[fi]
-
-    out_dir = text_input(stdscr, t(cfg, "audio_title"), t(cfg, "outdir_prompt"),
-                          t(cfg, "footer_input"), default=cfg["download_dir"])
-    if out_dir is None:
-        return
-
-    expanded_out = parse_user_path(out_dir)
-    expanded_out.mkdir(parents=True, exist_ok=True)
-    cmd = ["yt-dlp", "-x", "--audio-format", audio_format, "--audio-quality", "0",
-           "-o", str(expanded_out / "%(title)s.%(ext)s"), *cookie_args(cfg), url]
-
-    cmd_str = " ".join(cmd)
-    subtitle = (f"{t(cfg, 'label_url')} {url}\n"
-                f"{t(cfg, 'label_format')} {audio_format}   {t(cfg, 'label_folder')} {out_dir}\n"
-                f"{t(cfg, 'label_cmd')} {cmd_str}")
-    confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
-                        t(cfg, "footer_nav"), subtitle=subtitle)
-    if confirm == 0:
-        run_with_log(stdscr, cfg, cmd, op_type="Download Audio", source=url, target=str(expanded_out))
-
+    if not url: return
+    fi = run_menu(stdscr, t(cfg, "audio_title"), [a.upper() for a in AUDIO_FORMATS], t(cfg, "footer_nav"))
+    if fi is None: return
+    fmt = AUDIO_FORMATS[fi]
+    out_dir = parse_user_path(cfg["download_dir"])
+    cmd = ["yt-dlp", "-x", "--audio-format", fmt, "--audio-quality", "0", *get_proxy_args(cfg), "-o", str(out_dir / "%(title)s.%(ext)s"), *cookie_args(cfg), url]
+    run_with_log(stdscr, cfg, cmd, op_type="Download Audio", source=url, target=str(out_dir))
 
 def screen_playlist(stdscr, cfg: dict) -> None:
-    """Mirrors screen_video's Quick / Preset / Manual flow (for_playlist=True so
-    the Playlist category and --yes-playlist/--playlist-* flags are included)."""
     url = text_input(stdscr, t(cfg, "playlist_title"), t(cfg, "playlist_prompt_url"), t(cfg, "footer_input"))
-    if not url:
-        return
-
-    mode_labels = [t(cfg, "download_mode_quick"), t(cfg, "download_mode_preset"), t(cfg, "download_mode_manual")]
-    mode = run_menu(stdscr, t(cfg, "playlist_title"), mode_labels, t(cfg, "footer_nav"),
-                    subtitle=t(cfg, "download_mode_subtitle"))
-    if mode is None:
-        return
-
-    if mode == 0:  # Quick Download
-        default_id = cfg.get("default_download_preset")
-        preset = next((p for p in cfg.get("download_presets", []) if p["id"] == default_id), None)
-        if preset is None:
-            show_message(stdscr, t(cfg, "playlist_title"), [t(cfg, "preset_none_quick")], t(cfg, "footer_message"))
-            mode = 2
-        else:
-            out_dir_str = cfg.get("download_dir", DEFAULT_DOWNLOAD_DIR)
-            run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, for_playlist=True, op_type="Download Playlist")
-            return
-
-    if mode == 1:  # Choose a saved preset
-        preset = choose_download_preset(stdscr, cfg)
-        if preset is None:
-            return
-        out_dir_str = text_input(stdscr, t(cfg, "playlist_title"), t(cfg, "outdir_prompt"),
-                                  t(cfg, "footer_input"), default=cfg["download_dir"])
-        if out_dir_str is None:
-            return
-        run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, for_playlist=True, op_type="Download Playlist")
-        return
-
-    # mode == 2: Configure manually
-    fields = default_preset_fields()
-    result = screen_manual_preset_config(stdscr, cfg, fields, for_playlist=True)
-    if result is None:
-        return
-    action, fields = result
-
-    out_dir_str = text_input(stdscr, t(cfg, "playlist_title"), t(cfg, "outdir_prompt"),
-                              t(cfg, "footer_input"), default=cfg["download_dir"])
-    if out_dir_str is None:
-        return
-
-    if action == "save":
-        preset = prompt_save_preset(stdscr, cfg, fields)
-        if preset is None:
-            preset = {"id": "", "name": "", "fields": fields}
-    else:
-        preset = {"id": "", "name": "", "fields": fields}
-
-    run_download_with_preset(stdscr, cfg, url, preset, out_dir_str, for_playlist=True, op_type="Download Playlist")
-
-
-def screen_info(stdscr, cfg: dict) -> None:
-    url = text_input(stdscr, t(cfg, "info_title"), t(cfg, "video_prompt_url"), t(cfg, "footer_input"))
-    if not url:
-        return
-
-    curses.curs_set(0)
-    stdscr.erase()
-    h, w = stdscr.getmaxyx()
-    draw_header(stdscr, t(cfg, "info_title"), w)
-    safe_addstr(stdscr, 3, 4, t(cfg, "info_fetching"), w - 8)
-    stdscr.refresh()
-
-    cmd = ["yt-dlp", "--no-playlist", "-j", *cookie_args(cfg), url]
-    lines: list[str] = []
-    try:
-        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-        if result.returncode != 0:
-            lines = [t(cfg, "info_error"), result.stderr.strip()[:2000]]
-        else:
-            data = json.loads(result.stdout)
-            heights = sorted({f.get("height") for f in data.get("formats", []) if f.get("height")})
-            lines = [
-                f"{t(cfg, 'info_label_title')} {data.get('title')}",
-                f"{t(cfg, 'info_label_uploader')} {data.get('uploader')}",
-                f"{t(cfg, 'info_label_duration')} {data.get('duration_string', data.get('duration'))}",
-                f"{t(cfg, 'info_label_views')} {data.get('view_count')}",
-                f"{t(cfg, 'info_label_date')} {data.get('upload_date')}",
-                f"{t(cfg, 'info_label_quality')} {', '.join(str(h) + 'p' for h in heights) if heights else '-'}",
-            ]
-    except FileNotFoundError:
-        lines = [t(cfg, "info_not_installed")]
-    except json.JSONDecodeError:
-        lines = [t(cfg, "info_parse_error")]
-    show_message(stdscr, t(cfg, "info_title"), lines, t(cfg, "footer_message"))
-
+    if not url: return
+    out_dir = parse_user_path(cfg["download_dir"])
+    fields = get_effective_default_fields(cfg)
+    preset_obj = {"id": "playlist", "name": "Playlist", "fields": fields}
+    cmd = ["yt-dlp", "--yes-playlist", *build_ytdlp_args_from_preset(preset_obj, cfg, out_dir, for_playlist=True), url]
+    run_with_log(stdscr, cfg, cmd, op_type="Download Playlist", source=url, target=str(out_dir))
 
 def screen_subs(stdscr, cfg: dict) -> None:
     url = text_input(stdscr, t(cfg, "subs_title"), t(cfg, "video_prompt_url"), t(cfg, "footer_input"))
-    if not url:
-        return
+    if not url: return
+    out_dir = parse_user_path(cfg["download_dir"])
+    cmd = ["yt-dlp", "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", cfg.get("sub_langs", "ru,en"), *get_proxy_args(cfg), "-o", str(out_dir / "%(title)s.%(ext)s"), *cookie_args(cfg), url]
+    run_with_log(stdscr, cfg, cmd, op_type="Download Subtitles", source=url, target=str(out_dir))
 
-    langs = text_input(stdscr, t(cfg, "subs_title"), t(cfg, "subs_langs_prompt"),
-                        t(cfg, "footer_input"), default=cfg["sub_langs"])
-    if langs is None:
-        return
-
-    out_dir = text_input(stdscr, t(cfg, "subs_title"), t(cfg, "outdir_prompt"),
-                          t(cfg, "footer_input"), default=cfg["download_dir"])
-    if out_dir is None:
-        return
-
-    expanded_out = parse_user_path(out_dir)
-    expanded_out.mkdir(parents=True, exist_ok=True)
-    cmd = ["yt-dlp", "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", langs,
-           "-o", str(expanded_out / "%(title)s.%(ext)s"), *cookie_args(cfg), url]
-
-    cmd_str = " ".join(cmd)
-    subtitle = (f"{t(cfg, 'label_url')} {url}\n"
-                f"{t(cfg, 'label_langs')} {langs}   {t(cfg, 'label_folder')} {out_dir}\n"
-                f"{t(cfg, 'label_cmd')} {cmd_str}")
-    confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")],
-                        t(cfg, "footer_nav"), subtitle=subtitle)
-    if confirm == 0:
-        run_with_log(stdscr, cfg, cmd, op_type="Download Subs", source=url, target=str(expanded_out))
-
-
-def cookies_status_line(cfg: dict) -> str:
-    mode = cfg.get("cookies_mode", "none")
-    if mode == "file" and cfg.get("cookies_file"):
-        n = len(parse_cookies_file(cfg["cookies_file"]))
-        return t(cfg, "cookies_status_file", v=n, f=cfg["cookies_file"])
-    if mode == "browser" and cfg.get("cookies_browser"):
-        return t(cfg, "cookies_status_browser", v=cfg["cookies_browser"])
-    return t(cfg, "cookies_status_none")
-
+def screen_info(stdscr, cfg: dict) -> None:
+    url = text_input(stdscr, t(cfg, "info_title"), t(cfg, "video_prompt_url"), t(cfg, "footer_input"))
+    if not url: return
+    cmd = ["yt-dlp", "--no-playlist", "-j", *get_proxy_args(cfg), *cookie_args(cfg), url]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        if res.returncode == 0:
+            d = json.loads(res.stdout)
+            lines = [f"Title: {d.get('title')}", f"Uploader: {d.get('uploader')}", f"Duration: {d.get('duration_string')}", f"Views: {d.get('view_count')}"]
+            show_message(stdscr, t(cfg, "info_title"), lines, t(cfg, "footer_message"))
+    except Exception as e:
+        show_message(stdscr, t(cfg, "info_title"), [f"Error: {e}"], t(cfg, "footer_message"))
 
 def screen_cookies(stdscr, cfg: dict) -> None:
-    while True:
-        path = cfg.get("cookies_file") or DEFAULT_COOKIES_FILE
-        items = [
-            t(cfg, "cookies_opt_view"),
-            t(cfg, "cookies_opt_add"),
-            t(cfg, "cookies_opt_edit_file"),
-            t(cfg, "cookies_opt_set_path"),
-            t(cfg, "cookies_opt_browser"),
-            t(cfg, "cookies_opt_disable"),
-            t(cfg, "cookies_opt_back"),
-        ]
-        choice = run_menu(stdscr, t(cfg, "cookies_title"), items, t(cfg, "footer_nav"),
-                           subtitle=cookies_status_line(cfg))
-        if choice is None or choice == 6:
-            return
+    cfile = cfg.get("cookies_file") or DEFAULT_COOKIES_FILE
+    cookies = parse_cookies_file(cfile)
+    lines = [f"Cookies file: {cfile}", f"Entries: {len(cookies)}"] + [f"  - {c['domain']}: {c['name']}" for c in cookies[:15]]
+    show_message(stdscr, "Cookies", lines, t(cfg, "footer_message"))
 
-        if choice == 0:  # view
-            cookies = parse_cookies_file(path)
-            if not cookies:
-                lines = [t(cfg, "cookies_none_found"), "", t(cfg, "cookies_view_note"), path]
-            else:
-                lines = [f"{c['domain']}  {c['name']} = {c['value'][:40]}" for c in cookies]
-                lines += ["", t(cfg, "cookies_view_note"), path]
-            show_message(stdscr, t(cfg, "cookies_title"), lines, t(cfg, "footer_message"))
-
-        elif choice == 1:  # add
-            domain = text_input(stdscr, t(cfg, "cookies_title"), t(cfg, "cookies_domain_prompt"),
-                                 t(cfg, "footer_input"))
-            if not domain:
-                continue
-            name = text_input(stdscr, t(cfg, "cookies_title"), t(cfg, "cookies_name_prompt"),
-                               t(cfg, "footer_input"))
-            if not name:
-                continue
-            value = text_input(stdscr, t(cfg, "cookies_title"), t(cfg, "cookies_value_prompt"),
-                                t(cfg, "footer_input"))
-            if value is None:
-                continue
-            append_cookie_entry(path, domain, name, value)
-            cfg["cookies_mode"] = "file"
-            cfg["cookies_file"] = path
-            save_config(cfg)
-            show_message(stdscr, t(cfg, "cookies_title"), [t(cfg, "cookies_added", v=path)],
-                         t(cfg, "footer_message"))
-
-        elif choice == 2:  # edit in $EDITOR
-            exp_path = parse_user_path(path)
-            exp_path.parent.mkdir(parents=True, exist_ok=True)
-            if not exp_path.exists():
-                exp_path.write_text("# Netscape HTTP Cookie File\n# Generated by MogDop's MediaCLI.\n\n")
-            editor = (os.environ.get("EDITOR") or
-                      shutil.which("nano") or
-                      shutil.which("vim") or
-                      shutil.which("vi") or
-                      shutil.which("notepad") or "notepad")
-            run_external(stdscr, [editor, str(exp_path)])
-            cfg["cookies_mode"] = "file"
-            cfg["cookies_file"] = path
-            save_config(cfg)
-
-        elif choice == 3:  # change path
-            new_path = text_input(stdscr, t(cfg, "cookies_title"), t(cfg, "cookies_path_prompt"),
-                                   t(cfg, "footer_input"), default=path)
-            if new_path:
-                cfg["cookies_file"] = new_path
-                cfg["cookies_mode"] = "file"
-                save_config(cfg)
-
-        elif choice == 4:  # browser
-            bi = run_menu(stdscr, t(cfg, "cookies_title"), BROWSERS, t(cfg, "footer_nav"),
-                          subtitle=t(cfg, "cookies_browser_subtitle"))
-            if bi is None:
-                continue
-            browser = BROWSERS[bi]
-            profile = text_input(stdscr, t(cfg, "cookies_title"), t(cfg, "cookies_profile_prompt"),
-                                  t(cfg, "footer_input"))
-            if profile:
-                browser = f"{browser}:{profile}"
-            cfg["cookies_mode"] = "browser"
-            cfg["cookies_browser"] = browser
-            save_config(cfg)
-
-        elif choice == 5:  # disable
-            cfg["cookies_mode"] = "none"
-            save_config(cfg)
-
-
-def screen_settings(stdscr, cfg: dict) -> None:
-    """Tabbed Settings Menu (General / Conversion / Interface)."""
-    current_tab = 0
-    current_item = 0
-
-    while True:
-        lang = cfg.get("language", "en")
-        preset_name = get_preset_name(cfg, cfg.get("video_preset", "davinci_dnxhr"))
-        theme_id = cfg.get("theme", "cyan")
-        theme_name = THEMES.get(theme_id, THEMES["cyan"])["name_ru"] if lang == "ru" else THEMES.get(theme_id, THEMES["cyan"])["name_en"]
-        bg_status = t(cfg, "bg_option_keep") if cfg.get("use_terminal_bg", True) else t(cfg, "bg_option_solid")
-
-        # Define Tab Structure for Settings
-        tabs = [
-            {
-                "title": t(cfg, "tab_set_gen"),
-                "items": [
-                    t(cfg, "settings_download_dir", v=cfg["download_dir"]),
-                    t(cfg, "settings_goal", v=cfg.get("user_goal", "editing")),
-                    t(cfg, "settings_proxy", v=(cfg.get("proxy_url") if cfg.get("proxy_mode") == "custom" else t(cfg, f"proxy_{cfg.get('proxy_mode', 'system')}"))),
-                    t(cfg, "settings_language", v=("English" if lang == "en" else "Русский")),
-                    t(cfg, "settings_cookies", v=cookies_status_line(cfg)),
-                    t(cfg, "settings_download_presets", v=len(cfg.get("download_presets", []))),
-                ]
-            },
-            {
-                "title": t(cfg, "tab_set_conv"),
-                "items": [
-                    t(cfg, "settings_preset", v=preset_name),
-                    t(cfg, "settings_audio_format", v=cfg["audio_format"]),
-                    t(cfg, "settings_sub_langs", v=cfg["sub_langs"]),
-                ]
-            },
-            {
-                "title": t(cfg, "tab_set_ui"),
-                "items": [
-                    t(cfg, "settings_theme", v=theme_name),
-                    t(cfg, "settings_bg", v=bg_status),
-                    t(cfg, "settings_style", v=cfg.get("progress_style", "blocks")),
-                    t(cfg, "settings_reset"),
-                    t(cfg, "settings_back"),
-                ]
-            }
-        ]
-
-        t_idx, i_idx = run_menu_tabbed(stdscr, t(cfg, "settings_title"), tabs, t(cfg, "footer_nav"),
-                                       start_tab=current_tab, start_index=current_item)
-
-        if t_idx is None:
-            return
-
-        current_tab = t_idx
-        current_item = i_idx
-
-        # TAB 0: GENERAL
-        if current_tab == 0:
-            if current_item == 0:  # Dir
-                val = text_input(stdscr, t(cfg, "settings_title"), t(cfg, "settings_new_download_dir"),
-                                  t(cfg, "footer_input"), default=cfg["download_dir"])
-                if val:
-                    cfg["download_dir"] = val
-                    save_config(cfg)
-            elif current_item == 1:  # Goal
-                goals = ["editing", "downloading", "audio", "transcoding"]
-                goal_labels = [t(cfg, "goal_editing"), t(cfg, "goal_downloading"), t(cfg, "goal_audio"), t(cfg, "goal_transcoding")]
-                gi = run_menu(stdscr, t(cfg, "settings_title"), goal_labels, t(cfg, "footer_nav"), subtitle=t(cfg, "settings_choose_goal"))
-                if gi is not None:
-                    cfg["user_goal"] = goals[gi]
-                    save_config(cfg)
-            elif current_item == 2:  # Proxy Mode
-                p_opts = [t(cfg, "proxy_system"), t(cfg, "proxy_custom"), t(cfg, "proxy_none")]
-                pi = run_menu(stdscr, t(cfg, "settings_title"), p_opts, t(cfg, "footer_nav"))
-                if pi is not None:
-                    modes = ["system", "custom", "none"]
-                    cfg["proxy_mode"] = modes[pi]
-                    if modes[pi] == "custom":
-                        pr = text_input(stdscr, t(cfg, "settings_title"), t(cfg, "adv_proxy_url_prompt"), t(cfg, "footer_input"), default=cfg.get("proxy_url", ""))
-                        if pr is not None:
-                            cfg["proxy_url"] = pr.strip()
-                    save_config(cfg)
-            elif current_item == 3:  # Language
-                li = run_menu(stdscr, t(cfg, "settings_title"), ["English", "Русский"], t(cfg, "footer_nav"), subtitle=t(cfg, "settings_choose_language"))
-                if li is not None:
-                    cfg["language"] = "en" if li == 0 else "ru"
-                    save_config(cfg)
-            elif current_item == 4:  # Cookies
-                screen_cookies(stdscr, cfg)
-            elif current_item == 5:  # Download Presets
-                screen_manage_download_presets(stdscr, cfg)
-
-        # TAB 1: CONVERSION
-        elif current_tab == 1:
-            if current_item == 0:  # Video preset
-                preset_keys = get_ordered_video_preset_keys(cfg)
-                preset_labels = [VIDEO_PRESETS[pk]["name_ru"] if lang == "ru" else VIDEO_PRESETS[pk]["name_en"] for pk in preset_keys]
-                preset_descs = [VIDEO_PRESETS[pk]["desc_ru"] if lang == "ru" else VIDEO_PRESETS[pk]["desc_en"] for pk in preset_keys]
-                pi = run_menu(stdscr, t(cfg, "settings_title"), preset_labels, t(cfg, "footer_nav"), subtitle=t(cfg, "settings_choose_preset"), descriptions=preset_descs)
-                if pi is not None:
-                    cfg["video_preset"] = preset_keys[pi]
-                    save_config(cfg)
-            elif current_item == 1:  # Audio format
-                fi = run_menu(stdscr, t(cfg, "settings_title"), AUDIO_FORMATS, t(cfg, "footer_nav"), subtitle=t(cfg, "settings_choose_audio_format"))
-                if fi is not None:
-                    cfg["audio_format"] = AUDIO_FORMATS[fi]
-                    save_config(cfg)
-            elif current_item == 2:  # Sub langs
-                val = text_input(stdscr, t(cfg, "settings_title"), t(cfg, "settings_new_sub_langs"), t(cfg, "footer_input"), default=cfg["sub_langs"])
-                if val:
-                    cfg["sub_langs"] = val
-                    save_config(cfg)
-
-        # TAB 2: INTERFACE
-        elif current_tab == 2:
-            if current_item == 0:  # Theme
-                theme_keys = list(THEMES.keys())
-                theme_labels = [THEMES[k]["name_ru"] if lang == "ru" else THEMES[k]["name_en"] for k in theme_keys]
-                ti = run_menu(stdscr, t(cfg, "settings_title"), theme_labels, t(cfg, "footer_nav"), subtitle=t(cfg, "settings_choose_theme"))
-                if ti is not None:
-                    cfg["theme"] = theme_keys[ti]
-                    apply_theme(cfg)
-                    save_config(cfg)
-            elif current_item == 1:  # Terminal BG
-                bgi = run_menu(stdscr, t(cfg, "settings_title"), [t(cfg, "bg_option_keep"), t(cfg, "bg_option_solid")], t(cfg, "footer_nav"), subtitle=t(cfg, "bg_option_title"))
-                if bgi is not None:
-                    cfg["use_terminal_bg"] = (bgi == 0)
-                    apply_theme(cfg)
-                    save_config(cfg)
-            elif current_item == 2:  # Progress Bar Style
-                styles = ["blocks", "classic", "dots", "minimal"]
-                si = run_menu(stdscr, t(cfg, "settings_title"), styles, t(cfg, "footer_nav"))
-                if si is not None:
-                    cfg["progress_style"] = styles[si]
-                    save_config(cfg)
-            elif current_item == 3:  # Reset
-                confirm = run_menu(stdscr, t(cfg, "confirm_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")], t(cfg, "footer_nav"), subtitle=t(cfg, "settings_reset_confirm"))
-                if confirm == 0:
-                    cfg.clear()
-                    cfg.update(reset_config())
-                    run_first_run_wizard(stdscr, cfg)
-                    return
-            elif current_item == 4:  # Back
-                return
-
+def screen_history(stdscr, cfg: dict) -> None:
+    if not HISTORY_PATH.exists():
+        show_message(stdscr, t(cfg, "history_title"), [t(cfg, "history_empty")], t(cfg, "footer_message"))
+        return
+    entries = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))[:20]
+    lines = [f"[{e.get('time')}] {e.get('type')} ({e.get('status')})\n  {e.get('source')} -> {e.get('target')}" for e in entries]
+    show_message(stdscr, t(cfg, "history_title"), lines, t(cfg, "footer_message"))
 
 def screen_update(stdscr, cfg: dict) -> None:
-    choice = run_menu(stdscr, t(cfg, "update_title"),
-                       [t(cfg, "update_via_pkg"), t(cfg, "update_via_pip"), t(cfg, "update_via_ytdlp"), t(cfg, "update_cancel")],
-                       t(cfg, "footer_nav"))
-    if choice is None or choice == 3:
-        return
-    if choice == 0:
-        if sys.platform == "win32":
-            run_external(stdscr, ["winget", "upgrade", "yt-dlp"])
-        elif sys.platform == "darwin":
-            run_external(stdscr, ["brew", "upgrade", "yt-dlp"])
-        elif shutil.which("pacman"):
-            run_external(stdscr, ["sudo", "pacman", "-Syu", "yt-dlp"])
-        elif shutil.which("apt"):
-            run_external(stdscr, ["sudo", "apt", "update"])
-            run_external(stdscr, ["sudo", "apt", "install", "--only-upgrade", "yt-dlp"])
-        elif shutil.which("dnf"):
-            run_external(stdscr, ["sudo", "dnf", "upgrade", "yt-dlp"])
-        else:
-            run_with_log(stdscr, cfg, ["python", "-m", "pip", "install", "--user", "-U", "yt-dlp"])
-    elif choice == 1:
-        run_with_log(stdscr, cfg, ["python", "-m", "pip", "install", "--user", "-U", "yt-dlp"])
-    elif choice == 2:
-        run_with_log(stdscr, cfg, ["yt-dlp", "-U"])
-
+    acts = [t(cfg, "update_via_pkg"), t(cfg, "update_via_pip"), t(cfg, "update_via_ytdlp"), t(cfg, "update_cancel")]
+    c = run_menu(stdscr, t(cfg, "update_title"), acts, t(cfg, "footer_nav"))
+    if c == 0:
+        cmd = ["sudo", "pacman", "-Syu", "yt-dlp"] if shutil.which("pacman") else ["winget", "upgrade", "yt-dlp"]
+        run_with_log(stdscr, cfg, cmd, op_type="Update yt-dlp")
+    elif c == 1:
+        run_with_log(stdscr, cfg, [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"], op_type="Update yt-dlp")
+    elif c == 2:
+        run_with_log(stdscr, cfg, ["yt-dlp", "-U"], op_type="Update yt-dlp")
 
 # ==========================================================================
-# Main menu (Tabbed Layout)
+# Main TUI Loop with Tabbed Navigation
 # ==========================================================================
 
 MAIN_TABS = [
-    {
-        "id": "online",
-        "title_key": "tab_online",
-        "keys": [("menu_video", screen_video), ("menu_audio", screen_audio), ("menu_playlist", screen_playlist), ("menu_subs", screen_subs), ("menu_info", screen_info)]
-    },
-    {
-        "id": "local",
-        "title_key": "tab_local",
-        "keys": [("menu_convert", screen_convert), ("menu_batch_convert", screen_batch_convert), ("menu_trim", screen_trim), ("menu_probe", screen_probe)]
-    },
-    {
-        "id": "system",
-        "title_key": "tab_system",
-        "keys": [("menu_history", screen_history), ("menu_cookies", screen_cookies), ("menu_settings", screen_settings), ("menu_update", screen_update), ("menu_exit", None)]
-    }
+    {"id": "online", "title_key": "tab_online", "keys": [("menu_video", screen_video), ("menu_audio", screen_audio), ("menu_playlist", screen_playlist), ("menu_subs", screen_subs), ("menu_info", screen_info)]},
+    {"id": "local", "title_key": "tab_local", "keys": [("menu_convert", screen_convert), ("menu_batch_convert", screen_batch_convert), ("menu_trim", screen_trim), ("menu_probe", screen_probe)]},
+    {"id": "system", "title_key": "tab_system", "keys": [("menu_history", screen_history), ("menu_cookies", screen_cookies), ("menu_settings", screen_settings_vertical), ("menu_update", screen_update), ("menu_exit", None)]}
 ]
-
 
 def main_tui(stdscr) -> None:
     cfg = load_config()
     apply_theme(cfg)
-
-    # First Run Wizard check
-    if not cfg.get("first_run_completed", False):
-        run_first_run_wizard(stdscr, cfg)
-
-    # Auto Dependency check & Arch Linux prompt
-    missing = missing_dependencies()
-    if missing:
-        missing_bins = [bin_ for bin_, _ in missing]
-        lines = [t(cfg, "deps_missing_header"), ""]
-        for bin_ in missing_bins:
-            lines.append(f"  - {bin_}")
-
-        if shutil.which("pacman"):
-            lines += ["", t(cfg, "deps_arch_install_prompt")]
-            choice = run_menu(stdscr, t(cfg, "deps_title"), [t(cfg, "confirm_start"), t(cfg, "confirm_cancel")], t(cfg, "footer_nav"), subtitle="\n".join(lines))
-            if choice == 0:
-                run_external(stdscr, ["sudo", "pacman", "-S", "--noconfirm", *missing_bins, "atomicparsley"])
-        else:
-            lines += ["", t(cfg, "deps_install_header"), "  " + get_install_command(missing_bins), "", t(cfg, "deps_note")]
-            show_message(stdscr, t(cfg, "deps_title"), lines, t(cfg, "footer_message"))
-
-    current_tab = 0
-    current_item = 0
+    cur_tab = 0
+    cur_item = 0
 
     while True:
-        tabs = []
-        for tab in MAIN_TABS:
-            tabs.append({
-                "title": t(cfg, tab["title_key"]),
-                "items": [t(cfg, k[0]) for k in tab["keys"]]
-            })
+        stdscr.erase()
+        h, w = stdscr.getmaxyx()
+        draw_header(stdscr, t(cfg, "app_title"), w)
 
-        t_idx, i_idx = run_menu_tabbed(stdscr, t(cfg, "app_title"), tabs, t(cfg, "footer_nav"),
-                                       start_tab=current_tab, start_index=current_item, ascii_art=ASCII_ART)
+        # ASCII Art
+        row = 2
+        if h >= 24 and w >= 82:
+            for line in ASCII_ART:
+                safe_addstr(stdscr, row, max(2, (w - len(line)) // 2), line, w - 4, curses.A_BOLD)
+                row += 1
+            row += 1
 
-        if t_idx is None:
-            break
+        # Horizontal Tabs bar
+        tab_x = 4
+        for idx, tab in enumerate(MAIN_TABS):
+            t_name = f" [ {t(cfg, tab['title_key'])} ] "
+            safe_addstr(stdscr, row, tab_x, t_name, w - tab_x, HL_ATTR if idx == cur_tab else curses.A_DIM)
+            tab_x += len(t_name) + 2
+        row += 2
 
-        current_tab = t_idx
-        current_item = i_idx
+        # Menu items
+        active_keys = MAIN_TABS[cur_tab]["keys"]
+        cur_item = min(cur_item, len(active_keys) - 1)
+        for idx, (label_key, _) in enumerate(active_keys):
+            y = row + idx
+            if y >= h - 3: break
+            safe_addstr(stdscr, y, 6, f"{'> ' if idx == cur_item else '  '}{t(cfg, label_key)}", w - 12, HL_ATTR if idx == cur_item else curses.A_NORMAL)
 
-        key, func = MAIN_TABS[current_tab]["keys"][current_item]
-        if key == "menu_exit":
+        draw_footer(stdscr, t(cfg, "footer_nav"), w, h)
+        stdscr.refresh()
+
+        key = stdscr.getch()
+
+        if check_terminal_hotkey(stdscr, key):
+            TERMINAL_OVERLAY.open(stdscr, cfg)
+            continue
+        if key in (curses.KEY_LEFT, ord('h')):
+            cur_tab = (cur_tab - 1) % len(MAIN_TABS)
+            cur_item = 0
+        elif key in (curses.KEY_RIGHT, ord('l')):
+            cur_tab = (cur_tab + 1) % len(MAIN_TABS)
+            cur_item = 0
+        elif key in (curses.KEY_UP, ord('k')):
+            cur_item = (cur_item - 1) % len(active_keys)
+        elif key in (curses.KEY_DOWN, ord('j')):
+            cur_item = (cur_item + 1) % len(active_keys)
+        elif key in (curses.KEY_ENTER, 10, 13):
+            k, func = active_keys[cur_item]
+            if k == "menu_exit": return
+            if func: func(stdscr, cfg)
+        elif key in (27, ord('q')):
             return
-        if func:
-            func(stdscr, cfg)
-
-
-# ==========================================================================
-# Classic (non-curses) fallback
-# ==========================================================================
-
-def run(cmd: list[str]) -> int:
-    print("[cmd]", " ".join(cmd))
-    try:
-        return subprocess.run(cmd, check=False).returncode
-    except FileNotFoundError:
-        print("[!] Tool is not installed.")
-        return 1
-    except KeyboardInterrupt:
-        print("\n[!] Interrupted.")
-        return 130
-
-
-def classic_menu() -> int:
-    cfg = load_config()
-    print("=== MogDop's MediaCLI (classic menu, curses unavailable) ===")
-    print("1) Video  2) Audio  3) Playlist  4) Convert local file  5) Info  6) Subtitles  7) Update  0) Exit")
-    try:
-        choice = input("Choice: ").strip()
-    except (KeyboardInterrupt, EOFError):
-        return 0
-    if choice == "0" or not choice:
-        return 0
-    if choice == "7":
-        return run(["python", "-m", "pip", "install", "-U", "yt-dlp"])
-
-    if choice == "4":
-        try:
-            inp = input("Enter path to file: ").strip()
-            if not inp or not parse_user_path(inp).exists():
-                print("File not found.")
-                return 1
-            print("1) DaVinci DNxHR HQ  2) DaVinci ProRes HQ  3) DaVinci H.264+PCM  4) Standard MP4  5) WAV  6) MP3  7) Custom")
-            p_sel = input("Preset [1]: ").strip() or "1"
-            p_map = {"1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5, "7": 6}
-            preset = CONVERT_PRESETS[p_map.get(p_sel, 0)]
-            inp_path = parse_user_path(inp)
-
-            if preset["id"] == "custom":
-                ext = input("Custom extension [mov]: ").strip() or "mov"
-                flags_str = input("Custom FFmpeg flags [-c:v libx264 -c:a pcm_s16le]: ").strip() or "-c:v libx264 -c:a pcm_s16le"
-                flags = flags_str.split()
-                out_file = inp_path.parent / f"{inp_path.stem}_custom.{ext}"
-            else:
-                flags = preset["ffmpeg_flags"]
-                out_file = inp_path.parent / f"{inp_path.stem}{preset['suffix']}.{preset['ext']}"
-
-            cmd = ["ffmpeg", "-y", "-i", str(inp_path), *flags, str(out_file)]
-            return run(cmd)
-        except (KeyboardInterrupt, EOFError):
-            return 0
-
-    try:
-        url = input("URL: ").strip()
-        if not url:
-            return 1
-        out = input(f"Folder [{cfg['download_dir']}]: ").strip() or cfg["download_dir"]
-    except (KeyboardInterrupt, EOFError):
-        return 0
-
-    exp_out = parse_user_path(out)
-    exp_out.mkdir(parents=True, exist_ok=True)
-    cargs = cookie_args(cfg)
-
-    if choice == "1":
-        q = input("Quality, e.g. 1080 (Enter = best): ").strip()
-        fmt = f"bestvideo[height<={q}]+bestaudio/best[height<={q}]" if q else "bestvideo+bestaudio/best"
-        preset_args = VIDEO_PRESETS[cfg.get("video_preset", "davinci_dnxhr")]["args"]
-        cmd = ["yt-dlp", "-f", fmt, "-o", str(exp_out / "%(title)s.%(ext)s"),
-               *preset_args, *cargs, url]
-    elif choice == "2":
-        f = input(f"Audio format [{cfg['audio_format']}]: ").strip() or cfg["audio_format"]
-        cmd = ["yt-dlp", "-x", "--audio-format", f, "-o", str(exp_out / "%(title)s.%(ext)s"), *cargs, url]
-    elif choice == "3":
-        template = str(exp_out / "%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s")
-        preset_args = VIDEO_PRESETS[cfg.get("video_preset", "davinci_dnxhr")]["args"]
-        cmd = ["yt-dlp", "-f", "bestvideo+bestaudio/best", "-o", template, "--yes-playlist",
-               *preset_args, *cargs, url]
-    elif choice == "5":
-        cmd = ["yt-dlp", "--no-playlist", "-j", *cargs, url]
-    elif choice == "6":
-        cmd = ["yt-dlp", "--skip-download", "--write-subs", "--write-auto-subs",
-               "--sub-langs", cfg["sub_langs"], "-o", str(exp_out / "%(title)s.%(ext)s"), *cargs, url]
-    else:
-        print("Invalid choice.")
-        return 1
-    return run(cmd)
-
-
-# ==========================================================================
-# Command-line subcommands (scripting)
-# ==========================================================================
-
-def _resolve_cookie_args(args: argparse.Namespace) -> list[str]:
-    if getattr(args, "cookies", None):
-        return ["--cookies", str(parse_user_path(args.cookies))]
-    if getattr(args, "cookies_from_browser", None):
-        return ["--cookies-from-browser", args.cookies_from_browser]
-    return cookie_args(load_config())
-
-
-def cli_video(args: argparse.Namespace) -> int:
-    cfg = load_config()
-    out_dir = parse_user_path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    fmt = f"bestvideo[height<={args.quality}]+bestaudio/best[height<={args.quality}]" if args.quality else "bestvideo+bestaudio/best"
-
-    preset_key = PRESET_CLI_MAP.get(args.preset, cfg.get("video_preset", "davinci_dnxhr"))
-    if preset_key == "custom":
-        custom_ext = args.custom_ext or "mp4"
-        custom_flags = args.custom_flags or "-c:v libx264 -c:a aac"
-        preset_args = ["--recode-video", custom_ext, "--postprocessor-args", f"ffmpeg:{custom_flags}"]
-    else:
-        preset_args = VIDEO_PRESETS[preset_key]["args"]
-
-    cmd = ["yt-dlp"]
-    if args.all_audio:
-        cmd += ["--audio-multistreams"]
-    if args.sponsorblock:
-        cmd += ["--sponsorblock-remove", args.sponsorblock]
-
-    cmd += get_proxy_args(cfg, override_mode=args.proxy_mode, override_url=args.proxy_url)
-
-    cmd += ["-f", fmt, "-o", str(out_dir / "%(title)s.%(ext)s"),
-            *preset_args, *_resolve_cookie_args(args), args.url]
-    if args.subs:
-        cmd += ["--write-subs", "--sub-langs", args.subs]
-    return run(cmd)
-
-
-def cli_convert(args: argparse.Namespace) -> int:
-    inp_path = parse_user_path(args.input)
-    if not inp_path.exists():
-        print(f"[!] Input file '{inp_path}' does not exist.")
-        return 1
-
-    out_dir = parse_user_path(args.output_dir) if args.output_dir else inp_path.parent
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    if args.preset == "custom":
-        ext = args.custom_ext or "mov"
-        flags = (args.custom_flags or "-c:v libx264 -c:a pcm_s16le").split()
-        suffix = "_custom"
-    else:
-        preset_dict = next((p for p in CONVERT_PRESETS if p["id"] == args.preset), CONVERT_PRESETS[0])
-        ext = preset_dict["ext"]
-        flags = preset_dict["ffmpeg_flags"]
-        suffix = preset_dict["suffix"]
-
-    out_file = out_dir / f"{inp_path.stem}{suffix}.{ext}"
-    cmd = ["ffmpeg", "-y", "-i", str(inp_path), *flags, str(out_file)]
-    return run(cmd)
-
-
-def cli_trim(args: argparse.Namespace) -> int:
-    inp_path = parse_user_path(args.input)
-    if not inp_path.exists():
-        print(f"[!] Input file '{inp_path}' does not exist.")
-        return 1
-
-    out_file = inp_path.parent / f"{inp_path.stem}_trimmed{inp_path.suffix}"
-    cmd = ["ffmpeg", "-y", "-ss", args.start]
-    if args.end:
-        cmd += ["-to", args.end]
-    cmd += ["-i", str(inp_path)]
-
-    if args.copy:
-        cmd += ["-c", "copy", str(out_file)]
-    else:
-        cmd += ["-c:v", "libx264", "-c:a", "aac", str(out_file)]
-
-    return run(cmd)
-
-
-def cli_probe(args: argparse.Namespace) -> int:
-    inp_path = parse_user_path(args.input)
-    if not inp_path.exists():
-        print(f"[!] Input file '{inp_path}' does not exist.")
-        return 1
-
-    cmd = ["ffprobe", "-hide_banner", "-i", str(inp_path)]
-    return run(cmd)
-
-
-def cli_audio(args: argparse.Namespace) -> int:
-    out_dir = parse_user_path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = ["yt-dlp", "-x", "--audio-format", args.format, "--audio-quality", "0",
-           "-o", str(out_dir / "%(title)s.%(ext)s"), *_resolve_cookie_args(args), args.url]
-    return run(cmd)
-
-
-def cli_playlist(args: argparse.Namespace) -> int:
-    cfg = load_config()
-    out_dir = parse_user_path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    template = str(out_dir / "%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s")
-    cargs = _resolve_cookie_args(args)
-    if args.audio_only:
-        cmd = ["yt-dlp", "-x", "--audio-format", cfg["audio_format"], "-o", template, "--yes-playlist", *cargs, args.url]
-    else:
-        preset_key = PRESET_CLI_MAP.get(args.preset, cfg.get("video_preset", "davinci_dnxhr"))
-        preset_args = VIDEO_PRESETS[preset_key]["args"]
-        cmd = ["yt-dlp", "-f", "bestvideo+bestaudio/best", "-o", template, "--yes-playlist",
-               *preset_args, *cargs, args.url]
-    return run(cmd)
-
-
-def cli_info(args: argparse.Namespace) -> int:
-    cmd = ["yt-dlp", "--no-playlist", "-j", *_resolve_cookie_args(args), args.url]
-    print("[cmd]", " ".join(cmd))
-    try:
-        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    except FileNotFoundError:
-        print("[!] yt-dlp is not installed.")
-        return 1
-    if result.returncode != 0:
-        print(result.stderr.strip())
-        return result.returncode
-    data = json.loads(result.stdout)
-    print(f"Title:    {data.get('title')}")
-    print(f"Uploader: {data.get('uploader')}")
-    print(f"Duration: {data.get('duration_string', data.get('duration'))}")
-    print(f"Views:    {data.get('view_count')}")
-    heights = sorted({f.get("height") for f in data.get("formats", []) if f.get("height")})
-    if heights:
-        print(f"Quality:  {', '.join(str(h) + 'p' for h in heights)}")
-    return 0
-
-
-def cli_subs(args: argparse.Namespace) -> int:
-    out_dir = parse_user_path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    cmd = ["yt-dlp", "--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", args.langs,
-           "-o", str(out_dir / "%(title)s.%(ext)s"), *_resolve_cookie_args(args), args.url]
-    return run(cmd)
-
-
-def cli_update(_args: argparse.Namespace) -> int:
-    if sys.platform == "win32":
-        return run(["winget", "upgrade", "yt-dlp"])
-    elif sys.platform == "darwin":
-        return run(["brew", "upgrade", "yt-dlp"])
-    elif shutil.which("pacman"):
-        return run(["sudo", "pacman", "-Syu", "yt-dlp"])
-    elif shutil.which("apt"):
-        return run(["sudo", "apt", "update"]) or run(["sudo", "apt", "install", "--only-upgrade", "yt-dlp"])
-    return run(["python", "-m", "pip", "install", "--user", "-U", "yt-dlp"])
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="mediacli", description="MogDop's MediaCLI — yt-dlp & FFmpeg toolkit")
-    sub = parser.add_subparsers(dest="command")
-
-    cookie_parent = argparse.ArgumentParser(add_help=False)
-    cookie_parent.add_argument("--cookies", default=None, help="path to a Netscape-format cookies.txt file")
-    cookie_parent.add_argument("--cookies-from-browser", default=None,
-                                help="e.g. firefox, chrome, chrome:Default")
-
-    p_video = sub.add_parser("video", help="Download video", parents=[cookie_parent])
-    p_video.add_argument("url")
-    p_video.add_argument("-q", "--quality", default="")
-    p_video.add_argument("-p", "--preset", default="davinci-dnxhr", choices=list(PRESET_CLI_MAP.keys()),
-                         help="FFmpeg export preset (e.g. davinci-dnxhr, standard-mp4, custom)")
-    p_video.add_argument("--all-audio", action="store_true", help="Download all available audio streams")
-    p_video.add_argument("--sponsorblock", default=None, help="Remove sponsors (e.g. sponsor, selfpromo)")
-    p_video.add_argument("--proxy-mode", default=None, choices=["system", "custom", "none"])
-    p_video.add_argument("--proxy-url", default=None, help="Custom proxy URL")
-    p_video.add_argument("--custom-ext", default="mp4", help="Extension for custom preset")
-    p_video.add_argument("--custom-flags", default="-c:v libx264 -c:a aac", help="Flags for custom preset")
-    p_video.add_argument("-o", "--output", default=DEFAULT_DOWNLOAD_DIR)
-    p_video.add_argument("-s", "--subs", default=None)
-    p_video.set_defaults(func=cli_video)
-
-    p_convert = sub.add_parser("convert", help="Convert local media file with FFmpeg")
-    p_convert.add_argument("input", help="Path to local file")
-    p_convert.add_argument("-p", "--preset", default="davinci_dnxhr_hq",
-                           choices=[p["id"] for p in CONVERT_PRESETS],
-                           help="Target conversion preset")
-    p_convert.add_argument("--custom-ext", default="mov", help="Extension for custom preset")
-    p_convert.add_argument("--custom-flags", default="-c:v libx264 -c:a pcm_s16le", help="Flags for custom preset")
-    p_convert.add_argument("-o", "--output-dir", default=None, help="Destination directory")
-    p_convert.set_defaults(func=cli_convert)
-
-    p_trim = sub.add_parser("trim", help="Trim media file by time")
-    p_trim.add_argument("input", help="Path to input file")
-    p_trim.add_argument("-s", "--start", default="00:00:00", help="Start time")
-    p_trim.add_argument("-e", "--end", default=None, help="End time")
-    p_trim.add_argument("--copy", action="store_true", help="Stream copy (no re-encoding)")
-    p_trim.set_defaults(func=cli_trim)
-
-    p_probe = sub.add_parser("probe", help="Inspect local media file with FFprobe")
-    p_probe.add_argument("input", help="Path to input file")
-    p_probe.set_defaults(func=cli_probe)
-
-    p_audio = sub.add_parser("audio", help="Download audio only", parents=[cookie_parent])
-    p_audio.add_argument("url")
-    p_audio.add_argument("-f", "--format", default="mp3", choices=AUDIO_FORMATS)
-    p_audio.add_argument("-o", "--output", default=DEFAULT_DOWNLOAD_DIR)
-    p_audio.set_defaults(func=cli_audio)
-
-    p_playlist = sub.add_parser("playlist", help="Download a playlist", parents=[cookie_parent])
-    p_playlist.add_argument("url")
-    p_playlist.add_argument("-p", "--preset", default="davinci-dnxhr", choices=list(PRESET_CLI_MAP.keys()))
-    p_playlist.add_argument("-o", "--output", default=DEFAULT_DOWNLOAD_DIR)
-    p_playlist.add_argument("--audio-only", action="store_true")
-    p_playlist.set_defaults(func=cli_playlist)
-
-    p_info = sub.add_parser("info", help="Show video info")
-    p_info.add_argument("url")
-    p_info.set_defaults(func=cli_info)
-
-    p_subs = sub.add_parser("subs", help="Download subtitles only", parents=[cookie_parent])
-    p_subs.add_argument("url")
-    p_subs.add_argument("-l", "--langs", default="ru,en")
-    p_subs.add_argument("-o", "--output", default=DEFAULT_DOWNLOAD_DIR)
-    p_subs.set_defaults(func=cli_subs)
-
-    p_update = sub.add_parser("update", help="Update yt-dlp")
-    p_update.set_defaults(func=cli_update)
-
-    return parser
-
 
 def main() -> int:
-    setup_signal_handlers()
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try: locale.setlocale(locale.LC_ALL, "")
+    except Exception: pass
 
-    parser = build_parser()
-    args = parser.parse_args()
-
-    if args.command is not None:
-        return args.func(args)
-
-    try:
-        locale.setlocale(locale.LC_ALL, "")
-    except locale.Error:
-        pass
-
-    if curses is not None and sys.stdout.isatty() and sys.stdin.isatty():
+    if curses and sys.stdout.isatty() and sys.stdin.isatty():
         try:
             curses.wrapper(main_tui)
             return 0
         except curses.error:
-            print("[!] Curses is not available in this terminal, falling back to classic menu.\n")
-
-    if sys.platform == "win32" and curses is None:
-        print("[!] Note: For full TUI menu on Windows, run: pip install windows-curses\n")
-
-    return classic_menu()
-
+            pass
+    print("[!] Curses TUI unavailable in this terminal environment.")
+    return 1
 
 if __name__ == "__main__":
     sys.exit(main())
