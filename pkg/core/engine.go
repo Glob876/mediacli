@@ -707,9 +707,9 @@ func (qm *BackgroundQueueManager) GetSummary() string {
 		return ""
 	}
 	if len(running) > 0 {
-		return fmt.Sprintf("[⏬ BG: %d active (%.1f%%)]", total, running[0].Progress)
+		return fmt.Sprintf("[BG: %d active (%.1f%%)]", total, running[0].Progress)
 	}
-	return fmt.Sprintf("[⏬ BG: %d queued]", total)
+	return fmt.Sprintf("[BG: %d queued]", total)
 }
 
 func (qm *BackgroundQueueManager) workerLoop() {
@@ -846,7 +846,7 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	if frags <= 0 {
 		frags = 4
 	}
-	if fragStr := getString(f, "concurrent_fragments"); fragStr != "" {
+	if fragStr := GetString(f, "concurrent_fragments"); fragStr != "" {
 		if val, err := strconv.Atoi(fragStr); err == nil {
 			frags = val
 		}
@@ -857,13 +857,13 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	cmd = append(cmd, "--extractor-args", "youtube:player_client=android,web")
 
 	// 2. Системные флаги файлов
-	if cfg.NoMtime || getBool(f, "no_mtime") {
+	if cfg.NoMtime || GetBool(f, "no_mtime") {
 		cmd = append(cmd, "--no-mtime")
 	}
-	if cfg.WindowsFilenames || getBool(f, "windows_filenames") {
+	if cfg.WindowsFilenames || GetBool(f, "windows_filenames") {
 		cmd = append(cmd, "--windows-filenames")
 	}
-	if getBool(f, "restrict_filenames") {
+	if GetBool(f, "restrict_filenames") {
 		cmd = append(cmd, "--restrict-filenames")
 	}
 
@@ -873,7 +873,7 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	}
 
 	// 4. Скачивание определенного отрезка времени (Section / Timecode)
-	if sec := getString(f, "download_section"); sec != "" {
+	if sec := GetString(f, "download_section"); sec != "" {
 		if !strings.HasPrefix(sec, "*") {
 			sec = "*" + sec
 		}
@@ -881,19 +881,19 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	}
 
 	// 5. Форматы видео и аудио
-	if getBool(f, "audio_only") {
-		fmtStr := getString(f, "audio_format")
+	if GetBool(f, "audio_only") {
+		fmtStr := GetString(f, "audio_format")
 		if fmtStr == "" {
 			fmtStr = cfg.AudioFormat
 		}
-		qStr := getString(f, "audio_quality")
+		qStr := GetString(f, "audio_quality")
 		if qStr == "" {
 			qStr = "0"
 		}
 		cmd = append(cmd, "-x", "--audio-format", fmtStr, "--audio-quality", qStr)
 	} else {
-		quality := getString(f, "quality")
-		fps := getString(f, "fps_limit")
+		quality := GetString(f, "quality")
+		fps := GetString(f, "fps_limit")
 		fpsSuffix := ""
 		if fps != "" {
 			fpsSuffix = fmt.Sprintf("[fps<=%s]", fps)
@@ -903,7 +903,7 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 			qStr = fmt.Sprintf("[height<=%s]", quality)
 		}
 
-		vcodec := getString(f, "vcodec")
+		vcodec := GetString(f, "vcodec")
 		vcFilter := ""
 		switch vcodec {
 		case "av1":
@@ -917,17 +917,17 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 		formatExpr := fmt.Sprintf("bestvideo%s%s%s+bestaudio/best%s%s", qStr, fpsSuffix, vcFilter, qStr, fpsSuffix)
 		cmd = append(cmd, "-f", formatExpr)
 
-		vPresetKey := getString(f, "video_preset")
+		vPresetKey := GetString(f, "video_preset")
 		if vPresetKey == "" {
 			vPresetKey = cfg.VideoPreset
 		}
 
 		if vPresetKey == "custom" {
-			ext := getString(f, "custom_ext")
+			ext := GetString(f, "custom_ext")
 			if ext == "" {
 				ext = "mp4"
 			}
-			flags := getString(f, "custom_flags")
+			flags := GetString(f, "custom_flags")
 			if flags == "" {
 				flags = "-c:v libx264 -c:a aac"
 			}
@@ -937,56 +937,56 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 		}
 	}
 
-	if getBool(f, "geobypass") {
+	if GetBool(f, "geobypass") {
 		cmd = append(cmd, "--geo-bypass")
 	}
 
-	cmd = append(cmd, BuildProxyArgs(cfg, getString(f, "proxy_mode"), getString(f, "proxy_url"))...)
+	cmd = append(cmd, BuildProxyArgs(cfg, GetString(f, "proxy_mode"), GetString(f, "proxy_url"))...)
 
-	if rate := getString(f, "ratelimit"); rate != "" {
+	if rate := GetString(f, "ratelimit"); rate != "" {
 		cmd = append(cmd, "--limit-rate", rate)
 	}
-	if getBool(f, "live_start") {
+	if GetBool(f, "live_start") {
 		cmd = append(cmd, "--live-from-start")
 	}
-	if getBool(f, "split_chapters") {
+	if GetBool(f, "split_chapters") {
 		cmd = append(cmd, "--split-chapters")
 	}
-	if getBool(f, "write_extra") {
+	if GetBool(f, "write_extra") {
 		cmd = append(cmd, "--write-description", "--write-thumbnail")
 	}
 
-	sb := getString(f, "sponsorblock")
+	sb := GetString(f, "sponsorblock")
 	if sb == "remove" || sb == "sponsors" {
 		cmd = append(cmd, "--sponsorblock-remove", "sponsor,selfpromo,interaction")
 	} else if sb == "mark" {
 		cmd = append(cmd, "--sponsorblock-mark", "all")
 	}
 
-	if !getBool(f, "audio_only") {
-		if getBoolDefault(f, "embed_metadata", true) {
+	if !GetBool(f, "audio_only") {
+		if GetBoolDefault(f, "embed_metadata", true) {
 			cmd = append(cmd, "--embed-metadata", "--embed-thumbnail")
 		}
-		if getBoolDefault(f, "embed_chapters", true) {
+		if GetBoolDefault(f, "embed_chapters", true) {
 			cmd = append(cmd, "--embed-chapters")
 		}
 	}
 
-	if getBool(f, "subs_enabled") {
-		langs := getString(f, "sub_langs")
+	if GetBool(f, "subs_enabled") {
+		langs := GetString(f, "sub_langs")
 		if langs == "" {
 			langs = cfg.SubLangs
 		}
 		cmd = append(cmd, "--write-subs", "--sub-langs", langs)
-		if getBool(f, "auto_subs") {
+		if GetBool(f, "auto_subs") {
 			cmd = append(cmd, "--write-auto-subs")
 		}
-		if getBool(f, "embed_subs") {
+		if GetBool(f, "embed_subs") {
 			cmd = append(cmd, "--embed-subs")
 		}
 	}
 
-	template := getString(f, "output_template")
+	template := GetString(f, "output_template")
 	if template == "" {
 		if isPlaylist {
 			template = "%(playlist_title)s/%(playlist_index)03d - %(title)s.%(ext)s"
@@ -1051,7 +1051,8 @@ func CheckDependencies() []DependencyStatus {
 	return statuses
 }
 
-func getString(m map[string]interface{}, key string) string {
+// Публичные функции для чтения данных из map[string]interface{}
+func GetString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {
 			return s
@@ -1060,7 +1061,7 @@ func getString(m map[string]interface{}, key string) string {
 	return ""
 }
 
-func getBool(m map[string]interface{}, key string) bool {
+func GetBool(m map[string]interface{}, key string) bool {
 	if v, ok := m[key]; ok {
 		if b, ok := v.(bool); ok {
 			return b
@@ -1069,7 +1070,7 @@ func getBool(m map[string]interface{}, key string) bool {
 	return false
 }
 
-func getBoolDefault(m map[string]interface{}, key string, def bool) bool {
+func GetBoolDefault(m map[string]interface{}, key string, def bool) bool {
 	if v, ok := m[key]; ok {
 		if b, ok := v.(bool); ok {
 			return b
