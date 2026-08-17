@@ -1,41 +1,16 @@
 #!/usr/bin/env bash
 
-# Строгий режим: прерывание при любой ошибке, необъявленной переменной или сбое в пайпе
 set -euo pipefail
 
 DIST_DIR="dist"
 LOG_FILE="$DIST_DIR/build.log"
 CHECKSUM_FILE="$DIST_DIR/checksums.sha256"
 
-# Создаем каталог для артефактов
 mkdir -p "$DIST_DIR"
+: > "$LOG_FILE"
 
-# Перенаправляем весь вывод (stdout и stderr) одновременно на экран и в файл лога
-exec > >(tee -i "$LOG_FILE") 2>&1
-
-log() {
-    local level="$1"
-    shift
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${level}] $*"
-}
-
-trap 'log "ERROR" "Build failed on line $LINENO. Check $LOG_FILE for details."' ERR
-
-START_TOTAL=$(date +%s)
-
-log "INFO" "================================================================="
-log "INFO" "MediaCLI Multi-Platform Build Pipeline"
-log "INFO" "================================================================="
-log "INFO" "Host OS: $(uname -s) ($(uname -m))"
-log "INFO" "Go Version: $(go version)"
-log "INFO" "Target Directory: $DIST_DIR"
-log "INFO" "Log File: $LOG_FILE"
-log "INFO" "================================================================="
-
-# Флаги линковщика: -s (strip symbol table), -w (strip DWARF debugging info)
 LDFLAGS="-s -w"
 
-# Список целевых платформ: "OS ARCH OUTPUT_FILENAME"
 TARGETS=(
     "linux amd64 mediacli-linux-amd64"
     "linux arm64 mediacli-linux-arm64"
@@ -45,51 +20,62 @@ TARGETS=(
 )
 
 TOTAL_TARGETS=${#TARGETS[@]}
-CURRENT=1
+START_TOTAL=$(date +%s)
 
+echo "================================================================"
+echo "MediaCLI Multi-Platform Build Pipeline"
+echo "================================================================"
+echo "Host OS   : $(uname -s) ($(uname -m))"
+echo "Go Version: $(go version | awk '{print $3, $4}')"
+echo "Output Dir: $DIST_DIR"
+echo "Log File  : $LOG_FILE"
+echo "================================================================"
+
+CURRENT=1
 for TARGET in "${TARGETS[@]}"; do
     read -r TARGET_OS TARGET_ARCH TARGET_BIN <<< "$TARGET"
     TARGET_PATH="$DIST_DIR/$TARGET_BIN"
 
-    log "INFO" "[$CURRENT/$TOTAL_TARGETS] Compiling for target: OS=$TARGET_OS ARCH=$TARGET_ARCH..."
+    printf "[%d/%d] Compiling %-7s / %-7s -> %-30s " "$CURRENT" "$TOTAL_TARGETS" "$TARGET_OS" "$TARGET_ARCH" "$TARGET_BIN"
+    
     START_TARGET=$(date +%s)
 
-    # CGO_ENABLED=0 обеспечивает 100% статическую линковку без зависимости от системного glibc
-    CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build \
-        -v \
+    # Без флага -v вывод идет чисто, а ошибки пишутся в лог
+    if CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build \
         -trimpath \
         -ldflags="$LDFLAGS" \
         -o "$TARGET_PATH" \
-        .
+        . >> "$LOG_FILE" 2>&1; then
+        
+        END_TARGET=$(date +%s)
+        TARGET_DURATION=$((END_TARGET - START_TARGET))
+        FILE_SIZE=$(ls -lh "$TARGET_PATH" | awk '{print $5}')
+        printf "[OK] (%ds, %s)\n" "$TARGET_DURATION" "$FILE_SIZE"
+    else
+        printf "[FAIL]\n"
+        echo "Error details:"
+        tail -n 20 "$LOG_FILE"
+        exit 1
+    fi
 
-    END_TARGET=$(date +%s)
-    TARGET_DURATION=$((END_TARGET - START_TARGET))
-    FILE_SIZE=$(ls -lh "$TARGET_PATH" | awk '{print $5}')
-
-    log "INFO" "[$CURRENT/$TOTAL_TARGETS] Finished $TARGET_BIN (Size: $FILE_SIZE, Time: ${TARGET_DURATION}s)"
     CURRENT=$((CURRENT + 1))
 done
 
-log "INFO" "-----------------------------------------------------------------"
-log "INFO" "Calculating SHA-256 checksums..."
+echo "----------------------------------------------------------------"
+printf "Generating SHA-256 checksums... "
 rm -f "$CHECKSUM_FILE"
 
 for TARGET in "${TARGETS[@]}"; do
     read -r _ _ TARGET_BIN <<< "$TARGET"
     (cd "$DIST_DIR" && sha256sum "$TARGET_BIN") >> "$CHECKSUM_FILE"
 done
-
-log "INFO" "Checksums saved to: $CHECKSUM_FILE"
-log "INFO" "-----------------------------------------------------------------"
+printf "[OK]\n"
 
 END_TOTAL=$(date +%s)
 TOTAL_DURATION=$((END_TOTAL - START_TOTAL))
 
-log "INFO" "Build Summary:"
-log "INFO" "Total targets built: $TOTAL_TARGETS"
-log "INFO" "Total build duration: ${TOTAL_DURATION}s"
-log "INFO" "Artifacts list:"
-ls -lh "$DIST_DIR"
-log "INFO" "================================================================="
-log "INFO" "Build completed successfully."
-log "INFO" "================================================================="
+echo "================================================================"
+echo "Build Summary: $TOTAL_TARGETS targets built in ${TOTAL_DURATION}s"
+echo "Artifacts generated in $DIST_DIR:"
+ls -lh "$DIST_DIR" | grep -v "total" | grep -v "build.log"
+echo "================================================================"
