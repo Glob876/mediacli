@@ -50,6 +50,7 @@ func RunApp() error {
 			Items: []MenuItem{
 				{LabelKey: "menu_video", Action: ScreenVideo},
 				{LabelKey: "menu_audio", Action: ScreenAudio},
+				{LabelKey: "menu_thumbnail", Action: ScreenThumbnail},
 				{LabelKey: "menu_probe", Action: ScreenProbe},
 			},
 		},

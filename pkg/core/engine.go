@@ -39,6 +39,12 @@ type Config struct {
 	NotifyBell            bool                   `json:"notify_bell"`
 	AutoCheckDeps         bool                   `json:"auto_check_deps"`
 	DefaultEditor         string                 `json:"default_editor"`
+	ConcurrentFragments   int                    `json:"concurrent_fragments"`
+	NoMtime               bool                   `json:"no_mtime"`
+	WindowsFilenames      bool                   `json:"windows_filenames"`
+	ThumbnailFormat       string                 `json:"thumbnail_format"`
+	UseArchive            bool                   `json:"use_archive"`
+	ArchiveFile           string                 `json:"archive_file"`
 	DownloadPresets       []DownloadPreset       `json:"download_presets"`
 	DefaultDownloadPreset string                 `json:"default_download_preset"`
 	PresetDefaults        map[string]interface{} `json:"preset_defaults"`
@@ -83,7 +89,7 @@ func GetDefaultConfig() Config {
 		CookiesMode:           "none",
 		CookiesFile:           filepath.Join(configDir, "cookies.txt"),
 		CookiesBrowser:        "",
-		VideoPreset:           "davinci_dnxhr",
+		VideoPreset:           "standard_mp4",
 		Theme:                 "cyan",
 		UseTerminalBG:         true,
 		ProxyMode:             "system",
@@ -93,6 +99,12 @@ func GetDefaultConfig() Config {
 		NotifyBell:            true,
 		AutoCheckDeps:         true,
 		DefaultEditor:         "",
+		ConcurrentFragments:   4,
+		NoMtime:               true,
+		WindowsFilenames:      true,
+		ThumbnailFormat:       "png",
+		UseArchive:            false,
+		ArchiveFile:           filepath.Join(configDir, "archive.txt"),
 		DownloadPresets:       []DownloadPreset{},
 		DefaultDownloadPreset: "",
 		PresetDefaults:        make(map[string]interface{}),
@@ -143,7 +155,7 @@ func SaveConfig(cfg Config) error {
 }
 
 // ============================================================================
-// 2. Пресеты конвертации и видео (Presets)
+// 2. Пресеты конвертации и видео (ПЕРВЫЕ ДВА ВСЕГДА MP4 и MKV)
 // ============================================================================
 
 type VideoPreset struct {
@@ -166,13 +178,52 @@ type ConvertPreset struct {
 	FFmpegFlags []string
 }
 
+// Порядок пресетов скачивания: 1. Standard MP4, 2. Modern MKV (AV1), далее остальные
+var OrderedVideoPresetKeys = []string{
+	"standard_mp4",
+	"mkv_av1",
+	"hevc_mp4",
+	"davinci_dnxhr",
+	"davinci_prores",
+	"davinci_h264",
+	"webm_vp9",
+	"audio_mp3",
+	"audio_flac",
+	"default",
+	"custom",
+}
+
 var VideoPresets = map[string]VideoPreset{
+	"standard_mp4": {
+		ID:     "standard_mp4",
+		NameEN: "Standard MP4 (H.264 + AAC) [Universal]",
+		NameRU: "Стандартный MP4 (H.264 + AAC) [Универсальный]",
+		DescEN: "Universal MP4 container with H.264 video and AAC audio.",
+		DescRU: "Универсальный MP4 с H.264 видео и AAC аудио. Максимальная совместимость.",
+		Args:   []string{"--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx264 -pix_fmt yuv420p -c:a aac -b:a 192k"},
+	},
+	"mkv_av1": {
+		ID:     "mkv_av1",
+		NameEN: "Modern MKV (AV1 + Opus/AAC) [Next-Gen]",
+		NameRU: "Современный MKV (AV1 + Opus/AAC) [Новое поколение]",
+		DescEN: "Next-generation AV1 video codec in Matroska MKV container. Ultra high efficiency.",
+		DescRU: "Видеокодек нового поколения AV1 в контейнере MKV. Высочайшая эффективность сжатия.",
+		Args:   []string{"--recode-video", "mkv", "--postprocessor-args", "ffmpeg:-c:v libsvtav1 -crf 26 -c:a copy"},
+	},
+	"hevc_mp4": {
+		ID:     "hevc_mp4",
+		NameEN: "High Efficiency MP4 (H.265 / HEVC + AAC)",
+		NameRU: "Высокоэффективный MP4 (H.265 / HEVC + AAC)",
+		DescEN: "H.265/HEVC video codec for smaller file sizes.",
+		DescRU: "Видеокодек H.265/HEVC для меньшего размера файла.",
+		Args:   []string{"--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx265 -crf 24 -c:a aac -b:a 192k"},
+	},
 	"davinci_dnxhr": {
 		ID:     "davinci_dnxhr",
-		NameEN: "DaVinci Resolve: DNxHR HQ + PCM Audio (.mov) [RECOMMENDED]",
-		NameRU: "DaVinci Resolve: DNxHR HQ + PCM Аудио (.mov) [РЕКОМЕНДУЕТСЯ]",
+		NameEN: "DaVinci Resolve: DNxHR HQ + PCM Audio (.mov)",
+		NameRU: "DaVinci Resolve: DNxHR HQ + PCM Аудио (.mov)",
 		DescEN: "Converts video to Avid DNxHR HQ with PCM 16-bit audio.",
-		DescRU: "Конвертирует в Avid DNxHR HQ с PCM 16-бит аудио.",
+		DescRU: "Конвертирует в Avid DNxHR HQ с PCM 16-бит аудио для монтажа.",
 		Args:   []string{"--recode-video", "mov", "--postprocessor-args", "ffmpeg:-c:v dnxhd -profile:v dnxhr_hq -c:a pcm_s16le"},
 	},
 	"davinci_prores": {
@@ -191,21 +242,29 @@ var VideoPresets = map[string]VideoPreset{
 		DescRU: "Видео H.264 с PCM аудио в MOV контейнере.",
 		Args:   []string{"--recode-video", "mov", "--postprocessor-args", "ffmpeg:-c:v libx264 -pix_fmt yuv420p -c:a pcm_s16le"},
 	},
-	"standard_mp4": {
-		ID:     "standard_mp4",
-		NameEN: "Standard MP4 (H.264 + AAC)",
-		NameRU: "Стандартный MP4 (H.264 + AAC)",
-		DescEN: "Universal MP4 container with H.264 video and AAC audio.",
-		DescRU: "Универсальный MP4 с H.264 видео и AAC аудио.",
-		Args:   []string{"--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx264 -c:a aac"},
+	"webm_vp9": {
+		ID:     "webm_vp9",
+		NameEN: "WebM (VP9 + Opus)",
+		NameRU: "WebM (VP9 + Opus)",
+		DescEN: "Open WebM media format with VP9 video and Opus audio.",
+		DescRU: "Открытый веб-формат WebM с видео VP9 и аудио Opus.",
+		Args:   []string{"--recode-video", "webm", "--postprocessor-args", "ffmpeg:-c:v libvpx-vp9 -c:a libopus"},
 	},
-	"hevc_mp4": {
-		ID:     "hevc_mp4",
-		NameEN: "High Efficiency MP4 (H.265 / HEVC + AAC)",
-		NameRU: "Высокоэффективный MP4 (H.265 / HEVC + AAC)",
-		DescEN: "H.265/HEVC video codec for smaller file sizes.",
-		DescRU: "Видеокодек H.265/HEVC для меньшего размера файла.",
-		Args:   []string{"--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx265 -c:a aac"},
+	"audio_mp3": {
+		ID:     "audio_mp3",
+		NameEN: "Audio Only: MP3 320 kbps",
+		NameRU: "Только аудио: MP3 320 кбит/с",
+		DescEN: "Extracts audio stream into high quality 320 kbps MP3 format.",
+		DescRU: "Извлекает звуковую дорожку в MP3 320 кбит/с.",
+		Args:   []string{"-x", "--audio-format", "mp3", "--audio-quality", "0"},
+	},
+	"audio_flac": {
+		ID:     "audio_flac",
+		NameEN: "Audio Only: FLAC Lossless",
+		NameRU: "Только аудио: FLAC без потерь",
+		DescEN: "Extracts audio stream into lossless FLAC audio format.",
+		DescRU: "Извлекает звуковую дорожку в сжатый формат без потерь FLAC.",
+		Args:   []string{"-x", "--audio-format", "flac"},
 	},
 	"default": {
 		ID:     "default",
@@ -217,54 +276,87 @@ var VideoPresets = map[string]VideoPreset{
 	},
 }
 
+// Пресеты локальной конвертации FFmpeg: Первые два — MP4 и MKV
 var ConvertPresets = []ConvertPreset{
 	{
+		ID:          "standard_mp4",
+		NameEN:      "1. Standard MP4 (H.264 + AAC)",
+		NameRU:      "1. Стандартный MP4 (H.264 + AAC)",
+		Ext:         "mp4",
+		Suffix:      "_mp4",
+		FFmpegFlags: []string{"-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"},
+	},
+	{
+		ID:          "modern_mkv",
+		NameEN:      "2. Modern MKV (AV1 / High-Efficiency)",
+		NameRU:      "2. Современный MKV (AV1 / Высокое сжатие)",
+		Ext:         "mkv",
+		Suffix:      "_av1",
+		FFmpegFlags: []string{"-c:v", "libsvtav1", "-crf", "26", "-preset", "6", "-c:a", "aac", "-b:a", "192k"},
+	},
+	{
+		ID:          "hevc_mp4",
+		NameEN:      "3. High Efficiency MP4 (H.265 / HEVC)",
+		NameRU:      "3. Высокоэффективный MP4 (H.265 / HEVC)",
+		Ext:         "mp4",
+		Suffix:      "_hevc",
+		FFmpegFlags: []string{"-c:v", "libx265", "-crf", "24", "-c:a", "aac", "-b:a", "192k"},
+	},
+	{
 		ID:          "davinci_dnxhr_hq",
-		NameEN:      "DaVinci Resolve: DNxHR HQ + PCM (.mov)",
-		NameRU:      "DaVinci Resolve: DNxHR HQ + PCM (.mov)",
+		NameEN:      "4. DaVinci Resolve: DNxHR HQ + PCM (.mov)",
+		NameRU:      "4. DaVinci Resolve: DNxHR HQ + PCM (.mov)",
 		Ext:         "mov",
 		Suffix:      "_dnxhr",
 		FFmpegFlags: []string{"-c:v", "dnxhd", "-profile:v", "dnxhr_hq", "-c:a", "pcm_s16le"},
 	},
 	{
 		ID:          "davinci_prores",
-		NameEN:      "DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
-		NameRU:      "DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
+		NameEN:      "5. DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
+		NameRU:      "5. DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
 		Ext:         "mov",
 		Suffix:      "_prores",
 		FFmpegFlags: []string{"-c:v", "prores_ks", "-profile:v", "3", "-c:a", "pcm_s16le"},
 	},
 	{
-		ID:          "standard_mp4",
-		NameEN:      "Standard MP4 (H.264 + AAC)",
-		NameRU:      "Стандартный MP4 (H.264 + AAC)",
-		Ext:         "mp4",
-		Suffix:      "_mp4",
-		FFmpegFlags: []string{"-c:v", "libx264", "-c:a", "aac", "-b:a", "192k"},
-	},
-	{
 		ID:          "fast_compress",
-		NameEN:      "Fast Video Compress (H.264 CRF 28)",
-		NameRU:      "Быстрое сжатие видео (H.264 CRF 28)",
+		NameEN:      "6. Fast Video Compress (H.264 CRF 28)",
+		NameRU:      "6. Быстрое сжатие видео (H.264 CRF 28)",
 		Ext:         "mp4",
 		Suffix:      "_compressed",
 		FFmpegFlags: []string{"-c:v", "libx264", "-crf", "28", "-preset", "faster", "-c:a", "aac", "-b:a", "128k"},
 	},
 	{
-		ID:          "audio_wav",
-		NameEN:      "Extract Audio: Uncompressed WAV (.wav)",
-		NameRU:      "Извлечь аудио: WAV без сжатия (.wav)",
-		Ext:         "wav",
-		Suffix:      "_audio",
-		FFmpegFlags: []string{"-vn", "-acodec", "pcm_s16le"},
+		ID:          "gif_anim",
+		NameEN:      "7. High-Quality Animated GIF (.gif)",
+		NameRU:      "7. Высококачественная GIF-анимация (.gif)",
+		Ext:         "gif",
+		Suffix:      "_anim",
+		FFmpegFlags: []string{"-vf", "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"},
 	},
 	{
 		ID:          "audio_mp3",
-		NameEN:      "Extract Audio: MP3 320 kbps (.mp3)",
-		NameRU:      "Извлечь аудио: MP3 320 кбит/с (.mp3)",
+		NameEN:      "8. Extract Audio: MP3 320 kbps (.mp3)",
+		NameRU:      "8. Извлечь аудио: MP3 320 кбит/с (.mp3)",
 		Ext:         "mp3",
 		Suffix:      "_audio",
 		FFmpegFlags: []string{"-vn", "-ab", "320k"},
+	},
+	{
+		ID:          "audio_flac",
+		NameEN:      "9. Extract Audio: FLAC Lossless (.flac)",
+		NameRU:      "9. Извлечь аудио: FLAC без потерь (.flac)",
+		Ext:         "flac",
+		Suffix:      "_lossless",
+		FFmpegFlags: []string{"-vn", "-c:a", "flac"},
+	},
+	{
+		ID:          "audio_wav",
+		NameEN:      "10. Extract Audio: Uncompressed WAV (.wav)",
+		NameRU:      "10. Извлечь аудио: WAV без сжатия (.wav)",
+		Ext:         "wav",
+		Suffix:      "_audio",
+		FFmpegFlags: []string{"-vn", "-acodec", "pcm_s16le"},
 	},
 }
 
@@ -416,6 +508,10 @@ var (
 		{
 			Regex: regexp.MustCompile(`\[ExtractAudio\]\s*(.*)`),
 			Formatter: func(m []string) string { return fmt.Sprintf("[AudioExtract] %s", m[1]) },
+		},
+		{
+			Regex: regexp.MustCompile(`\[ThumbnailsConvertor\]\s*(.*)`),
+			Formatter: func(m []string) string { return fmt.Sprintf("[ThumbConvert] %s", m[1]) },
 		},
 		{
 			Regex: regexp.MustCompile(`\[download\]\s+Destination:\s*(.+)`),
@@ -705,7 +801,7 @@ func (qm *BackgroundQueueManager) finishTask(task *BackgroundTask, exitCode int,
 }
 
 // ============================================================================
-// 7. Сборщики аргументов yt-dlp / FFmpeg (Command Builders)
+// 7. Сборщики аргументов yt-dlp (С ускорением и защитой)
 // ============================================================================
 
 func BuildCookieArgs(cfg Config) []string {
@@ -748,20 +844,42 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	f := preset.Fields
 	var cmd []string
 
+	// 1. Ускорение загрузки и стабильность сети
+	frags := cfg.ConcurrentFragments
+	if frags <= 0 {
+		frags = 4
+	}
+	if fragStr := getString(f, "concurrent_fragments"); fragStr != "" {
+		if val, err := strconv.Atoi(fragStr); err == nil {
+			frags = val
+		}
+	}
+	cmd = append(cmd, "--concurrent-fragments", strconv.Itoa(frags))
+	cmd = append(cmd, "--retries", "10", "--fragment-retries", "10")
+	cmd = append(cmd, "--buffer-size", "16M")
+	cmd = append(cmd, "--extractor-args", "youtube:player_client=android,web")
+
+	// 2. Системные флаги файлов
+	if cfg.NoMtime || getBool(f, "no_mtime") {
+		cmd = append(cmd, "--no-mtime")
+	}
+	if cfg.WindowsFilenames || getBool(f, "windows_filenames") {
+		cmd = append(cmd, "--windows-filenames")
+	}
 	if getBool(f, "restrict_filenames") {
 		cmd = append(cmd, "--restrict-filenames")
 	}
-	if retries := getString(f, "retries"); retries != "" {
-		cmd = append(cmd, "--retries", retries)
-	}
-	if frags := getString(f, "concurrent_fragments"); frags != "" {
-		cmd = append(cmd, "--concurrent-fragments", frags)
+
+	// 3. Архив скачиваний (защита от повторов)
+	if cfg.UseArchive && cfg.ArchiveFile != "" {
+		cmd = append(cmd, "--download-archive", ParseUserPath(cfg.ArchiveFile))
 	}
 
+	// 4. Форматы видео и аудио
 	if getBool(f, "audio_only") {
 		fmtStr := getString(f, "audio_format")
 		if fmtStr == "" {
-			fmtStr = "mp3"
+			fmtStr = cfg.AudioFormat
 		}
 		qStr := getString(f, "audio_quality")
 		if qStr == "" {
@@ -796,7 +914,7 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 
 		vPresetKey := getString(f, "video_preset")
 		if vPresetKey == "" {
-			vPresetKey = "davinci_dnxhr"
+			vPresetKey = cfg.VideoPreset
 		}
 
 		if vPresetKey == "custom" {
@@ -826,6 +944,9 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	if getBool(f, "live_start") {
 		cmd = append(cmd, "--live-from-start")
 	}
+	if getBool(f, "split_chapters") {
+		cmd = append(cmd, "--split-chapters")
+	}
 	if getBool(f, "write_extra") {
 		cmd = append(cmd, "--write-description", "--write-thumbnail")
 	}
@@ -851,7 +972,7 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	if getBool(f, "subs_enabled") {
 		langs := getString(f, "sub_langs")
 		if langs == "" {
-			langs = "ru,en"
+			langs = cfg.SubLangs
 		}
 		cmd = append(cmd, "--write-subs", "--sub-langs", langs)
 		if getBool(f, "auto_subs") {

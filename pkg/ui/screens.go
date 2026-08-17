@@ -47,12 +47,57 @@ func ScreenVideo(s tcell.Screen, cfg *core.Config) {
 		}
 		preset = cfg.DownloadPresets[pi]
 	} else {
-		preset = core.DownloadPreset{ID: "manual", Name: "Manual", Fields: cfg.PresetDefaults}
+		// Ручной выбор кодека: первые 2 места — всегда MP4 и MKV
+		keys := core.OrderedVideoPresetKeys
+		var pNames []string
+		for _, k := range keys {
+			pNames = append(pNames, PresetDisplayName(*cfg, core.VideoPresets[k]))
+		}
+		pi := RunMenu(s, cfg, T(*cfg, "video_title"), pNames, "Choose Export Codec Preset (1. MP4 / 2. MKV)", T(*cfg, "footer_nav"))
+		if pi < 0 {
+			return
+		}
+		preset = core.DownloadPreset{
+			ID:   "manual",
+			Name: "Manual",
+			Fields: map[string]interface{}{
+				"video_preset": keys[pi],
+			},
+		}
 	}
 
 	cmdList := append([]string{"yt-dlp"}, core.BuildYtDlpArgs(preset, *cfg, outDir, false)...)
 	cmdList = append(cmdList, url)
 	RunWithLog(s, cfg, cmdList, "Download Video", url, outDir)
+}
+
+func ScreenThumbnail(s tcell.Screen, cfg *core.Config) {
+	url, ok := TextInput(s, cfg, T(*cfg, "thumb_title"), T(*cfg, "video_prompt_url"), "", T(*cfg, "footer_input"))
+	if !ok || strings.TrimSpace(url) == "" {
+		return
+	}
+
+	fmts := []string{"PNG (Lossless)", "JPG (Compact)", "WEBP (Original)"}
+	rawFmts := []string{"png", "jpg", "webp"}
+	fi := RunMenu(s, cfg, T(*cfg, "thumb_title"), fmts, T(*cfg, "thumb_format_subtitle"), T(*cfg, "footer_nav"))
+	if fi < 0 {
+		return
+	}
+	targetFmt := rawFmts[fi]
+
+	outDir := core.ParseUserPath(cfg.DownloadDir)
+	_ = os.MkdirAll(outDir, 0755)
+
+	cmdList := []string{
+		"yt-dlp", "--write-thumbnail", "--skip-download",
+		"--convert-thumbnails", targetFmt,
+		"-o", filepath.Join(outDir, "%(title)s.%(ext)s"),
+	}
+	cmdList = append(cmdList, core.BuildCookieArgs(*cfg)...)
+	cmdList = append(cmdList, core.BuildProxyArgs(*cfg, "", "")...)
+	cmdList = append(cmdList, url)
+
+	RunWithLog(s, cfg, cmdList, "Download Thumbnail", url, outDir)
 }
 
 func ScreenAudio(s tcell.Screen, cfg *core.Config) {
@@ -61,19 +106,27 @@ func ScreenAudio(s tcell.Screen, cfg *core.Config) {
 		return
 	}
 
-	formats := []string{"MP3", "WAV", "M4A", "OPUS", "FLAC"}
+	formats := []string{"MP3 (320k)", "FLAC (Lossless)", "WAV (Uncompressed)", "M4A (AAC)", "OPUS"}
+	rawFmts := []string{"mp3", "flac", "wav", "m4a", "opus"}
 	fi := RunMenu(s, cfg, T(*cfg, "audio_title"), formats, "Select Audio Format", T(*cfg, "footer_nav"))
 	if fi < 0 {
 		return
 	}
 
-	fmtStr := strings.ToLower(formats[fi])
+	fmtStr := rawFmts[fi]
 	outDir := core.ParseUserPath(cfg.DownloadDir)
 	_ = os.MkdirAll(outDir, 0755)
 
 	cmdList := []string{
 		"yt-dlp", "-x", "--audio-format", fmtStr, "--audio-quality", "0",
+		"--concurrent-fragments", fmt.Sprintf("%d", cfg.ConcurrentFragments),
 		"-o", filepath.Join(outDir, "%(title)s.%(ext)s"),
+	}
+	if cfg.NoMtime {
+		cmdList = append(cmdList, "--no-mtime")
+	}
+	if cfg.WindowsFilenames {
+		cmdList = append(cmdList, "--windows-filenames")
 	}
 	cmdList = append(cmdList, core.BuildCookieArgs(*cfg)...)
 	cmdList = append(cmdList, core.BuildProxyArgs(*cfg, "", "")...)
@@ -94,6 +147,7 @@ func ScreenConvert(s tcell.Screen, cfg *core.Config) {
 		return
 	}
 
+	// Список пресетов гарантирует 1. MP4 и 2. MKV во главе
 	names := make([]string, len(core.ConvertPresets))
 	for i, pr := range core.ConvertPresets {
 		if cfg.Language == "ru" {
@@ -103,7 +157,7 @@ func ScreenConvert(s tcell.Screen, cfg *core.Config) {
 		}
 	}
 
-	pi := RunMenu(s, cfg, T(*cfg, "convert_title"), names, "Choose target preset:", T(*cfg, "footer_nav"))
+	pi := RunMenu(s, cfg, T(*cfg, "convert_title"), names, "Choose target conversion preset (1. MP4 / 2. MKV):", T(*cfg, "footer_nav"))
 	if pi < 0 {
 		return
 	}
@@ -208,8 +262,8 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 	categories := []string{
 		T(*cfg, "tab_set_gen"),
 		T(*cfg, "tab_set_conv"),
+		T(*cfg, "tab_set_accel"),
 		T(*cfg, "tab_set_ui"),
-		T(*cfg, "tab_set_app"),
 	}
 
 	type settingItem struct {
@@ -223,7 +277,7 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 		s.Clear()
 
 		DrawHeader(s, T(*cfg, "settings_title"), w, *cfg)
-		leftW := 24
+		leftW := 26
 		divX := leftW + 2
 
 		for i, cat := range categories {
@@ -246,14 +300,22 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 		}
 
 		var rightItems []settingItem
+		yesStr := T(*cfg, "val_yes")
+		noStr := T(*cfg, "val_no")
+
 		switch leftIdx {
-		case 0:
+		case 0: // General
+			archStr := noStr
+			if cfg.UseArchive {
+				archStr = yesStr
+			}
 			rightItems = []settingItem{
 				{Label: T(*cfg, "settings_download_dir", cfg.DownloadDir), CLI: "-o", Key: "download_dir"},
 				{Label: T(*cfg, "settings_language", cfg.Language), CLI: "i18n", Key: "language"},
 				{Label: T(*cfg, "settings_proxy", cfg.ProxyMode), CLI: "--proxy", Key: "proxy"},
+				{Label: T(*cfg, "settings_archive", archStr), CLI: "--download-archive", Key: "archive"},
 			}
-		case 1:
+		case 1: // Video & Codecs
 			pName := cfg.VideoPreset
 			if p, ok := core.VideoPresets[cfg.VideoPreset]; ok {
 				pName = PresetDisplayName(*cfg, p)
@@ -262,8 +324,23 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 				{Label: T(*cfg, "settings_preset", pName), CLI: "--recode-video", Key: "video_preset"},
 				{Label: T(*cfg, "settings_audio_format", cfg.AudioFormat), CLI: "--audio-format", Key: "audio_format"},
 				{Label: T(*cfg, "settings_sub_langs", cfg.SubLangs), CLI: "--sub-langs", Key: "sub_langs"},
+				{Label: T(*cfg, "settings_thumb_fmt", strings.ToUpper(cfg.ThumbnailFormat)), CLI: "--convert-thumbnails", Key: "thumb_fmt"},
 			}
-		case 2:
+		case 2: // Acceleration & Network
+			noMtimeStr := noStr
+			if cfg.NoMtime {
+				noMtimeStr = yesStr
+			}
+			winNamesStr := noStr
+			if cfg.WindowsFilenames {
+				winNamesStr = yesStr
+			}
+			rightItems = []settingItem{
+				{Label: T(*cfg, "settings_accel_frags", cfg.ConcurrentFragments), CLI: "--concurrent-fragments", Key: "frags"},
+				{Label: T(*cfg, "settings_no_mtime", noMtimeStr), CLI: "--no-mtime", Key: "no_mtime"},
+				{Label: T(*cfg, "settings_win_names", winNamesStr), CLI: "--windows-filenames", Key: "win_names"},
+			}
+		case 3: // Interface & System
 			themeName := GetTheme(*cfg).NameEN
 			if cfg.Language == "ru" {
 				themeName = GetTheme(*cfg).NameRU
@@ -276,9 +353,6 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 				{Label: T(*cfg, "settings_theme", themeName), CLI: "color_scheme", Key: "theme"},
 				{Label: T(*cfg, "settings_bg", bgName), CLI: "transparency", Key: "terminal_bg"},
 				{Label: T(*cfg, "settings_style", cfg.ProgressStyle), CLI: "style", Key: "progress_style"},
-			}
-		case 3:
-			rightItems = []settingItem{
 				{Label: T(*cfg, "settings_bg_queue_max", cfg.BGQueueMax), CLI: "queue_slots", Key: "queue_max"},
 				{Label: T(*cfg, "settings_reset"), CLI: "factory_wipe", Key: "reset"},
 			}
@@ -385,6 +459,48 @@ func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 		} else {
 			cfg.Language = "en"
 		}
+		_ = core.SaveConfig(*cfg)
+	case "archive":
+		cfg.UseArchive = !cfg.UseArchive
+		_ = core.SaveConfig(*cfg)
+	case "video_preset":
+		keys := core.OrderedVideoPresetKeys
+		var pNames []string
+		for _, k := range keys {
+			pNames = append(pNames, PresetDisplayName(*cfg, core.VideoPresets[k]))
+		}
+		pi := RunMenu(s, cfg, T(*cfg, "settings_title"), pNames, "Choose Default Video Codec (1. MP4 / 2. MKV):", T(*cfg, "footer_nav"))
+		if pi >= 0 {
+			cfg.VideoPreset = keys[pi]
+			_ = core.SaveConfig(*cfg)
+		}
+	case "audio_format":
+		fmts := []string{"mp3", "flac", "wav", "m4a", "opus"}
+		fi := RunMenu(s, cfg, T(*cfg, "settings_title"), fmts, "Default Audio Format", T(*cfg, "footer_nav"))
+		if fi >= 0 {
+			cfg.AudioFormat = fmts[fi]
+			_ = core.SaveConfig(*cfg)
+		}
+	case "thumb_fmt":
+		fmts := []string{"png", "jpg", "webp"}
+		fi := RunMenu(s, cfg, T(*cfg, "settings_title"), fmts, "Default Thumbnail Format", T(*cfg, "footer_nav"))
+		if fi >= 0 {
+			cfg.ThumbnailFormat = fmts[fi]
+			_ = core.SaveConfig(*cfg)
+		}
+	case "frags":
+		choices := []string{"2 потока", "4 потока (по умолчанию)", "8 потоков (быстро)", "16 потоков (максимум)"}
+		vals := []int{2, 4, 8, 16}
+		ci := RunMenu(s, cfg, T(*cfg, "settings_title"), choices, "Concurrent Fragment Downloads", T(*cfg, "footer_nav"))
+		if ci >= 0 {
+			cfg.ConcurrentFragments = vals[ci]
+			_ = core.SaveConfig(*cfg)
+		}
+	case "no_mtime":
+		cfg.NoMtime = !cfg.NoMtime
+		_ = core.SaveConfig(*cfg)
+	case "win_names":
+		cfg.WindowsFilenames = !cfg.WindowsFilenames
 		_ = core.SaveConfig(*cfg)
 	case "theme":
 		var tKeys []string
