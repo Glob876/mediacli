@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -30,9 +31,9 @@ func ScreenVideo(s tcell.Screen, cfg *core.Config) {
 	_ = os.MkdirAll(outDir, 0755)
 
 	var preset core.DownloadPreset
-	if m == 0 {
+	if m == 0 { // Quick Download
 		preset = core.DownloadPreset{ID: "default", Name: "Default", Fields: cfg.PresetDefaults}
-	} else if m == 1 {
+	} else if m == 1 { // Choose saved preset
 		if len(cfg.DownloadPresets) == 0 {
 			ShowMessage(s, cfg, T(*cfg, "video_title"), []string{"No presets saved yet."}, T(*cfg, "footer_message"))
 			return
@@ -46,29 +47,167 @@ func ScreenVideo(s tcell.Screen, cfg *core.Config) {
 			return
 		}
 		preset = cfg.DownloadPresets[pi]
-	} else {
-		// Ручной выбор кодека: первые 2 места — всегда MP4 и MKV
-		keys := core.OrderedVideoPresetKeys
-		var pNames []string
-		for _, k := range keys {
-			pNames = append(pNames, PresetDisplayName(*cfg, core.VideoPresets[k]))
-		}
-		pi := RunMenu(s, cfg, T(*cfg, "video_title"), pNames, "Choose Export Codec Preset (1. MP4 / 2. MKV)", T(*cfg, "footer_nav"))
-		if pi < 0 {
+	} else { // Step-by-Step Manual Setup Wizard
+		pObj, ok := runManualDownloadWizard(s, cfg)
+		if !ok {
 			return
 		}
-		preset = core.DownloadPreset{
-			ID:   "manual",
-			Name: "Manual",
-			Fields: map[string]interface{}{
-				"video_preset": keys[pi],
-			},
-		}
+		preset = *pObj
 	}
 
 	cmdList := append([]string{"yt-dlp"}, core.BuildYtDlpArgs(preset, *cfg, outDir, false)...)
 	cmdList = append(cmdList, url)
 	RunWithLog(s, cfg, cmdList, "Download Video", url, outDir)
+}
+
+// runManualDownloadWizard последовательно задает вопросы на отдельных экранах
+func runManualDownloadWizard(s tcell.Screen, cfg *core.Config) (*core.DownloadPreset, bool) {
+	fields := make(map[string]interface{})
+
+	// 1. Качество видео
+	qItems := []string{
+		"1. Best Available (Лучшее доступное)",
+		"2. 4K Ultra HD (2160p)",
+		"3. 2K Quad HD (1440p)",
+		"4. Full HD (1080p)",
+		"5. HD (720p)",
+		"6. SD (480p)",
+		"7. Audio Only (Только звуковая дорожка)",
+	}
+	qVals := []string{"", "2160", "1440", "1080", "720", "480", "audio"}
+	qi := RunMenu(s, cfg, T(*cfg, "wizard_step1_title"), qItems, T(*cfg, "wizard_step1_sub"), T(*cfg, "footer_nav"))
+	if qi < 0 {
+		return nil, false
+	}
+	if qVals[qi] == "audio" {
+		fields["audio_only"] = true
+	} else if qVals[qi] != "" {
+		fields["quality"] = qVals[qi]
+	}
+
+	// 2. Кодек (если не аудио)
+	if !core.GetBool(fields, "audio_only") {
+		keys := core.OrderedVideoPresetKeys
+		var pNames []string
+		for _, k := range keys {
+			pNames = append(pNames, PresetDisplayName(*cfg, core.VideoPresets[k]))
+		}
+		pNames = append(pNames, "Custom FFmpeg Flags...")
+
+		ci := RunMenu(s, cfg, T(*cfg, "wizard_step2_title"), pNames, T(*cfg, "wizard_step2_sub"), T(*cfg, "footer_nav"))
+		if ci < 0 {
+			return nil, false
+		}
+		if ci < len(keys) {
+			fields["video_preset"] = keys[ci]
+		} else {
+			flags, ok := TextInput(s, cfg, "Custom FFmpeg", "Enter custom FFmpeg flags:", "-c:v libx264 -c:a aac", T(*cfg, "footer_input"))
+			if !ok {
+				return nil, false
+			}
+			fields["video_preset"] = "custom"
+			fields["custom_flags"] = flags
+		}
+	}
+
+	// 3. Диапазон времени (Таймкод)
+	timeRange, ok := TextInput(s, cfg, T(*cfg, "wizard_step3_title"), T(*cfg, "wizard_step3_prompt"), "", T(*cfg, "footer_input"))
+	if !ok {
+		return nil, false
+	}
+	if strings.TrimSpace(timeRange) != "" {
+		fields["download_section"] = strings.TrimSpace(timeRange)
+	}
+
+	// 4. Субтитры
+	subItems := []string{
+		"1. No Subtitles (Без субтитров)",
+		"2. Download Subs (Отдельный файл субтитров ru,en)",
+		"3. Embed Subs (Вшить субтитры в контейнер)",
+		"4. Embed Auto-Generated Subs (Вшить автосабы)",
+	}
+	si := RunMenu(s, cfg, T(*cfg, "wizard_step4_title"), subItems, T(*cfg, "wizard_step4_sub"), T(*cfg, "footer_nav"))
+	if si < 0 {
+		return nil, false
+	}
+	if si == 1 {
+		fields["subs_enabled"] = true
+	} else if si == 2 {
+		fields["subs_enabled"] = true
+		fields["embed_subs"] = true
+	} else if si == 3 {
+		fields["subs_enabled"] = true
+		fields["embed_subs"] = true
+		fields["auto_subs"] = true
+	}
+
+	// 5. SponsorBlock
+	sbItems := []string{
+		"1. Disabled (Оставить видео оригинальным)",
+		"2. Remove Sponsors (Вырезать рекламу и интеграции физически)",
+		"3. Mark Chapters (Только пометить рекламу главами в плеере)",
+	}
+	sbi := RunMenu(s, cfg, T(*cfg, "wizard_step5_title"), sbItems, T(*cfg, "wizard_step5_sub"), T(*cfg, "footer_nav"))
+	if sbi < 0 {
+		return nil, false
+	}
+	if sbi == 1 {
+		fields["sponsorblock"] = "remove"
+	} else if sbi == 2 {
+		fields["sponsorblock"] = "mark"
+	}
+
+	// 6. Нарезка по главам
+	chapItems := []string{
+		"1. Single File (Один цельный файл, по умолчанию)",
+		"2. Split by Chapters (Разрезать на отдельные файлы по главам)",
+	}
+	chapi := RunMenu(s, cfg, T(*cfg, "wizard_step6_title"), chapItems, T(*cfg, "wizard_step6_sub"), T(*cfg, "footer_nav"))
+	if chapi < 0 {
+		return nil, false
+	}
+	if chapi == 1 {
+		fields["split_chapters"] = true
+	}
+
+	// 7. Метаданные и постер
+	metaItems := []string{
+		"1. Embed Metadata & Thumbnail (Вшить обложку и теги, рекомендуется)",
+		"2. Clean File (Без добавления метаданных)",
+	}
+	mi := RunMenu(s, cfg, T(*cfg, "wizard_step7_title"), metaItems, T(*cfg, "wizard_step7_sub"), T(*cfg, "footer_nav"))
+	if mi < 0 {
+		return nil, false
+	}
+	fields["embed_metadata"] = (mi == 0)
+
+	// 8. Финал: Запустить или Сохранить как пресет
+	finishItems := []string{
+		T(*cfg, "wizard_act_run"),
+		T(*cfg, "wizard_act_save_run"),
+		T(*cfg, "wizard_act_cancel"),
+	}
+	fi := RunMenu(s, cfg, T(*cfg, "wizard_finish_title"), finishItems, T(*cfg, "wizard_finish_sub"), T(*cfg, "footer_nav"))
+	if fi < 0 || fi == 2 {
+		return nil, false
+	}
+
+	preset := &core.DownloadPreset{
+		ID:     fmt.Sprintf("custom_%d", time.Now().Unix()),
+		Name:   "Manual Setup",
+		Fields: fields,
+	}
+
+	if fi == 1 { // Сохранить как постоянный пресет
+		pName, ok := TextInput(s, cfg, "Save Preset", "Enter name for this new preset:", "My Custom Preset", T(*cfg, "footer_input"))
+		if ok && strings.TrimSpace(pName) != "" {
+			preset.Name = strings.TrimSpace(pName)
+			cfg.DownloadPresets = append(cfg.DownloadPresets, *preset)
+			_ = core.SaveConfig(*cfg)
+		}
+	}
+
+	return preset, true
 }
 
 func ScreenThumbnail(s tcell.Screen, cfg *core.Config) {
@@ -147,7 +286,6 @@ func ScreenConvert(s tcell.Screen, cfg *core.Config) {
 		return
 	}
 
-	// Список пресетов гарантирует 1. MP4 и 2. MKV во главе
 	names := make([]string, len(core.ConvertPresets))
 	for i, pr := range core.ConvertPresets {
 		if cfg.Language == "ru" {

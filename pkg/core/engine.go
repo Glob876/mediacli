@@ -155,7 +155,7 @@ func SaveConfig(cfg Config) error {
 }
 
 // ============================================================================
-// 2. Пресеты конвертации и видео (ПЕРВЫЕ ДВА ВСЕГДА MP4 и MKV)
+// 2. Пресеты конвертации и видео (1. MP4 и 2. MKV ВСЕГДА В НАЧАЛЕ)
 // ============================================================================
 
 type VideoPreset struct {
@@ -178,7 +178,6 @@ type ConvertPreset struct {
 	FFmpegFlags []string
 }
 
-// Порядок пресетов скачивания: 1. Standard MP4, 2. Modern MKV (AV1), далее остальные
 var OrderedVideoPresetKeys = []string{
 	"standard_mp4",
 	"mkv_av1",
@@ -190,7 +189,6 @@ var OrderedVideoPresetKeys = []string{
 	"audio_mp3",
 	"audio_flac",
 	"default",
-	"custom",
 }
 
 var VideoPresets = map[string]VideoPreset{
@@ -276,7 +274,6 @@ var VideoPresets = map[string]VideoPreset{
 	},
 }
 
-// Пресеты локальной конвертации FFmpeg: Первые два — MP4 и MKV
 var ConvertPresets = []ConvertPreset{
 	{
 		ID:          "standard_mp4",
@@ -875,7 +872,15 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 		cmd = append(cmd, "--download-archive", ParseUserPath(cfg.ArchiveFile))
 	}
 
-	// 4. Форматы видео и аудио
+	// 4. Скачивание определенного отрезка времени (Section / Timecode)
+	if sec := getString(f, "download_section"); sec != "" {
+		if !strings.HasPrefix(sec, "*") {
+			sec = "*" + sec
+		}
+		cmd = append(cmd, "--download-sections", sec)
+	}
+
+	// 5. Форматы видео и аудио
 	if getBool(f, "audio_only") {
 		fmtStr := getString(f, "audio_format")
 		if fmtStr == "" {
@@ -952,12 +957,10 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	}
 
 	sb := getString(f, "sponsorblock")
-	if sb != "" && sb != "off" {
-		cats := "sponsor"
-		if sb == "sponsors_promo" {
-			cats = "sponsor,selfpromo,interaction"
-		}
-		cmd = append(cmd, "--sponsorblock-remove", cats)
+	if sb == "remove" || sb == "sponsors" {
+		cmd = append(cmd, "--sponsorblock-remove", "sponsor,selfpromo,interaction")
+	} else if sb == "mark" {
+		cmd = append(cmd, "--sponsorblock-mark", "all")
 	}
 
 	if !getBool(f, "audio_only") {
@@ -1047,10 +1050,6 @@ func CheckDependencies() []DependencyStatus {
 	}
 	return statuses
 }
-
-// ============================================================================
-// Вспомогательные функции для чтения map[string]interface{}
-// ============================================================================
 
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
