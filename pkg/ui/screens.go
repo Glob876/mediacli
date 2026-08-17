@@ -60,7 +60,6 @@ func ScreenVideo(s tcell.Screen, cfg *core.Config) {
 	RunWithLog(s, cfg, cmdList, "Download Video", url, outDir)
 }
 
-// runManualDownloadWizard последовательно задает вопросы на отдельных экранах
 func runManualDownloadWizard(s tcell.Screen, cfg *core.Config) (*core.DownloadPreset, bool) {
 	fields := make(map[string]interface{})
 
@@ -85,7 +84,7 @@ func runManualDownloadWizard(s tcell.Screen, cfg *core.Config) (*core.DownloadPr
 		fields["quality"] = qVals[qi]
 	}
 
-	// 2. Кодек (если не аудио)
+	// 2. Кодек (если не только аудио)
 	if !core.GetBool(fields, "audio_only") {
 		keys := core.OrderedVideoPresetKeys
 		var pNames []string
@@ -198,7 +197,7 @@ func runManualDownloadWizard(s tcell.Screen, cfg *core.Config) (*core.DownloadPr
 		Fields: fields,
 	}
 
-	if fi == 1 { // Сохранить как постоянный пресет
+	if fi == 1 {
 		pName, ok := TextInput(s, cfg, "Save Preset", "Enter name for this new preset:", "My Custom Preset", T(*cfg, "footer_input"))
 		if ok && strings.TrimSpace(pName) != "" {
 			preset.Name = strings.TrimSpace(pName)
