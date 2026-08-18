@@ -180,30 +180,55 @@ func runManualDownloadWizard(s tcell.Screen, cfg *core.Config) (*core.DownloadPr
 	}
 	fields["embed_metadata"] = (mi == 0)
 
-	// 8. Финал: Запустить или Сохранить как пресет
-	finishItems := []string{
-		T(*cfg, "wizard_act_run"),
-		T(*cfg, "wizard_act_save_run"),
-		T(*cfg, "wizard_act_cancel"),
+	// 8. Настройка Cookies
+	cookieItems := []string{
+		T(*cfg, "wizard_cookie_global", cfg.CookiesMode),
+		T(*cfg, "wizard_cookie_none"),
+		T(*cfg, "wizard_cookie_browser"),
+		T(*cfg, "wizard_cookie_file"),
 	}
-	fi := RunMenu(s, cfg, T(*cfg, "wizard_finish_title"), finishItems, T(*cfg, "wizard_finish_sub"), T(*cfg, "footer_nav"))
-	if fi < 0 || fi == 2 {
+	cki := RunMenu(s, cfg, T(*cfg, "wizard_step8_title"), cookieItems, T(*cfg, "wizard_step8_sub"), T(*cfg, "footer_nav"))
+	if cki < 0 {
+		return nil, false
+	}
+	if cki == 1 {
+		fields["cookies_mode"] = "none"
+	} else if cki == 2 {
+		var browserItems []string
+		for _, b := range core.SupportedBrowsers {
+			browserItems = append(browserItems, strings.Title(b))
+		}
+		bi := RunMenu(s, cfg, "Choose Browser", browserItems, "Select browser to import cookies from:", T(*cfg, "footer_nav"))
+		if bi >= 0 {
+			fields["cookies_mode"] = "browser"
+			fields["cookies_browser"] = core.SupportedBrowsers[bi]
+		}
+	} else if cki == 3 {
+		cPath, ok := TextInput(s, cfg, "Cookies File", "Enter path to cookies.txt:", cfg.CookiesFile, T(*cfg, "footer_input"))
+		if ok && strings.TrimSpace(cPath) != "" {
+			fields["cookies_mode"] = "file"
+			fields["cookies_file"] = strings.TrimSpace(cPath)
+		}
+	}
+
+	// Финал: Ввод названия пресета (опционально, Enter для разового скачивания)
+	pName, ok := TextInput(s, cfg, T(*cfg, "wizard_name_title"), T(*cfg, "wizard_name_prompt"), "", T(*cfg, "footer_input"))
+	if !ok {
 		return nil, false
 	}
 
 	preset := &core.DownloadPreset{
 		ID:     fmt.Sprintf("custom_%d", time.Now().Unix()),
-		Name:   "Manual Setup",
+		Name:   "Manual Download",
 		Fields: fields,
 	}
 
-	if fi == 1 {
-		pName, ok := TextInput(s, cfg, "Save Preset", "Enter name for this new preset:", "My Custom Preset", T(*cfg, "footer_input"))
-		if ok && strings.TrimSpace(pName) != "" {
-			preset.Name = strings.TrimSpace(pName)
-			cfg.DownloadPresets = append(cfg.DownloadPresets, *preset)
-			_ = core.SaveConfig(*cfg)
-		}
+	// Если пользователь ввел название, сохраняем в список постоянных пресетов
+	trimmedName := strings.TrimSpace(pName)
+	if trimmedName != "" {
+		preset.Name = trimmedName
+		cfg.DownloadPresets = append(cfg.DownloadPresets, *preset)
+		_ = core.SaveConfig(*cfg)
 	}
 
 	return preset, true
@@ -231,7 +256,7 @@ func ScreenThumbnail(s tcell.Screen, cfg *core.Config) {
 		"--convert-thumbnails", targetFmt,
 		"-o", filepath.Join(outDir, "%(title)s.%(ext)s"),
 	}
-	cmdList = append(cmdList, core.BuildCookieArgs(*cfg)...)
+	cmdList = append(cmdList, core.BuildCookieArgs(*cfg, nil)...)
 	cmdList = append(cmdList, core.BuildProxyArgs(*cfg, "", "")...)
 	cmdList = append(cmdList, url)
 
@@ -266,7 +291,7 @@ func ScreenAudio(s tcell.Screen, cfg *core.Config) {
 	if cfg.WindowsFilenames {
 		cmdList = append(cmdList, "--windows-filenames")
 	}
-	cmdList = append(cmdList, core.BuildCookieArgs(*cfg)...)
+	cmdList = append(cmdList, core.BuildCookieArgs(*cfg, nil)...)
 	cmdList = append(cmdList, core.BuildProxyArgs(*cfg, "", "")...)
 	cmdList = append(cmdList, url)
 

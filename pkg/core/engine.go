@@ -56,6 +56,8 @@ type DownloadPreset struct {
 	Fields map[string]interface{} `json:"fields"`
 }
 
+var SupportedBrowsers = []string{"chrome", "firefox", "brave", "edge", "opera", "vivaldi", "chromium", "safari"}
+
 func GetConfigDir() string {
 	home, _ := os.UserHomeDir()
 
@@ -801,18 +803,39 @@ func (qm *BackgroundQueueManager) finishTask(task *BackgroundTask, exitCode int,
 // 7. Сборщики аргументов yt-dlp (С ускорением и защитой)
 // ============================================================================
 
-func BuildCookieArgs(cfg Config) []string {
-	switch cfg.CookiesMode {
+func BuildCookieArgs(cfg Config, f map[string]interface{}) []string {
+	mode := cfg.CookiesMode
+	if f != nil {
+		if m := GetString(f, "cookies_mode"); m != "" {
+			mode = m
+		}
+	}
+
+	switch mode {
+	case "none":
+		return nil
 	case "file":
-		if cfg.CookiesFile != "" {
-			p := ParseUserPath(cfg.CookiesFile)
+		cFile := cfg.CookiesFile
+		if f != nil {
+			if cf := GetString(f, "cookies_file"); cf != "" {
+				cFile = cf
+			}
+		}
+		if cFile != "" {
+			p := ParseUserPath(cFile)
 			if _, err := os.Stat(p); err == nil {
 				return []string{"--cookies", p}
 			}
 		}
 	case "browser":
-		if cfg.CookiesBrowser != "" {
-			return []string{"--cookies-from-browser", cfg.CookiesBrowser}
+		browser := cfg.CookiesBrowser
+		if f != nil {
+			if cb := GetString(f, "cookies_browser"); cb != "" {
+				browser = cb
+			}
+		}
+		if browser != "" {
+			return []string{"--cookies-from-browser", browser}
 		}
 	}
 	return nil
@@ -996,7 +1019,7 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	}
 
 	cmd = append(cmd, "-o", filepath.Join(outDir, template))
-	cmd = append(cmd, BuildCookieArgs(cfg)...)
+	cmd = append(cmd, BuildCookieArgs(cfg, f)...)
 	return cmd
 }
 
@@ -1051,7 +1074,6 @@ func CheckDependencies() []DependencyStatus {
 	return statuses
 }
 
-// Публичные функции для чтения данных из map[string]interface{}
 func GetString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {
