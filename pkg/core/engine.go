@@ -109,7 +109,45 @@ func GetDefaultConfig() Config {
 		ArchiveFile:           filepath.Join(configDir, "archive.txt"),
 		DownloadPresets:       []DownloadPreset{},
 		DefaultDownloadPreset: "",
-		PresetDefaults:        make(map[string]interface{}),
+		PresetDefaults:        GetInitialPresetFields(),
+	}
+}
+
+func GetInitialPresetFields() map[string]interface{} {
+	return map[string]interface{}{
+		"quality":              "",
+		"video_preset":         "standard_mp4",
+		"vcodec":               "auto",
+		"fps_limit":            "",
+		"audio_only":           false,
+		"audio_format":         "mp3",
+		"audio_quality":        "0",
+		"download_section":     "",
+		"subs_enabled":         false,
+		"sub_langs":            "ru,en",
+		"auto_subs":            false,
+		"embed_subs":           false,
+		"embed_metadata":       true,
+		"embed_chapters":       true,
+		"split_chapters":       false,
+		"write_extra":          false,
+		"sponsorblock":         "off",
+		"concurrent_fragments": "4",
+		"retries":              "10",
+		"ratelimit":            "",
+		"geobypass":            false,
+		"live_start":           false,
+		"video_password":       "",
+		"restrict_filenames":   false,
+		"windows_filenames":    true,
+		"no_mtime":             true,
+		"use_archive":          false,
+		"cookies_mode":         "default",
+		"cookies_browser":      "",
+		"cookies_file":         "",
+		"proxy_mode":           "default",
+		"proxy_url":            "",
+		"output_template":      "",
 	}
 }
 
@@ -800,13 +838,13 @@ func (qm *BackgroundQueueManager) finishTask(task *BackgroundTask, exitCode int,
 }
 
 // ============================================================================
-// 7. Сборщики аргументов yt-dlp (С ускорением и защитой)
+// 7. Сборщики аргументов yt-dlp (Полный набор параметров Stacher 7)
 // ============================================================================
 
 func BuildCookieArgs(cfg Config, f map[string]interface{}) []string {
 	mode := cfg.CookiesMode
 	if f != nil {
-		if m := GetString(f, "cookies_mode"); m != "" {
+		if m := GetString(f, "cookies_mode"); m != "" && m != "default" {
 			mode = m
 		}
 	}
@@ -843,7 +881,7 @@ func BuildCookieArgs(cfg Config, f map[string]interface{}) []string {
 
 func BuildProxyArgs(cfg Config, overrideMode, overrideURL string) []string {
 	mode := cfg.ProxyMode
-	if overrideMode != "" {
+	if overrideMode != "" && overrideMode != "default" {
 		mode = overrideMode
 	}
 
@@ -875,7 +913,12 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 		}
 	}
 	cmd = append(cmd, "--concurrent-fragments", strconv.Itoa(frags))
-	cmd = append(cmd, "--retries", "10", "--fragment-retries", "10")
+
+	retries := "10"
+	if r := GetString(f, "retries"); r != "" {
+		retries = r
+	}
+	cmd = append(cmd, "--retries", retries, "--fragment-retries", retries)
 	cmd = append(cmd, "--buffer-size", "16M")
 	cmd = append(cmd, "--extractor-args", "youtube:player_client=android,web")
 
@@ -891,11 +934,16 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	}
 
 	// 3. Архив скачиваний (защита от повторов)
-	if cfg.UseArchive && cfg.ArchiveFile != "" {
+	if (cfg.UseArchive || GetBool(f, "use_archive")) && cfg.ArchiveFile != "" {
 		cmd = append(cmd, "--download-archive", ParseUserPath(cfg.ArchiveFile))
 	}
 
-	// 4. Скачивание определенного отрезка времени (Section / Timecode)
+	// 4. Пароль к видео
+	if pass := GetString(f, "video_password"); pass != "" {
+		cmd = append(cmd, "--video-password", pass)
+	}
+
+	// 5. Скачивание определенного отрезка времени (Section / Timecode)
 	if sec := GetString(f, "download_section"); sec != "" {
 		if !strings.HasPrefix(sec, "*") {
 			sec = "*" + sec
@@ -903,7 +951,7 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 		cmd = append(cmd, "--download-sections", sec)
 	}
 
-	// 5. Форматы видео и аудио
+	// 6. Форматы видео и аудио
 	if GetBool(f, "audio_only") {
 		fmtStr := GetString(f, "audio_format")
 		if fmtStr == "" {
