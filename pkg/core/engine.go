@@ -195,7 +195,7 @@ func SaveConfig(cfg Config) error {
 }
 
 // ============================================================================
-// 2. Пресеты конвертации и видео (1. MP4 и 2. MKV ВСЕГДА В НАЧАЛЕ)
+// 2. Пресеты конвертации и видео
 // ============================================================================
 
 type VideoPreset struct {
@@ -398,7 +398,7 @@ var ConvertPresets = []ConvertPreset{
 }
 
 // ============================================================================
-// 3. История операций (History)
+// 3. История операций и функции удаления
 // ============================================================================
 
 type HistoryEntry struct {
@@ -448,13 +448,44 @@ func GetHistory() []HistoryEntry {
 	return entries
 }
 
+func DeleteHistoryItem(entry HistoryEntry, deleteFileFromDisk bool, downloadDir string) error {
+	dir := GetConfigDir()
+	historyPath := filepath.Join(dir, "history.json")
+
+	entries := GetHistory()
+	var newEntries []HistoryEntry
+
+	for _, e := range entries {
+		if e.Time == entry.Time && e.Source == entry.Source && e.Target == entry.Target {
+			// Если запрошено физическое удаление файла с диска
+			if deleteFileFromDisk && entry.Target != "" {
+				targetPath := entry.Target
+				if !filepath.IsAbs(targetPath) {
+					targetPath = filepath.Join(ParseUserPath(downloadDir), targetPath)
+				}
+				if _, err := os.Stat(targetPath); err == nil {
+					_ = os.Remove(targetPath)
+				}
+			}
+			continue
+		}
+		newEntries = append(newEntries, e)
+	}
+
+	data, err := json.MarshalIndent(newEntries, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(historyPath, data, 0644)
+}
+
 func ClearHistory() error {
 	historyPath := filepath.Join(GetConfigDir(), "history.json")
 	return os.WriteFile(historyPath, []byte("[]"), 0644)
 }
 
 // ============================================================================
-// 4. Cookies парсер (Cookies)
+// 4. Cookies парсер
 // ============================================================================
 
 type Cookie struct {
@@ -511,7 +542,7 @@ func AppendCookie(filePath, domain, name, val string) error {
 }
 
 // ============================================================================
-// 5. Детектор этапов и прогресса (Dynamic Stage & Progress Parser)
+// 5. Детектор этапов и прогресса
 // ============================================================================
 
 type StagePattern struct {
@@ -613,7 +644,7 @@ func ExtractProgress(line string) (pct float64, speed string, ok bool) {
 }
 
 // ============================================================================
-// 6. Менеджер фоновых задач (Background Queue Manager)
+// 6. Менеджер фоновых задач
 // ============================================================================
 
 type TaskStatus string
@@ -838,7 +869,7 @@ func (qm *BackgroundQueueManager) finishTask(task *BackgroundTask, exitCode int,
 }
 
 // ============================================================================
-// 7. Сборщики аргументов yt-dlp (Полный набор параметров Stacher 7)
+// 7. Сборщики аргументов yt-dlp
 // ============================================================================
 
 func BuildCookieArgs(cfg Config, f map[string]interface{}) []string {
@@ -902,7 +933,6 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	f := preset.Fields
 	var cmd []string
 
-	// 1. Ускорение загрузки и стабильность сети
 	frags := cfg.ConcurrentFragments
 	if frags <= 0 {
 		frags = 4
@@ -922,7 +952,6 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	cmd = append(cmd, "--buffer-size", "16M")
 	cmd = append(cmd, "--extractor-args", "youtube:player_client=android,web")
 
-	// 2. Системные флаги файлов
 	if cfg.NoMtime || GetBool(f, "no_mtime") {
 		cmd = append(cmd, "--no-mtime")
 	}
@@ -933,17 +962,14 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 		cmd = append(cmd, "--restrict-filenames")
 	}
 
-	// 3. Архив скачиваний (защита от повторов)
 	if (cfg.UseArchive || GetBool(f, "use_archive")) && cfg.ArchiveFile != "" {
 		cmd = append(cmd, "--download-archive", ParseUserPath(cfg.ArchiveFile))
 	}
 
-	// 4. Пароль к видео
 	if pass := GetString(f, "video_password"); pass != "" {
 		cmd = append(cmd, "--video-password", pass)
 	}
 
-	// 5. Скачивание определенного отрезка времени (Section / Timecode)
 	if sec := GetString(f, "download_section"); sec != "" {
 		if !strings.HasPrefix(sec, "*") {
 			sec = "*" + sec
@@ -951,7 +977,6 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 		cmd = append(cmd, "--download-sections", sec)
 	}
 
-	// 6. Форматы видео и аудио
 	if GetBool(f, "audio_only") {
 		fmtStr := GetString(f, "audio_format")
 		if fmtStr == "" {
@@ -1072,7 +1097,7 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 }
 
 // ============================================================================
-// 8. Медиа-утилиты (FFprobe, Проверка зависимостей)
+// 8. Медиа-утилиты
 // ============================================================================
 
 type MediaProbeResult struct {

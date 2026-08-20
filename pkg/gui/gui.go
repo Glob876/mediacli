@@ -22,59 +22,59 @@ import (
 )
 
 // ============================================================================
-// Кастомная современная темная тема (Modern Dark Theme)
+// 1. Пастельно-зеленая тема (Pastel Sage & Matcha Theme)
 // ============================================================================
 
-type modernDarkTheme struct{}
+type pastelGreenTheme struct{}
 
-func (m *modernDarkTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
+func (m *pastelGreenTheme) Color(name fyne.ThemeColorName, variant fyne.ThemeVariant) color.Color {
 	switch name {
 	case theme.ColorNameBackground:
-		return color.RGBA{R: 18, G: 20, B: 26, A: 255} // Глубокий темный фон
+		return color.RGBA{R: 17, G: 22, B: 20, A: 255}
 	case theme.ColorNameOverlayBackground, theme.ColorNameMenuBackground:
-		return color.RGBA{R: 26, G: 29, B: 38, A: 255} // Фон модальных окон и блоков
+		return color.RGBA{R: 24, G: 32, B: 28, A: 255}
 	case theme.ColorNameButton:
-		return color.RGBA{R: 36, G: 41, B: 54, A: 255} // Цвет кнопок
+		return color.RGBA{R: 35, G: 48, B: 41, A: 255}
 	case theme.ColorNamePrimary:
-		return color.RGBA{R: 0, G: 210, B: 196, A: 255} // Неоновый циан/акцент
+		return color.RGBA{R: 123, G: 198, B: 154, A: 255}
 	case theme.ColorNameHover:
-		return color.RGBA{R: 48, G: 56, B: 74, A: 255}
+		return color.RGBA{R: 48, G: 66, B: 56, A: 255}
 	case theme.ColorNameInputBackground:
-		return color.RGBA{R: 28, G: 32, B: 42, A: 255}
+		return color.RGBA{R: 22, G: 29, B: 25, A: 255}
 	case theme.ColorNameForeground:
-		return color.RGBA{R: 242, G: 245, B: 250, A: 255}
+		return color.RGBA{R: 232, G: 239, B: 234, A: 255}
 	case theme.ColorNamePlaceHolder:
-		return color.RGBA{R: 115, G: 125, B: 142, A: 255}
+		return color.RGBA{R: 120, G: 145, B: 130, A: 255}
 	case theme.ColorNameSeparator:
-		return color.RGBA{R: 42, G: 47, B: 62, A: 255}
+		return color.RGBA{R: 38, G: 50, B: 44, A: 255}
 	default:
 		return theme.DefaultTheme().Color(name, theme.VariantDark)
 	}
 }
 
-func (m *modernDarkTheme) Font(style fyne.TextStyle) fyne.Resource {
+func (m *pastelGreenTheme) Font(style fyne.TextStyle) fyne.Resource {
 	return theme.DefaultTheme().Font(style)
 }
 
-func (m *modernDarkTheme) Icon(name fyne.ThemeIconName) fyne.Resource {
+func (m *pastelGreenTheme) Icon(name fyne.ThemeIconName) fyne.Resource {
 	return theme.DefaultTheme().Icon(name)
 }
 
-func (m *modernDarkTheme) Size(name fyne.ThemeSizeName) float32 {
+func (m *pastelGreenTheme) Size(name fyne.ThemeSizeName) float32 {
 	switch name {
 	case theme.SizeNamePadding:
-		return 10.0
+		return 12.0
 	case theme.SizeNameInnerPadding:
 		return 12.0
 	case theme.SizeNameInputRadius:
-		return 8.0
+		return 10.0
 	default:
 		return theme.DefaultTheme().Size(name)
 	}
 }
 
 // ============================================================================
-// Структура карточки-куба
+// 2. Карточка загрузки
 // ============================================================================
 
 type DownloadCard struct {
@@ -87,15 +87,15 @@ type DownloadCard struct {
 }
 
 // ============================================================================
-// Главное окно GUI
+// 3. Главный интерфейс GUI с анимацией
 // ============================================================================
 
 func RunGUI() {
 	a := app.New()
-	a.Settings().SetTheme(&modernDarkTheme{})
+	a.Settings().SetTheme(&pastelGreenTheme{})
 
-	w := a.NewWindow("MediaCLI — Advanced Media Suite")
-	w.Resize(fyne.NewSize(1080, 720))
+	w := a.NewWindow("MediaCLI — Pastel Media Suite")
+	w.Resize(fyne.NewSize(1140, 750))
 	w.CenterOnScreen()
 
 	cfg, err := core.LoadConfig()
@@ -103,22 +103,30 @@ func RunGUI() {
 		cfg = core.GetDefaultConfig()
 	}
 
-	// Сетка карточек с гарантированными отступами
 	cardsGrid := container.New(layout.NewGridLayout(3))
 	scrollContainer := container.NewVScroll(container.NewPadded(cardsGrid))
 
-	// Загрузка истории
-	historyEntries := core.GetHistory()
-	for _, h := range historyEntries {
-		card := createHistoryCard(h)
-		cardsGrid.Add(card)
+	reloadCards := func() {
+		cardsGrid.Objects = nil
+		historyEntries := core.GetHistory()
+		for _, h := range historyEntries {
+			card := createHistoryCard(w, h, &cfg, func() {
+				cardsGrid.Objects = nil
+				for _, updatedH := range core.GetHistory() {
+					cardsGrid.Add(createHistoryCard(w, updatedH, &cfg, nil))
+				}
+				cardsGrid.Refresh()
+			})
+			cardsGrid.Add(card)
+		}
+		cardsGrid.Refresh()
 	}
 
-	// Верхняя панель: Поле ввода ссылки
-	urlEntry := widget.NewEntry()
-	urlEntry.SetPlaceHolder("Paste video, playlist, or audio URL and press Enter...")
+	reloadCards()
 
-	// Селекторы панели подтверждения
+	urlEntry := widget.NewEntry()
+	urlEntry.SetPlaceHolder("Paste media URL (YouTube, VK, Twitch, etc.) and press Enter...")
+
 	presetSelect := widget.NewSelect([]string{
 		"1. Standard MP4 (H.264 + AAC) [Universal]",
 		"2. Modern MKV (AV1 + Opus/AAC) [Next-Gen]",
@@ -141,21 +149,53 @@ func RunGUI() {
 	qualitySelect.SetSelected("Best Available (Max)")
 
 	timeRangeEntry := widget.NewEntry()
-	timeRangeEntry.SetPlaceHolder("Time range (e.g. 00:01:00-00:03:30 or leave blank for full video)")
+	timeRangeEntry.SetPlaceHolder("Time range cut (e.g. 00:01:00-00:03:30 or leave empty)")
 
 	subsCheck := widget.NewCheck("Download Subtitles (ru,en)", func(bool) {})
 	sponsorCheck := widget.NewCheck("SponsorBlock (Cut Sponsorships)", func(bool) {})
 
 	var confirmPanel *fyne.Container
+	var confirmBg *canvas.Rectangle
+	confirmExpanded := false
 
-	// Действие старта загрузки
+	animateConfirmDrawer := func(expand bool) {
+		if expand == confirmExpanded {
+			return
+		}
+		confirmExpanded = expand
+
+		if expand {
+			confirmPanel.Show()
+		}
+
+		anim := fyne.NewAnimation(240*time.Millisecond, func(p float32) {
+			if !expand {
+				p = 1.0 - p
+			}
+			alpha := uint8(p * 255)
+			confirmBg.FillColor = color.RGBA{R: 24, G: 32, B: 28, A: alpha}
+			confirmBg.StrokeColor = color.RGBA{R: 123, G: 198, B: 154, A: uint8(p * 180)}
+			confirmBg.Refresh()
+		})
+		anim.Curve = fyne.AnimationEaseOut
+		anim.Start()
+
+		if !expand {
+			time.AfterFunc(250*time.Millisecond, func() {
+				if !confirmExpanded {
+					confirmPanel.Hide()
+				}
+			})
+		}
+	}
+
 	startDownloadAction := func() {
 		targetURL := strings.TrimSpace(urlEntry.Text)
 		if targetURL == "" {
 			return
 		}
 
-		confirmPanel.Hide()
+		animateConfirmDrawer(false)
 
 		fields := core.GetInitialPresetFields()
 		switch presetSelect.Selected {
@@ -217,36 +257,36 @@ func RunGUI() {
 	}
 
 	btnCancel := widget.NewButtonWithIcon("Cancel", theme.CancelIcon(), func() {
-		confirmPanel.Hide()
+		animateConfirmDrawer(false)
 	})
 
 	btnStart := widget.NewButtonWithIcon("Start Download", theme.ConfirmIcon(), startDownloadAction)
 	btnStart.Importance = widget.HighImportance
 
-	panelBackground := canvas.NewRectangle(color.RGBA{R: 24, G: 28, B: 38, A: 255})
-	panelBackground.StrokeColor = color.RGBA{R: 44, G: 52, B: 70, A: 255}
-	panelBackground.StrokeWidth = 1.0
-	panelBackground.CornerRadius = 8.0
+	confirmBg = canvas.NewRectangle(color.RGBA{R: 24, G: 32, B: 28, A: 255})
+	confirmBg.StrokeColor = color.RGBA{R: 123, G: 198, B: 154, A: 180}
+	confirmBg.StrokeWidth = 1.2
+	confirmBg.CornerRadius = 10.0
 
-	panelContent := container.NewVBox(
+	confirmContent := container.NewVBox(
 		container.NewGridWithColumns(2,
 			container.NewVBox(widget.NewLabelWithStyle("Target Codec Preset:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), presetSelect),
-			container.NewVBox(widget.NewLabelWithStyle("Max Resolution:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), qualitySelect),
+			container.NewVBox(widget.NewLabelWithStyle("Max Quality:", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), qualitySelect),
 		),
 		timeRangeEntry,
-		container.NewHBox(subsCheck, widget.NewLabel("    "), sponsorCheck),
+		container.NewHBox(subsCheck, layout.NewSpacer(), sponsorCheck, layout.NewSpacer()),
 		widget.NewSeparator(),
 		container.NewHBox(
 			layout.NewSpacer(),
 			btnCancel,
-			widget.NewLabel("  "),
+			layout.NewSpacer(),
 			btnStart,
 		),
 	)
 
 	confirmPanel = container.NewStack(
-		panelBackground,
-		container.NewPadded(panelContent),
+		confirmBg,
+		container.NewPadded(confirmContent),
 	)
 	confirmPanel.Hide()
 
@@ -254,29 +294,107 @@ func RunGUI() {
 		if strings.TrimSpace(s) == "" {
 			return
 		}
-		confirmPanel.Show()
+		animateConfirmDrawer(true)
+	}
+
+	var settingsDrawer *fyne.Container
+	var settingsBg *canvas.Rectangle
+	settingsExpanded := false
+
+	settingsFormContainer := buildFullSettingsView(&cfg, func() {
+		_ = core.SaveConfig(cfg)
+	})
+
+	btnSettingsClose := widget.NewButtonWithIcon("Close Settings", theme.CancelIcon(), func() {
+		if settingsExpanded {
+			settingsExpanded = false
+			anim := fyne.NewAnimation(220*time.Millisecond, func(p float32) {
+				alpha := uint8((1.0 - p) * 255)
+				settingsBg.FillColor = color.RGBA{R: 20, G: 26, B: 23, A: alpha}
+				settingsBg.Refresh()
+			})
+			anim.Curve = fyne.AnimationEaseOut
+			anim.Start()
+			time.AfterFunc(230*time.Millisecond, func() {
+				settingsDrawer.Hide()
+			})
+		}
+	})
+
+	settingsHeader := container.NewBorder(
+		nil, nil,
+		widget.NewLabelWithStyle("MediaCLI Preferences", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		btnSettingsClose,
+	)
+
+	settingsBg = canvas.NewRectangle(color.RGBA{R: 20, G: 26, B: 23, A: 255})
+	settingsBg.StrokeColor = color.RGBA{R: 123, G: 198, B: 154, A: 200}
+	settingsBg.StrokeWidth = 1.2
+	settingsBg.CornerRadius = 12.0
+
+	settingsContent := container.NewBorder(
+		container.NewVBox(settingsHeader, widget.NewSeparator()),
+		nil, nil, nil,
+		container.NewVScroll(settingsFormContainer),
+	)
+
+	settingsDrawer = container.NewStack(
+		settingsBg,
+		container.NewPadded(settingsContent),
+	)
+	settingsDrawer.Hide()
+
+	animateSettingsDrawer := func(expand bool) {
+		if expand == settingsExpanded {
+			return
+		}
+		settingsExpanded = expand
+
+		if expand {
+			settingsDrawer.Show()
+		}
+
+		anim := fyne.NewAnimation(240*time.Millisecond, func(p float32) {
+			if !expand {
+				p = 1.0 - p
+			}
+			alpha := uint8(p * 255)
+			settingsBg.FillColor = color.RGBA{R: 20, G: 26, B: 23, A: alpha}
+			settingsBg.StrokeColor = color.RGBA{R: 123, G: 198, B: 154, A: uint8(p * 200)}
+			settingsBg.Refresh()
+		})
+		anim.Curve = fyne.AnimationEaseOut
+		anim.Start()
+
+		if !expand {
+			time.AfterFunc(250*time.Millisecond, func() {
+				if !settingsExpanded {
+					settingsDrawer.Hide()
+				}
+			})
+		}
 	}
 
 	btnSettings := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), func() {
-		openSettingsDialog(w, &cfg)
+		animateSettingsDrawer(!settingsExpanded)
 	})
 
 	btnPaste := widget.NewButtonWithIcon("Paste URL", theme.ContentPasteIcon(), func() {
 		if cb := w.Clipboard().Content(); cb != "" {
 			urlEntry.SetText(cb)
-			confirmPanel.Show()
+			animateConfirmDrawer(true)
 		}
 	})
 
 	btnGo := widget.NewButtonWithIcon("Configure", theme.DownloadIcon(), func() {
 		if strings.TrimSpace(urlEntry.Text) != "" {
-			confirmPanel.Show()
+			animateConfirmDrawer(true)
 		}
 	})
 	btnGo.Importance = widget.HighImportance
 
-	leftToolbar := container.NewHBox(btnSettings, widget.NewLabel(" "))
-	rightToolbar := container.NewHBox(widget.NewLabel(" "), btnPaste, widget.NewLabel(" "), btnGo)
+	leftToolbar := container.NewHBox(btnSettings, layout.NewSpacer())
+	rightToolbar := container.NewHBox(layout.NewSpacer(), btnPaste, layout.NewSpacer(), btnGo)
 
 	topBar := container.NewBorder(
 		nil, nil,
@@ -291,18 +409,23 @@ func RunGUI() {
 		widget.NewSeparator(),
 	)
 
-	mainLayout := container.NewBorder(
+	mainContent := container.NewBorder(
 		headerContainer,
 		nil, nil, nil,
 		scrollContainer,
 	)
 
-	w.SetContent(mainLayout)
+	rootStack := container.NewStack(
+		mainContent,
+		container.NewPadded(settingsDrawer),
+	)
+
+	w.SetContent(rootStack)
 	w.ShowAndRun()
 }
 
 // ============================================================================
-// Отрисовка интерактивной карточки-куба (Active Card)
+// 4. Карточка активной задачи
 // ============================================================================
 
 func createActiveDownloadCard(url string) *DownloadCard {
@@ -311,14 +434,14 @@ func createActiveDownloadCard(url string) *DownloadCard {
 		Status: "Initializing...",
 	}
 
-	cardBg := canvas.NewRectangle(color.RGBA{R: 26, G: 30, B: 40, A: 255})
-	cardBg.StrokeColor = color.RGBA{R: 0, G: 210, B: 196, A: 180}
+	cardBg := canvas.NewRectangle(color.RGBA{R: 22, G: 29, B: 25, A: 255})
+	cardBg.StrokeColor = color.RGBA{R: 123, G: 198, B: 154, A: 220}
 	cardBg.StrokeWidth = 1.5
-	cardBg.CornerRadius = 10.0
+	cardBg.CornerRadius = 12.0
 
-	thumbBg := canvas.NewRectangle(color.RGBA{R: 36, G: 42, B: 56, A: 255})
-	thumbBg.SetMinSize(fyne.NewSize(280, 130))
-	thumbBg.CornerRadius = 6.0
+	thumbBg := canvas.NewRectangle(color.RGBA{R: 30, G: 40, B: 34, A: 255})
+	thumbBg.SetMinSize(fyne.NewSize(300, 135))
+	thumbBg.CornerRadius = 8.0
 
 	mediaIcon := widget.NewIcon(theme.MediaPlayIcon())
 	thumbStack := container.NewStack(thumbBg, container.NewCenter(mediaIcon))
@@ -327,7 +450,7 @@ func createActiveDownloadCard(url string) *DownloadCard {
 	titleLabel.Truncation = fyne.TextTruncateEllipsis
 	card.TitleLabel = titleLabel
 
-	stageLabel := widget.NewLabel("Initializing pipeline...")
+	stageLabel := widget.NewLabel("Starting engine...")
 	stageLabel.TextStyle = fyne.TextStyle{Italic: true}
 	stageLabel.Truncation = fyne.TextTruncateEllipsis
 	card.StageLabel = stageLabel
@@ -351,18 +474,18 @@ func createActiveDownloadCard(url string) *DownloadCard {
 }
 
 // ============================================================================
-// Отрисовка карточки завершенной истории
+// 5. Карточка истории
 // ============================================================================
 
-func createHistoryCard(entry core.HistoryEntry) fyne.CanvasObject {
-	cardBg := canvas.NewRectangle(color.RGBA{R: 23, G: 26, B: 35, A: 255})
-	cardBg.StrokeColor = color.RGBA{R: 42, G: 48, B: 64, A: 255}
+func createHistoryCard(parent fyne.Window, entry core.HistoryEntry, cfg *core.Config, onDeleted func()) fyne.CanvasObject {
+	cardBg := canvas.NewRectangle(color.RGBA{R: 20, G: 26, B: 23, A: 255})
+	cardBg.StrokeColor = color.RGBA{R: 38, G: 50, B: 44, A: 255}
 	cardBg.StrokeWidth = 1.0
-	cardBg.CornerRadius = 10.0
+	cardBg.CornerRadius = 12.0
 
-	thumbBg := canvas.NewRectangle(color.RGBA{R: 30, G: 34, B: 46, A: 255})
-	thumbBg.SetMinSize(fyne.NewSize(280, 130))
-	thumbBg.CornerRadius = 6.0
+	thumbBg := canvas.NewRectangle(color.RGBA{R: 28, G: 36, B: 31, A: 255})
+	thumbBg.SetMinSize(fyne.NewSize(300, 135))
+	thumbBg.CornerRadius = 8.0
 
 	statusIcon := theme.ConfirmIcon()
 	if strings.Contains(strings.ToLower(entry.Status), "fail") {
@@ -382,10 +505,16 @@ func createHistoryCard(entry core.HistoryEntry) fyne.CanvasObject {
 	infoLabel.TextStyle = fyne.TextStyle{Italic: true}
 	infoLabel.Truncation = fyne.TextTruncateEllipsis
 
+	btnDelete := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+		showDeleteDialog(parent, entry, cfg, onDeleted)
+	})
+
+	bottomRow := container.NewBorder(nil, nil, nil, btnDelete, infoLabel)
+
 	cardInner := container.NewVBox(
 		thumbStack,
 		titleLabel,
-		infoLabel,
+		bottomRow,
 	)
 
 	return container.NewPadded(container.NewStack(
@@ -394,8 +523,40 @@ func createHistoryCard(entry core.HistoryEntry) fyne.CanvasObject {
 	))
 }
 
+func showDeleteDialog(parent fyne.Window, entry core.HistoryEntry, cfg *core.Config, onDeleted func()) {
+	var deleteChoice *widget.RadioGroup
+	deleteChoice = widget.NewRadioGroup([]string{
+		"1. Remove from history only (Keep file on disk)",
+		"2. Delete file from disk & remove from history",
+	}, func(string) {})
+	deleteChoice.SetSelected("1. Remove from history only (Keep file on disk)")
+
+	messageLabel := widget.NewLabel(fmt.Sprintf("Target: %s\nSelect deletion action:", entry.Target))
+	messageLabel.Wrapping = fyne.TextWrapWord
+
+	content := container.NewVBox(
+		messageLabel,
+		widget.NewSeparator(),
+		deleteChoice,
+	)
+
+	d := dialog.NewCustomConfirm("Delete Item", "Confirm Delete", "Cancel", container.NewPadded(content), func(confirm bool) {
+		if !confirm {
+			return
+		}
+		deleteFromDisk := (deleteChoice.Selected == "2. Delete file from disk & remove from history")
+		_ = core.DeleteHistoryItem(entry, deleteFromDisk, cfg.DownloadDir)
+		if onDeleted != nil {
+			onDeleted()
+		}
+	}, parent)
+
+	d.Resize(fyne.NewSize(540, 270))
+	d.Show()
+}
+
 // ============================================================================
-// Фоновый воркер выполнения задачи
+// 6. Фоновый исполнитель загрузки
 // ============================================================================
 
 func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core.Config, url string) {
@@ -458,20 +619,26 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 }
 
 // ============================================================================
-// Вкладки настроек программы (Modern Settings Tabs)
+// 7. Полнофункциональная боковая панель настроек
 // ============================================================================
 
-func openSettingsDialog(parent fyne.Window, cfg *core.Config) {
+func buildFullSettingsView(cfg *core.Config, onSave func()) fyne.CanvasObject {
 	dirEntry := widget.NewEntry()
 	dirEntry.SetText(cfg.DownloadDir)
 
 	proxyEntry := widget.NewEntry()
 	proxyEntry.SetText(cfg.ProxyURL)
 
+	langSelect := widget.NewSelect([]string{"en", "ru"}, func(s string) {
+		cfg.Language = s
+	})
+	langSelect.SetSelected(cfg.Language)
+
 	generalTab := container.NewVBox(
 		widget.NewForm(
 			widget.NewFormItem("Download Directory", dirEntry),
 			widget.NewFormItem("Network Proxy URL", proxyEntry),
+			widget.NewFormItem("Interface Language", langSelect),
 		),
 	)
 
@@ -506,13 +673,19 @@ func openSettingsDialog(parent fyne.Window, cfg *core.Config) {
 	fragmentsSelect := widget.NewSelect([]string{"2", "4", "8", "16"}, func(string) {})
 	fragmentsSelect.SetSelected(fmt.Sprintf("%d", cfg.ConcurrentFragments))
 
-	noMtimeCheck := widget.NewCheck("Keep current download timestamp (--no-mtime)", func(bool) {})
+	noMtimeCheck := widget.NewCheck("Keep current download timestamp (--no-mtime)", func(b bool) {
+		cfg.NoMtime = b
+	})
 	noMtimeCheck.SetChecked(cfg.NoMtime)
 
-	winNamesCheck := widget.NewCheck("Safe NTFS/FAT32 filenames (--windows-filenames)", func(bool) {})
+	winNamesCheck := widget.NewCheck("Safe NTFS/FAT32 filenames (--windows-filenames)", func(b bool) {
+		cfg.WindowsFilenames = b
+	})
 	winNamesCheck.SetChecked(cfg.WindowsFilenames)
 
-	archiveCheck := widget.NewCheck("Enable download deduplication archive (--download-archive)", func(bool) {})
+	archiveCheck := widget.NewCheck("Enable download deduplication archive (--download-archive)", func(b bool) {
+		cfg.UseArchive = b
+	})
 	archiveCheck.SetChecked(cfg.UseArchive)
 
 	accelTab := container.NewVBox(
@@ -524,10 +697,14 @@ func openSettingsDialog(parent fyne.Window, cfg *core.Config) {
 		archiveCheck,
 	)
 
-	cookieModeSelect := widget.NewSelect([]string{"none", "browser", "file"}, func(string) {})
+	cookieModeSelect := widget.NewSelect([]string{"none", "browser", "file"}, func(s string) {
+		cfg.CookiesMode = s
+	})
 	cookieModeSelect.SetSelected(cfg.CookiesMode)
 
-	cookieBrowserSelect := widget.NewSelect(core.SupportedBrowsers, func(string) {})
+	cookieBrowserSelect := widget.NewSelect(core.SupportedBrowsers, func(s string) {
+		cfg.CookiesBrowser = s
+	})
 	cookieBrowserSelect.SetSelected(cfg.CookiesBrowser)
 
 	cookieFileEntry := widget.NewEntry()
@@ -541,17 +718,7 @@ func openSettingsDialog(parent fyne.Window, cfg *core.Config) {
 		),
 	)
 
-	tabs := container.NewAppTabs(
-		container.NewTabItem("General", container.NewPadded(generalTab)),
-		container.NewTabItem("Codecs", container.NewPadded(codecsTab)),
-		container.NewTabItem("Acceleration", container.NewPadded(accelTab)),
-		container.NewTabItem("Cookies", container.NewPadded(cookiesTab)),
-	)
-
-	d := dialog.NewCustomConfirm("MediaCLI Preferences", "Save Changes", "Cancel", container.NewPadded(tabs), func(save bool) {
-		if !save {
-			return
-		}
+	btnSave := widget.NewButtonWithIcon("Save All Preferences", theme.ConfirmIcon(), func() {
 		cfg.DownloadDir = strings.TrimSpace(dirEntry.Text)
 		cfg.ProxyURL = strings.TrimSpace(proxyEntry.Text)
 		if fragmentsSelect.Selected != "" {
@@ -560,11 +727,6 @@ func openSettingsDialog(parent fyne.Window, cfg *core.Config) {
 		cfg.AudioFormat = audioFmtSelect.Selected
 		cfg.SubLangs = strings.TrimSpace(subLangsEntry.Text)
 		cfg.ThumbnailFormat = thumbFmtSelect.Selected
-		cfg.NoMtime = noMtimeCheck.Checked
-		cfg.WindowsFilenames = winNamesCheck.Checked
-		cfg.UseArchive = archiveCheck.Checked
-		cfg.CookiesMode = cookieModeSelect.Selected
-		cfg.CookiesBrowser = cookieBrowserSelect.Selected
 		cfg.CookiesFile = strings.TrimSpace(cookieFileEntry.Text)
 
 		for _, k := range presetKeys {
@@ -574,9 +736,22 @@ func openSettingsDialog(parent fyne.Window, cfg *core.Config) {
 			}
 		}
 
-		_ = core.SaveConfig(*cfg)
-	}, parent)
+		if onSave != nil {
+			onSave()
+		}
+	})
+	btnSave.Importance = widget.HighImportance
 
-	d.Resize(fyne.NewSize(640, 480))
-	d.Show()
+	tabs := container.NewAppTabs(
+		container.NewTabItem("General", container.NewPadded(generalTab)),
+		container.NewTabItem("Codecs", container.NewPadded(codecsTab)),
+		container.NewTabItem("Acceleration", container.NewPadded(accelTab)),
+		container.NewTabItem("Cookies", container.NewPadded(cookiesTab)),
+	)
+
+	return container.NewVBox(
+		tabs,
+		widget.NewSeparator(),
+		container.NewHBox(layout.NewSpacer(), btnSave, layout.NewSpacer()),
+	)
 }

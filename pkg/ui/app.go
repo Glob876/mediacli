@@ -58,6 +58,7 @@ func RunApp() error {
 			ID:       "local",
 			TitleKey: "tab_local",
 			Items: []MenuItem{
+				{LabelKey: "menu_aspect_ratio", Action: ScreenAspectRatio},
 				{LabelKey: "menu_convert", Action: ScreenConvert},
 				{LabelKey: "menu_trim", Action: ScreenTrim},
 			},
