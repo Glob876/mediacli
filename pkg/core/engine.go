@@ -45,6 +45,8 @@ type Config struct {
 	ThumbnailFormat       string                 `json:"thumbnail_format"`
 	UseArchive            bool                   `json:"use_archive"`
 	ArchiveFile           string                 `json:"archive_file"`
+	UseFFmpegSuffix       bool                   `json:"use_ffmpeg_suffix"`
+	OverwriteOriginal     bool                   `json:"overwrite_original"`
 	DownloadPresets       []DownloadPreset       `json:"download_presets"`
 	DefaultDownloadPreset string                 `json:"default_download_preset"`
 	PresetDefaults        map[string]interface{} `json:"preset_defaults"`
@@ -107,6 +109,8 @@ func GetDefaultConfig() Config {
 		ThumbnailFormat:       "png",
 		UseArchive:            false,
 		ArchiveFile:           filepath.Join(configDir, "archive.txt"),
+		UseFFmpegSuffix:       true,
+		OverwriteOriginal:     false,
 		DownloadPresets:       []DownloadPreset{},
 		DefaultDownloadPreset: "",
 		PresetDefaults:        GetInitialPresetFields(),
@@ -192,6 +196,100 @@ func SaveConfig(cfg Config) error {
 	}
 
 	return os.WriteFile(filepath.Join(dir, "config.json"), data, 0644)
+}
+
+// ============================================================================
+// План именования выходных файлов FFmpeg
+// ============================================================================
+
+type FFmpegOutputPlan struct {
+	TempOutputPath string
+	FinalPath      string
+	TargetDisplay  string
+	OnComplete     func(exitCode int)
+}
+
+func PrepareFFmpegOutput(inputPath string, targetExt string, defaultSuffix string, cfg Config) FFmpegOutputPlan {
+	inputExt := filepath.Ext(inputPath)
+	targetExtWithDot := targetExt
+	if !strings.HasPrefix(targetExtWithDot, ".") {
+		targetExtWithDot = "." + targetExtWithDot
+	}
+	base := strings.TrimSuffix(inputPath, inputExt)
+	dir := filepath.Dir(inputPath)
+	filename := filepath.Base(base)
+
+	// Режим 1: Полная замена исходного файла
+	if cfg.OverwriteOriginal {
+		finalTarget := filepath.Join(dir, filename+targetExtWithDot)
+
+		// Если расширение и имя файла совпадают — рендерим во временный файл, затем заменяем оригинал
+		if strings.EqualFold(filepath.Clean(inputPath), filepath.Clean(finalTarget)) {
+			tempPath := filepath.Join(dir, fmt.Sprintf(".%s_tmp_%d%s", filename, time.Now().UnixNano()%100000, targetExtWithDot))
+			return FFmpegOutputPlan{
+				TempOutputPath: tempPath,
+				FinalPath:      finalTarget,
+				TargetDisplay:  filepath.Base(finalTarget) + " (Replace Original)",
+				OnComplete: func(exitCode int) {
+					if exitCode == 0 {
+						_ = os.Remove(inputPath)
+						_ = os.Rename(tempPath, finalTarget)
+					} else {
+						_ = os.Remove(tempPath)
+					}
+				},
+			}
+		}
+
+		// Если расширение отличается, но включена замена оригинала
+		tempPath := finalTarget
+		if _, err := os.Stat(finalTarget); err == nil {
+			tempPath = filepath.Join(dir, fmt.Sprintf(".%s_tmp_%d%s", filename, time.Now().UnixNano()%100000, targetExtWithDot))
+		}
+
+		return FFmpegOutputPlan{
+			TempOutputPath: tempPath,
+			FinalPath:      finalTarget,
+			TargetDisplay:  filepath.Base(finalTarget) + " (Replace Original)",
+			OnComplete: func(exitCode int) {
+				if exitCode == 0 {
+					if tempPath != finalTarget {
+						_ = os.Remove(finalTarget)
+						_ = os.Rename(tempPath, finalTarget)
+					}
+					if !strings.EqualFold(filepath.Clean(inputPath), filepath.Clean(finalTarget)) {
+						_ = os.Remove(inputPath)
+					}
+				} else {
+					if tempPath != finalTarget {
+						_ = os.Remove(tempPath)
+					}
+				}
+			},
+		}
+	}
+
+	// Режим 2: Обычное сохранение (без удаления исходника)
+	useSuffix := cfg.UseFFmpegSuffix
+	isDiffExt := !strings.EqualFold(inputExt, targetExtWithDot)
+
+	var finalName string
+	if !useSuffix && isDiffExt {
+		// Суффиксы отключены и расширение отличается -> чистое имя (file.mp4)
+		finalName = filename + targetExtWithDot
+	} else {
+		// Суффиксы включены ИЛИ расширение совпадает (суффикс обязателен, чтобы не перезаписать исходник)
+		finalName = filename + defaultSuffix + targetExtWithDot
+	}
+
+	finalPath := filepath.Join(dir, finalName)
+
+	return FFmpegOutputPlan{
+		TempOutputPath: finalPath,
+		FinalPath:      finalPath,
+		TargetDisplay:  finalName,
+		OnComplete:     nil,
+	}
 }
 
 // ============================================================================
@@ -457,7 +555,6 @@ func DeleteHistoryItem(entry HistoryEntry, deleteFileFromDisk bool, downloadDir 
 
 	for _, e := range entries {
 		if e.Time == entry.Time && e.Source == entry.Source && e.Target == entry.Target {
-			// Если запрошено физическое удаление файла с диска
 			if deleteFileFromDisk && entry.Target != "" {
 				targetPath := entry.Target
 				if !filepath.IsAbs(targetPath) {

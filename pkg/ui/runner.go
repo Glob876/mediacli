@@ -12,6 +12,10 @@ import (
 )
 
 func RunWithLog(s tcell.Screen, cfg *core.Config, cmdList []string, opType, source, target string) {
+	RunWithLogHook(s, cfg, cmdList, opType, source, target, nil)
+}
+
+func RunWithLogHook(s tcell.Screen, cfg *core.Config, cmdList []string, opType, source, target string, onComplete func(exitCode int)) {
 	s.HideCursor()
 
 	cmd := exec.Command(cmdList[0], cmdList[1:]...)
@@ -97,6 +101,10 @@ func RunWithLog(s tcell.Screen, cfg *core.Config, cmdList []string, opType, sour
 		case <-ticker.C:
 			renderRunnerUI(s, cfg, lines, currentStage, opType, source, pct, speedStr, showRawLogs)
 		}
+	}
+
+	if onComplete != nil {
+		onComplete(exitCode)
 	}
 
 	statusMsg := T(*cfg, "log_finished_ok")

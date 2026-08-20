@@ -837,8 +837,8 @@ func ScreenAspectRatio(s tcell.Screen, cfg *core.Config) {
 				}
 			case 4: // Run
 				outW, outH := calcTargetDimensions(srcW, srcH, rW, rH, resIdx)
-				cmdList, outF := buildAspectRatioFFmpegArgs(p, outW, outH, rW, rH, modeIdx, codecIdx)
-				RunWithLog(s, cfg, cmdList, "Aspect Ratio Crop", filepath.Base(p), filepath.Base(outF))
+				cmdList, plan := buildAspectRatioFFmpegArgs(p, outW, outH, rW, rH, modeIdx, codecIdx, *cfg)
+				RunWithLogHook(s, cfg, cmdList, "Aspect Ratio Crop", filepath.Base(p), plan.TargetDisplay, plan.OnComplete)
 				return true
 			case 5: // Cancel
 				return true
@@ -1131,7 +1131,7 @@ func roundEven(val float64) int {
 	return i
 }
 
-func buildAspectRatioFFmpegArgs(inputPath string, outW, outH, rW, rH, modeIdx, codecIdx int) ([]string, string) {
+func buildAspectRatioFFmpegArgs(inputPath string, outW, outH, rW, rH, modeIdx, codecIdx int, cfg core.Config) ([]string, core.FFmpegOutputPlan) {
 	ext := ".mp4"
 	var codecFlags []string
 
@@ -1169,14 +1169,13 @@ func buildAspectRatioFFmpegArgs(inputPath string, outW, outH, rW, rH, modeIdx, c
 		filterArgs = []string{"-vf", fmt.Sprintf("scale=%d:%d,setsar=1", outW, outH)}
 	}
 
-	base := strings.TrimSuffix(inputPath, filepath.Ext(inputPath))
-	outPath := base + modeSuffix + ext
+	plan := core.PrepareFFmpegOutput(inputPath, ext, modeSuffix, cfg)
 
 	cmdList := append([]string{"ffmpeg", "-y", "-i", inputPath}, filterArgs...)
 	cmdList = append(cmdList, codecFlags...)
-	cmdList = append(cmdList, outPath)
+	cmdList = append(cmdList, plan.TempOutputPath)
 
-	return cmdList, outPath
+	return cmdList, plan
 }
 
 func ScreenConvert(s tcell.Screen, cfg *core.Config) {
@@ -1206,12 +1205,11 @@ func ScreenConvert(s tcell.Screen, cfg *core.Config) {
 	}
 
 	preset := core.ConvertPresets[pi]
-	base := strings.TrimSuffix(p, filepath.Ext(p))
-	outF := base + preset.Suffix + "." + preset.Ext
+	plan := core.PrepareFFmpegOutput(p, preset.Ext, preset.Suffix, *cfg)
 
 	cmdList := append([]string{"ffmpeg", "-y", "-i", p}, preset.FFmpegFlags...)
-	cmdList = append(cmdList, outF)
-	RunWithLog(s, cfg, cmdList, "Convert File", filepath.Base(p), filepath.Base(outF))
+	cmdList = append(cmdList, plan.TempOutputPath)
+	RunWithLogHook(s, cfg, cmdList, "Convert File", filepath.Base(p), plan.TargetDisplay, plan.OnComplete)
 }
 
 func ScreenTrim(s tcell.Screen, cfg *core.Config) {
@@ -1240,8 +1238,7 @@ func ScreenTrim(s tcell.Screen, cfg *core.Config) {
 	}
 
 	ext := filepath.Ext(p)
-	base := strings.TrimSuffix(p, ext)
-	outF := base + "_trimmed" + ext
+	plan := core.PrepareFFmpegOutput(p, ext, "_trimmed", *cfg)
 
 	cmdList := []string{"ffmpeg", "-y", "-ss", strings.TrimSpace(startT)}
 	if strings.TrimSpace(endT) != "" {
@@ -1249,12 +1246,12 @@ func ScreenTrim(s tcell.Screen, cfg *core.Config) {
 	}
 	cmdList = append(cmdList, "-i", p)
 	if m == 0 {
-		cmdList = append(cmdList, "-c", "copy", outF)
+		cmdList = append(cmdList, "-c", "copy", plan.TempOutputPath)
 	} else {
-		cmdList = append(cmdList, "-c:v", "libx264", "-c:a", "aac", outF)
+		cmdList = append(cmdList, "-c:v", "libx264", "-c:a", "aac", plan.TempOutputPath)
 	}
 
-	RunWithLog(s, cfg, cmdList, "Trim Media", filepath.Base(p), filepath.Base(outF))
+	RunWithLogHook(s, cfg, cmdList, "Trim Media", filepath.Base(p), plan.TargetDisplay, plan.OnComplete)
 }
 
 func ScreenProbe(s tcell.Screen, cfg *core.Config) {
@@ -1363,11 +1360,22 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 			if p, ok := core.VideoPresets[cfg.VideoPreset]; ok {
 				pName = PresetDisplayName(*cfg, p)
 			}
+			suffixStr := noStr
+			if cfg.UseFFmpegSuffix {
+				suffixStr = yesStr
+			}
+			overwriteStr := noStr
+			if cfg.OverwriteOriginal {
+				overwriteStr = yesStr
+			}
+
 			rightItems = []settingItem{
 				{Label: T(*cfg, "settings_preset", pName), CLI: "--recode-video", Key: "video_preset"},
 				{Label: T(*cfg, "settings_audio_format", cfg.AudioFormat), CLI: "--audio-format", Key: "audio_format"},
 				{Label: T(*cfg, "settings_sub_langs", cfg.SubLangs), CLI: "--sub-langs", Key: "sub_langs"},
 				{Label: T(*cfg, "settings_thumb_fmt", strings.ToUpper(cfg.ThumbnailFormat)), CLI: "--convert-thumbnails", Key: "thumb_fmt"},
+				{Label: T(*cfg, "settings_ffmpeg_suffix", suffixStr), CLI: "clean_names", Key: "ffmpeg_suffix"},
+				{Label: T(*cfg, "settings_overwrite_orig", overwriteStr), CLI: "replace_src", Key: "overwrite_orig"},
 			}
 		case 2: // Acceleration & Network
 			noMtimeStr := noStr
@@ -1531,6 +1539,12 @@ func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 			cfg.ThumbnailFormat = fmts[fi]
 			_ = core.SaveConfig(*cfg)
 		}
+	case "ffmpeg_suffix":
+		cfg.UseFFmpegSuffix = !cfg.UseFFmpegSuffix
+		_ = core.SaveConfig(*cfg)
+	case "overwrite_orig":
+		cfg.OverwriteOriginal = !cfg.OverwriteOriginal
+		_ = core.SaveConfig(*cfg)
 	case "frags":
 		choices := []string{"2 streams", "4 streams (default)", "8 streams (fast)", "16 streams (max)"}
 		vals := []int{2, 4, 8, 16}
