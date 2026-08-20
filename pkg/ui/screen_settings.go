@@ -2,6 +2,8 @@ package ui
 
 import (
 	"mediacli/pkg/core"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -113,13 +115,36 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 			if cfg.UseTerminalBG {
 				bgName = T(*cfg, "bg_option_keep")
 			}
+			
 			rightItems = []settingItem{
 				{Label: T(*cfg, "settings_theme", themeName), CLI: "color_scheme", Key: "theme"},
 				{Label: T(*cfg, "settings_bg", bgName), CLI: "transparency", Key: "terminal_bg"},
 				{Label: T(*cfg, "settings_style", cfg.ProgressStyle), CLI: "style", Key: "progress_style"},
 				{Label: T(*cfg, "settings_bg_queue_max", cfg.BGQueueMax), CLI: "queue_slots", Key: "queue_max"},
-				{Label: T(*cfg, "settings_reset"), CLI: "factory_wipe", Key: "reset"},
 			}
+
+			modeName := "ASCII"
+			if cfg.LogoMode == "image" {
+				modeName = T(*cfg, "logo_mode_img")
+			}
+			rightItems = append(rightItems, settingItem{Label: T(*cfg, "settings_logo_mode", modeName), CLI: "logo", Key: "logo_mode"})
+
+			if cfg.LogoMode == "ascii" {
+				rightItems = append(rightItems, settingItem{Label: T(*cfg, "settings_logo_ascii", cfg.LogoAsciiPreset), CLI: "ascii", Key: "logo_ascii"})
+			} else {
+				imgName := "(none)"
+				if cfg.LogoImagePath != "" {
+					imgName = filepath.Base(cfg.LogoImagePath)
+				}
+				protoName := T(*cfg, "logo_proto_"+cfg.LogoProtocol)
+				if protoName == "logo_proto_"+cfg.LogoProtocol {
+					protoName = cfg.LogoProtocol
+				}
+				rightItems = append(rightItems, settingItem{Label: T(*cfg, "settings_logo_protocol", protoName), CLI: "protocol", Key: "logo_protocol"})
+				rightItems = append(rightItems, settingItem{Label: T(*cfg, "settings_logo_image", imgName), CLI: "image", Key: "logo_img"})
+			}
+
+			rightItems = append(rightItems, settingItem{Label: T(*cfg, "settings_reset"), CLI: "factory_wipe", Key: "reset"})
 		}
 
 		rightX := divX + 3
@@ -297,6 +322,61 @@ func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 		if si >= 0 {
 			cfg.ProgressStyle = styles[si]
 			_ = core.SaveConfig(*cfg)
+		}
+	case "logo_mode":
+		if cfg.LogoMode == "ascii" {
+			cfg.LogoMode = "image"
+		} else {
+			cfg.LogoMode = "ascii"
+		}
+		_ = core.SaveConfig(*cfg)
+	case "logo_protocol":
+		labels := []string{
+			T(*cfg, "logo_proto_kitty"),
+			T(*cfg, "logo_proto_iterm2"),
+		}
+		vals := []string{"kitty", "iterm2"}
+		idx := RunMenu(s, cfg, T(*cfg, "settings_title"), labels, "Choose Image Protocol:", T(*cfg, "footer_nav"))
+		if idx >= 0 {
+			cfg.LogoProtocol = vals[idx]
+			_ = core.SaveConfig(*cfg)
+		}
+	case "logo_ascii":
+		presets := []string{"standard", "coder_mini", "toilet", "rubifont"}
+		labels := []string{"1. Standard", "2. Coder Mini", "3. TOIlet", "4. RubiFont"}
+		idx := RunMenu(s, cfg, T(*cfg, "settings_title"), labels, "Choose Ascii Art Preset:", T(*cfg, "footer_nav"))
+		if idx >= 0 {
+			cfg.LogoAsciiPreset = presets[idx]
+			_ = core.SaveConfig(*cfg)
+		}
+	case "logo_img":
+		logoDir := filepath.Join(core.GetConfigDir(), "logos")
+		_ = os.MkdirAll(logoDir, 0755)
+		
+		files, _ := os.ReadDir(logoDir)
+		var validFiles []string
+		for _, f := range files {
+			if !f.IsDir() {
+				ext := strings.ToLower(filepath.Ext(f.Name()))
+				if ext == ".png" || ext == ".jpg" || ext == ".jpeg" {
+					validFiles = append(validFiles, f.Name())
+				}
+			}
+		}
+
+		if len(validFiles) == 0 {
+			ShowMessage(s, cfg, T(*cfg, "settings_title"), []string{
+				T(*cfg, "logo_no_images", logoDir),
+				"",
+				T(*cfg, "logo_warning"),
+			}, T(*cfg, "footer_message"))
+		} else {
+			idx := RunMenu(s, cfg, T(*cfg, "settings_title"), validFiles, T(*cfg, "logo_warning"), T(*cfg, "footer_nav"))
+			if idx >= 0 {
+				cfg.LogoImagePath = filepath.Join(logoDir, validFiles[idx])
+				cfg.LogoMode = "image"
+				_ = core.SaveConfig(*cfg)
+			}
 		}
 	case "reset":
 		cfgDefault := core.GetDefaultConfig()
