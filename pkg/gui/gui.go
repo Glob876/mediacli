@@ -565,6 +565,7 @@ func showDeleteDialog(parent fyne.Window, entry core.HistoryEntry, cfg *core.Con
 func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core.Config, url string) {
 	outDir := core.ParseUserPath(cfg.DownloadDir)
 	_ = os.MkdirAll(outDir, 0755)
+	startTime := time.Now()
 
 	cmdList := append([]string{"yt-dlp"}, core.BuildYtDlpArgs(preset, cfg, outDir, false)...)
 	cmdList = append(cmdList, url)
@@ -666,6 +667,117 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 	exitCode := 0
 	if err := cmd.Wait(); err != nil {
 		exitCode = 1
+	}
+
+	// Внешний FFmpeg режим: yt-dlp уже скачал merge-файл, теперь транскодируем отдельным ffmpeg с паритетом байтов/логов
+	if exitCode == 0 && core.IsExternalTranscodeEnabled(cfg, preset.Fields) {
+		// пробуем взять путь из TitleLabel или последнего Destination
+		candidate := ""
+		titleText := card.TitleLabel.Text
+		if titleText != "" && titleText != "Downloading..." && titleText != "Completed successfully" {
+			candidate = filepath.Join(outDir, titleText)
+			if _, err := os.Stat(candidate); err != nil {
+				candidate = ""
+			}
+		}
+		if candidate == "" {
+			candidate = core.FindNewestDownloadedFile(outDir, startTime)
+		}
+		presetID := core.GetString(preset.Fields, "video_preset")
+		if presetID == "" {
+			presetID = cfg.VideoPreset
+		}
+		ext, ffFlags, ok := core.GetExternalFFmpegPlan(presetID, preset.Fields)
+		if ok && candidate != "" {
+			plan := core.PrepareFFmpegOutput(candidate, ext, "", cfg)
+			ffCmdList := []string{"ffmpeg", "-y", "-i", candidate}
+			ffCmdList = append(ffCmdList, ffFlags...)
+			ffCmdList = append(ffCmdList, plan.TempOutputPath)
+			synth := fmt.Sprintf("[VideoConvertor] Converting %s → %s via external FFmpeg", filepath.Base(candidate), filepath.Base(plan.FinalPath))
+			card.StageLabel.SetText(core.DetectStage(synth, currentStage))
+			ffCmd := exec.Command(ffCmdList[0], ffCmdList[1:]...)
+			ffOut, ferr := ffCmd.StdoutPipe()
+			if ferr == nil {
+				ffCmd.Stderr = ffCmd.Stdout
+				if ferr = ffCmd.Start(); ferr == nil {
+					ffLeftover := ""
+					ffBuf := make([]byte, 4096)
+					for {
+						n, rerr := ffOut.Read(ffBuf)
+						if n > 0 {
+							chunk := ffLeftover + string(ffBuf[:n])
+							chunk = strings.ReplaceAll(chunk, "\r", "\n")
+							parts := strings.Split(chunk, "\n")
+							ffLeftover = parts[len(parts)-1]
+							for _, raw := range parts[:len(parts)-1] {
+								line := strings.TrimSpace(raw)
+								if line == "" {
+									continue
+								}
+								currentStage = core.DetectStage(line, currentStage)
+								card.StageLabel.SetText(currentStage)
+								if pct, speed, ok := core.ExtractProgress(line); ok {
+									card.ProgressBar.SetValue(pct / 100.0)
+									if speed != "" {
+										card.StageLabel.SetText(fmt.Sprintf("%s (%s)", currentStage, speed))
+									}
+								}
+							}
+							if rerr != nil {
+								ffLeftover = strings.TrimSpace(ffLeftover)
+								if ffLeftover != "" {
+									line := ffLeftover
+									currentStage = core.DetectStage(line, currentStage)
+									card.StageLabel.SetText(currentStage)
+									if pct, speed, ok := core.ExtractProgress(line); ok {
+										card.ProgressBar.SetValue(pct / 100.0)
+										if speed != "" {
+											card.StageLabel.SetText(fmt.Sprintf("%s (%s)", currentStage, speed))
+										}
+									}
+								}
+								break
+							}
+						}
+						if rerr != nil {
+							if rerr != io.EOF && ffLeftover != "" {
+								ffLeftover = strings.TrimSpace(ffLeftover)
+								if ffLeftover != "" {
+									line := ffLeftover
+									currentStage = core.DetectStage(line, currentStage)
+									card.StageLabel.SetText(currentStage)
+								}
+							} else if rerr == io.EOF && ffLeftover != "" {
+								ffLeftover = strings.TrimSpace(ffLeftover)
+								if ffLeftover != "" {
+									line := ffLeftover
+									currentStage = core.DetectStage(line, currentStage)
+									card.StageLabel.SetText(currentStage)
+								}
+							}
+							break
+						}
+					}
+					ffExit := 0
+					if err := ffCmd.Wait(); err != nil {
+						ffExit = 1
+					}
+					if plan.OnComplete != nil {
+						plan.OnComplete(ffExit)
+					} else if ffExit == 0 && candidate != plan.FinalPath && candidate != plan.TempOutputPath {
+						if _, err := os.Stat(plan.FinalPath); err == nil {
+							if plan.TempOutputPath == plan.FinalPath && !strings.EqualFold(filepath.Clean(candidate), filepath.Clean(plan.FinalPath)) {
+								_ = os.Remove(candidate)
+							}
+						}
+					}
+					exitCode = ffExit
+					if ffExit == 0 {
+						card.TitleLabel.SetText(filepath.Base(plan.FinalPath))
+					}
+				}
+			}
+		}
 	}
 
 	if exitCode == 0 {

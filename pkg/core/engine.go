@@ -55,6 +55,7 @@ type Config struct {
 	DownloadPresets       []DownloadPreset       `json:"download_presets"`
 	DefaultDownloadPreset string                 `json:"default_download_preset"`
 	PresetDefaults        map[string]interface{} `json:"preset_defaults"`
+	TranscodeMode         string                 `json:"transcode_mode"` // "embedded" (yt-dlp --recode) | "external" (yt-dlp merge + ffmpeg)
 }
 
 type DownloadPreset struct {
@@ -123,6 +124,7 @@ func GetDefaultConfig() Config {
 		DownloadPresets:       []DownloadPreset{},
 		DefaultDownloadPreset: "",
 		PresetDefaults:        GetInitialPresetFields(),
+		TranscodeMode:         "embedded",
 	}
 }
 
@@ -490,6 +492,136 @@ var ConvertPresets = []ConvertPreset{
 		Suffix:      "_audio",
 		FFmpegFlags: []string{"-vn", "-acodec", "pcm_s16le"},
 	},
+}
+
+// 2b. Внешний FFmpeg транскод (отдельно от yt-dlp) — паритет с --recode-video
+
+func IsExternalTranscodeEnabled(cfg Config, fields map[string]interface{}) bool {
+	if cfg.TranscodeMode != "external" {
+		return false
+	}
+	if GetBool(fields, "audio_only") {
+		return false
+	}
+	presetID := GetString(fields, "video_preset")
+	if presetID == "" {
+		presetID = cfg.VideoPreset
+	}
+	if presetID == "" || presetID == "default" {
+		return false
+	}
+	if presetID == "custom" {
+		return true
+	}
+	if p, ok := VideoPresets[presetID]; ok {
+		for _, a := range p.Args {
+			if a == "--recode-video" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func GetExternalFFmpegPlan(presetID string, fields map[string]interface{}) (ext string, flags []string, ok bool) {
+	if presetID == "" {
+		return "", nil, false
+	}
+	if presetID == "custom" {
+		ext = GetString(fields, "custom_ext")
+		if ext == "" {
+			ext = "mp4"
+		}
+		ext = strings.TrimPrefix(strings.TrimSpace(ext), ".")
+		raw := GetString(fields, "custom_flags")
+		if raw == "" {
+			raw = "-c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k"
+		}
+		return ext, strings.Fields(raw), true
+	}
+	p, exists := VideoPresets[presetID]
+	if !exists {
+		return "", nil, false
+	}
+	// default и audio пресеты не транскодируют — пропускаем
+	if len(p.Args) == 2 && p.Args[0] == "--merge-output-format" {
+		return "", nil, false
+	}
+	if p.Args[0] == "-x" {
+		return "", nil, false
+	}
+	var recodeExt string
+	var ffmpegRaw string
+	for i, a := range p.Args {
+		if a == "--recode-video" && i+1 < len(p.Args) {
+			recodeExt = strings.TrimPrefix(p.Args[i+1], ".")
+		}
+		if a == "--postprocessor-args" && i+1 < len(p.Args) {
+			v := p.Args[i+1]
+			if strings.HasPrefix(v, "ffmpeg:") {
+				ffmpegRaw = strings.TrimPrefix(v, "ffmpeg:")
+			} else {
+				ffmpegRaw = v
+			}
+		}
+	}
+	if recodeExt == "" {
+		recodeExt = "mp4"
+	}
+	if ffmpegRaw == "" {
+		return "", nil, false
+	}
+	return recodeExt, strings.Fields(ffmpegRaw), true
+}
+
+func FindNewestDownloadedFile(outDir string, before time.Time) string {
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return ""
+	}
+	var bestPath string
+	var bestTime time.Time
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		p := filepath.Join(outDir, e.Name())
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		mt := info.ModTime()
+		if mt.Before(before) {
+			continue
+		}
+		if bestPath == "" || mt.After(bestTime) {
+			bestPath = p
+			bestTime = mt
+		}
+	}
+	return bestPath
+}
+
+func ParseDestinationFromLogs(lines []string) string {
+	// Ищет последний "Destination:" из логов yt-dlp
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := lines[i]
+		if strings.Contains(l, "Destination:") {
+			parts := strings.SplitN(l, "Destination:", 2)
+			if len(parts) == 2 {
+				return strings.TrimSpace(parts[1])
+			}
+		}
+		if strings.Contains(l, "Merging formats into") {
+			parts := strings.SplitN(l, "Merging formats into", 2)
+			if len(parts) == 2 {
+				s := strings.TrimSpace(parts[1])
+				s = strings.Trim(s, "\"'")
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 // 3. История операций и функции удаления
@@ -1155,7 +1287,10 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 				vPresetKey = "default"
 			}
 
-			if vPresetKey == "custom" {
+			if IsExternalTranscodeEnabled(cfg, f) {
+				// Внешний ffmpeg: yt-dlp только скачивает и мержит (без --recode), транскод отдельным ffmpeg → паритет байтов/логов
+				cmd = append(cmd, "--merge-output-format", "mp4")
+			} else if vPresetKey == "custom" {
 				ext := GetString(f, "custom_ext")
 				if ext == "" {
 					ext = "mp4"

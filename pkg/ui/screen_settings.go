@@ -97,8 +97,13 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 					overwriteStr = yesStr
 				}
 
+				transcodeName := T(*cfg, "transcode_embedded")
+				if cfg.TranscodeMode == "external" {
+					transcodeName = T(*cfg, "transcode_external")
+				}
 				rightItems = []settingItem{
 					{Label: T(*cfg, "settings_preset", pName), CLI: "--recode-video", Key: "video_preset"},
+					{Label: T(*cfg, "settings_transcode_mode", transcodeName), CLI: "ffmpeg standalone", Key: "transcode_mode"},
 					{Label: T(*cfg, "settings_audio_format", cfg.AudioFormat), CLI: "--audio-format", Key: "audio_format"},
 					{Label: T(*cfg, "settings_sub_langs", cfg.SubLangs), CLI: "--sub-langs", Key: "sub_langs"},
 					{Label: T(*cfg, "settings_thumb_fmt", strings.ToUpper(cfg.ThumbnailFormat)), CLI: "--convert-thumbnails", Key: "thumb_fmt"},
@@ -312,6 +317,20 @@ func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 			pi := RunMenu(s, cfg, T(*cfg, "settings_title"), pNames, "Choose Default Video Codec (1. MP4 / 2. MKV):", T(*cfg, "footer_nav"))
 			if pi >= 0 {
 				cfg.VideoPreset = keys[pi]
+				_ = core.SaveConfig(*cfg)
+			}
+		case "transcode_mode":
+			opts := []string{T(*cfg, "transcode_embedded"), T(*cfg, "transcode_external")}
+			vals := []string{"embedded", "external"}
+			cur := 0
+			if cfg.TranscodeMode == "external" {
+				cur = 1
+			}
+			ti := RunMenu(s, cfg, T(*cfg, "settings_title"), opts, "Transcode engine (embedded = yt-dlp --recode, external = yt-dlp merge + ffmpeg standalone):", T(*cfg, "footer_nav"))
+			// RunMenu не поддерживает pre-select, но показываем текущий в заголовке
+			_ = cur
+			if ti >= 0 {
+				cfg.TranscodeMode = vals[ti]
 				_ = core.SaveConfig(*cfg)
 			}
 		case "audio_format":

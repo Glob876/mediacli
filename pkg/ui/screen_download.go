@@ -63,9 +63,13 @@ func ScreenVideo(s tcell.Screen, cfg *core.Config) {
 		preset = *pObj
 	}
 
-	cmdList := append([]string{"yt-dlp"}, core.BuildYtDlpArgs(preset, *cfg, outDir, false)...)
-	cmdList = append(cmdList, url)
-	RunWithLog(s, cfg, cmdList, "Download Video", url, outDir)
+	if core.IsExternalTranscodeEnabled(*cfg, preset.Fields) {
+		RunDownloadExternal(s, cfg, preset, outDir, url)
+	} else {
+		cmdList := append([]string{"yt-dlp"}, core.BuildYtDlpArgs(preset, *cfg, outDir, false)...)
+		cmdList = append(cmdList, url)
+		RunWithLog(s, cfg, cmdList, "Download Video", url, outDir)
+	}
 }
 
 func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields map[string]interface{}) (*core.DownloadPreset, bool) {

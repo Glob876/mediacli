@@ -82,6 +82,7 @@ DEFAULT_CONFIG = {
     "download_presets": [],
     "default_download_preset": None,
     "preset_defaults": None,
+    "transcode_mode": "embedded",  # "embedded" | "external" — см. pkg/core/engine.go
 }
 
 BROWSERS = ["chrome", "chromium", "firefox", "brave", "edge", "opera", "vivaldi", "safari"]
@@ -233,6 +234,49 @@ PRESET_CLI_MAP = {
     "mkv-av1": "mkv_av1",
     "custom": "custom",
 }
+
+def is_external_transcode_enabled(cfg: dict, fields: dict) -> bool:
+    if cfg.get("transcode_mode") != "external":
+        return False
+    if fields.get("audio_only"):
+        return False
+    preset_id = fields.get("video_preset") or cfg.get("video_preset") or "default"
+    if preset_id in ("", "default"):
+        return False
+    if preset_id == "custom":
+        return True
+    preset = VIDEO_PRESETS.get(preset_id)
+    if not preset:
+        return False
+    return any(a == "--recode-video" for a in preset.get("args", []))
+
+def get_external_ffmpeg_plan(preset_id: str, fields: dict):
+    if preset_id == "custom":
+        ext = (fields.get("custom_ext") or "mp4").strip().lstrip(".")
+        raw = fields.get("custom_flags") or "-c:v libx264 -crf 18 -c:a aac"
+        import shlex
+        return ext, shlex.split(raw)
+    preset = VIDEO_PRESETS.get(preset_id)
+    if not preset:
+        return None, None
+    args = preset.get("args", [])
+    if args[:2] == ["--merge-output-format", "mp4"] or (args and args[0] == "-x"):
+        return None, None
+    ext = "mp4"
+    raw = ""
+    for i, a in enumerate(args):
+        if a == "--recode-video" and i+1 < len(args):
+            ext = args[i+1].lstrip(".")
+        if a == "--postprocessor-args" and i+1 < len(args):
+            v = args[i+1]
+            if v.startswith("ffmpeg:"):
+                raw = v[len("ffmpeg:"):]
+            else:
+                raw = v
+    if not raw:
+        return None, None
+    import shlex
+    return ext, shlex.split(raw)
 
 CONVERT_PRESETS = [
     {
@@ -657,6 +701,9 @@ STRINGS = {
         "settings_language": "Language: {v}",
         "settings_cookies": "Cookies: {v}",
         "settings_preset": "Default Codec Preset: {v}",
+        "settings_transcode_mode": "Transcode Engine: {v}",
+        "transcode_embedded": "Embedded (yt-dlp --recode)",
+        "transcode_external": "External FFmpeg (separate, same output)",
         "settings_audio_format": "Default Audio Format: {v}",
         "settings_sub_langs": "Default Subtitle Languages: {v}",
         "settings_theme": "Color Theme: {v}",
@@ -809,6 +856,9 @@ STRINGS = {
         "settings_language": "Язык интерфейса: {v}",
         "settings_cookies": "Cookies: {v}",
         "settings_preset": "Пресет видео/FFmpeg: {v}",
+        "settings_transcode_mode": "Движок транскодинга: {v}",
+        "transcode_embedded": "Встроенный (yt-dlp --recode)",
+        "transcode_external": "Внешний FFmpeg (отдельно, тот же результат)",
         "settings_audio_format": "Формат аудио по умолчанию: {v}",
         "settings_sub_langs": "Языки субтитров по умолчанию: {v}",
         "settings_theme": "Цветовая тема: {v}",
@@ -1044,7 +1094,9 @@ def build_ytdlp_args_from_preset(preset: dict, cfg: dict, out_dir: Path, for_pla
         v_preset = f.get("video_preset", "default")
         if not v_preset:
             v_preset = "default"
-        if v_preset == "custom":
+        if is_external_transcode_enabled(cfg, f):
+            cmd += ["--merge-output-format", "mp4"]
+        elif v_preset == "custom":
             ext = (f.get("custom_ext") or "mp4").strip(".")
             flags = f.get("custom_flags") or "-c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k"
             cmd += ["--recode-video", ext, "--postprocessor-args", f"ffmpeg:{flags}"]
@@ -1437,8 +1489,10 @@ def screen_settings_vertical(stdscr, cfg: dict) -> None:
                 (t(cfg, "settings_cookies", v=cfg.get("cookies_mode", "none")), "--cookies / --cookies-from-browser", "cookies"),
             ]
         elif active_cat == "conv":
+            trans_name = t(cfg, "transcode_external") if cfg.get("transcode_mode") == "external" else t(cfg, "transcode_embedded")
             right_items = [
                 (t(cfg, "settings_preset", v=get_preset_name(cfg, cfg.get("video_preset", "davinci_dnxhr"))), "--recode-video / --postprocessor-args", "video_preset"),
+                (t(cfg, "settings_transcode_mode", v=trans_name), "ffmpeg standalone", "transcode_mode"),
                 (t(cfg, "settings_audio_format", v=cfg["audio_format"]), "--audio-format", "audio_format"),
                 (t(cfg, "settings_sub_langs", v=cfg["sub_langs"]), "--sub-langs", "sub_langs"),
             ]
@@ -1541,6 +1595,13 @@ def _handle_setting_edit(stdscr, cfg: dict, key: str):
         labels = [VIDEO_PRESETS[k]["name_ru" if cfg.get("language")=="ru" else "name_en"] for k in keys]
         pi = run_menu(stdscr, t(cfg, "settings_title"), labels, t(cfg, "footer_nav"))
         if pi is not None: cfg["video_preset"] = keys[pi]; save_config(cfg)
+    elif key == "transcode_mode":
+        opts = [t(cfg, "transcode_embedded"), t(cfg, "transcode_external")]
+        vals = ["embedded", "external"]
+        ti = run_menu(stdscr, t(cfg, "settings_title"), opts, t(cfg, "footer_nav"))
+        if ti is not None:
+            cfg["transcode_mode"] = vals[ti]
+            save_config(cfg)
     elif key == "audio_format":
         fi = run_menu(stdscr, t(cfg, "settings_title"), [a.upper() for a in AUDIO_FORMATS], t(cfg, "footer_nav"))
         if fi is not None: cfg["audio_format"] = AUDIO_FORMATS[fi]; save_config(cfg)
@@ -1939,6 +2000,68 @@ def screen_manage_download_presets(stdscr, cfg: dict) -> None:
                 cfg["download_presets"] = [pr for pr in cfg["download_presets"] if pr["id"] != p["id"]]
                 save_config(cfg)
 
+def _run_video_preset_with_external(stdscr, cfg: dict, preset: dict, out_dir: Path, url: str):
+    # Внешний FFmpeg режим: yt-dlp только мержит, затем отдельный ffmpeg — паритет байтов/логов
+    if is_external_transcode_enabled(cfg, preset.get("fields", {})):
+        fields = preset.get("fields", {})
+        preset_id = fields.get("video_preset") or cfg.get("video_preset") or "default"
+        ext, ff_flags = get_external_ffmpeg_plan(preset_id, fields)
+        if ext and ff_flags is not None:
+            import time as _time
+            since = _time.time()
+            cmd = ["yt-dlp", *build_ytdlp_args_from_preset(preset, cfg, out_dir), url]
+            run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(out_dir))
+            # поиск скачанного файла (самый свежий после since)
+            candidate = None
+            try:
+                newest = None
+                newest_mt = since
+                for p in out_dir.iterdir():
+                    if p.is_file():
+                        mt = p.stat().st_mtime
+                        if mt >= since and mt > newest_mt:
+                            newest = p
+                            newest_mt = mt
+                candidate = newest
+            except Exception:
+                candidate = None
+            if candidate is None or not candidate.exists():
+                show_message(stdscr, t(cfg, "video_title"), ["External transcode: could not locate downloaded file.", f"Looked in {out_dir}"], t(cfg, "footer_message"))
+                return
+            # собрать ffmpeg команду с паритетом имён (база + новый ext)
+            base = candidate.stem
+            # учет windows_filenames/no_mtime уже применён к исходному, для external просто меняем расширение
+            final_path = candidate.parent / f"{base}.{ext}"
+            # если OverwriteOriginal logic или существующий файл — используем временный
+            tmp_path = final_path
+            if final_path.exists():
+                tmp_path = candidate.parent / f".{base}_tmp_{int(_time.time()*1000)%100000}.{ext}"
+            ff_cmd = ["ffmpeg", "-y", "-i", str(candidate), *ff_flags, str(tmp_path)]
+            # синтетический лог для паритета [VideoConvertor]
+            # run_with_log покажет ffmpeg логи (frame=...) как и встроенный режим
+            run_with_log(stdscr, cfg, ff_cmd, op_type="Transcode Video", source=candidate.name, target=final_path.name)
+            if tmp_path != final_path and tmp_path.exists():
+                try:
+                    if final_path.exists():
+                        final_path.unlink()
+                    tmp_path.rename(final_path)
+                    # удаляем исходный merge как делает yt-dlp --recode
+                    if candidate != final_path and candidate.exists():
+                        candidate.unlink()
+                except Exception:
+                    pass
+            else:
+                # если ffmpeg писал сразу в финал — удалить исходник если другой ext
+                try:
+                    if candidate != final_path and candidate.exists() and final_path.exists():
+                        candidate.unlink()
+                except Exception:
+                    pass
+            return
+    # fallback обычный встроенный
+    cmd = ["yt-dlp", *build_ytdlp_args_from_preset(preset, cfg, out_dir), url]
+    run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(out_dir))
+
 def screen_video(stdscr, cfg: dict) -> None:
     url = text_input(stdscr, t(cfg, "video_title"), t(cfg, "video_prompt_url"), t(cfg, "footer_input"))
     if not url: return
@@ -1955,8 +2078,7 @@ def screen_video(stdscr, cfg: dict) -> None:
         preset = next((p for p in cfg.get("download_presets", []) if p["id"] == def_id), None)
         if not preset:
             preset = {"id": "default", "name": "Default", "fields": get_effective_default_fields(cfg)}
-        cmd = ["yt-dlp", *build_ytdlp_args_from_preset(preset, cfg, out_dir), url]
-        run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(out_dir))
+        _run_video_preset_with_external(stdscr, cfg, preset, out_dir, url)
     elif m == 1:  # Saved preset
         presets = cfg.get("download_presets", [])
         if not presets:
@@ -1964,15 +2086,13 @@ def screen_video(stdscr, cfg: dict) -> None:
             return
         pi = run_menu(stdscr, t(cfg, "video_title"), [p["name"] for p in presets], t(cfg, "footer_nav"))
         if pi is not None:
-            cmd = ["yt-dlp", *build_ytdlp_args_from_preset(presets[pi], cfg, out_dir), url]
-            run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(out_dir))
+            _run_video_preset_with_external(stdscr, cfg, presets[pi], out_dir, url)
     else:  # Manual
         fields = get_effective_default_fields(cfg)
         res = screen_manual_preset_config(stdscr, cfg, fields)
         if res:
             preset_obj = {"id": "manual", "name": "Manual", "fields": res[1]}
-            cmd = ["yt-dlp", *build_ytdlp_args_from_preset(preset_obj, cfg, out_dir), url]
-            run_with_log(stdscr, cfg, cmd, op_type="Download Video", source=url, target=str(out_dir))
+            _run_video_preset_with_external(stdscr, cfg, preset_obj, out_dir, url)
 
 def screen_convert(stdscr, cfg: dict) -> None:
     fpath = text_input(stdscr, t(cfg, "convert_title"), t(cfg, "convert_prompt_file"), t(cfg, "footer_input"))
