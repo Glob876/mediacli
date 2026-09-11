@@ -69,7 +69,7 @@ DEFAULT_CONFIG = {
     "cookies_mode": "none",       # "none" | "file" | "browser"
     "cookies_file": DEFAULT_COOKIES_FILE,
     "cookies_browser": "",
-    "video_preset": "davinci_dnxhr",
+    "video_preset": "default",
     "theme": "cyan",
     "use_terminal_bg": True,
     "proxy_mode": "system",       # "system" | "custom" | "none"
@@ -158,35 +158,35 @@ VIDEO_PRESETS = {
     },
     "standard_mp4": {
         "id": "standard_mp4",
-        "name_en": "Standard MP4 (H.264 + AAC)",
-        "name_ru": "Стандартный MP4 (H.264 + AAC)",
-        "desc_en": "Universal MP4 container with H.264 video and AAC audio. High compatibility.",
-        "desc_ru": "Универсальный MP4 с H.264 видео и AAC аудио. Максимальная совместимость.",
-        "args": ["--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx264 -c:a aac"]
+        "name_en": "Re-encode MP4 (H.264 High Quality + AAC)",
+        "name_ru": "Перекодировать в MP4 (H.264 HQ + AAC)",
+        "desc_en": "Universal MP4 re-encoded with H.264 (CRF 18, medium) and AAC 192k.",
+        "desc_ru": "Перекодирует в универсальный MP4 (H.264 CRF 18 medium и AAC 192k).",
+        "args": ["--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k"]
     },
     "hevc_mp4": {
         "id": "hevc_mp4",
         "name_en": "High Efficiency MP4 (H.265 / HEVC + AAC)",
         "name_ru": "Высокоэффективный MP4 (H.265 / HEVC + AAC)",
-        "desc_en": "H.265/HEVC video codec. Up to 50% smaller file size with high visual quality.",
-        "desc_ru": "Видеокодек H.265/HEVC. До 50% меньший размер файла при высоком качестве.",
-        "args": ["--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx265 -c:a aac"]
+        "desc_en": "H.265/HEVC (CRF 22, medium) for smaller size with high quality.",
+        "desc_ru": "Видеокодек H.265/HEVC (CRF 22) для компактного размера при высоком качестве.",
+        "args": ["--recode-video", "mp4", "--postprocessor-args", "ffmpeg:-c:v libx265 -crf 22 -preset medium -c:a aac -b:a 192k"]
     },
     "webm_vp9": {
         "id": "webm_vp9",
         "name_en": "WebM (VP9 + Opus)",
         "name_ru": "WebM (VP9 + Opus)",
-        "desc_en": "Open WebM media format with VP9 video and Opus audio. Perfect for web browsers.",
-        "desc_ru": "Открытый веб-формат WebM с видео VP9 и аудио Opus. Идеально для браузеров.",
-        "args": ["--recode-video", "webm", "--postprocessor-args", "ffmpeg:-c:v libvpx-vp9 -c:a libopus"]
+        "desc_en": "Open WebM media format with VP9 (CRF 24) and Opus audio.",
+        "desc_ru": "Открытый веб-формат WebM с видео VP9 (CRF 24) и аудио Opus.",
+        "args": ["--recode-video", "webm", "--postprocessor-args", "ffmpeg:-c:v libvpx-vp9 -crf 24 -b:v 0 -c:a libopus"]
     },
     "mkv_av1": {
         "id": "mkv_av1",
-        "name_en": "Modern MKV (AV1 + AAC)",
-        "name_ru": "Современный MKV (AV1 + AAC)",
-        "desc_en": "Next-generation AV1 video codec in Matroska MKV container. Ultra high efficiency.",
-        "desc_ru": "Видеокодек нового поколения AV1 в контейнере MKV. Высокая эффективность сжатия.",
-        "args": ["--recode-video", "mkv", "--postprocessor-args", "ffmpeg:-c:v libsvtav1 -c:a aac"]
+        "name_en": "Modern MKV (AV1 + Opus/AAC) [Next-Gen]",
+        "name_ru": "Современный MKV (AV1 + Opus/AAC) [Новое поколение]",
+        "desc_en": "Next-generation AV1 (CRF 24, preset 5) in MKV container.",
+        "desc_ru": "Видеокодек нового поколения AV1 (CRF 24, preset 5) в контейнере MKV.",
+        "args": ["--recode-video", "mkv", "--postprocessor-args", "ffmpeg:-c:v libsvtav1 -crf 24 -preset 5 -c:a copy"]
     },
     "audio_mp3": {
         "id": "audio_mp3",
@@ -972,17 +972,34 @@ def build_ytdlp_args_from_preset(preset: dict, cfg: dict, out_dir: Path, for_pla
     if f.get("audio_only"):
         cmd += ["-x", "--audio-format", f.get("audio_format", "mp3"), "--audio-quality", str(f.get("audio_quality", "0"))]
     else:
-        quality = f.get("quality", "")
-        fps_suffix = f"[fps<={f['fps_limit']}]" if f.get("fps_limit") else ""
+        def _coerce_num_str(v) -> str:
+            if isinstance(v, float):
+                if v == int(v):
+                    return str(int(v))
+                return str(v).rstrip("0").rstrip(".") if "." in str(v) else str(v)
+            if isinstance(v, int):
+                return str(v)
+            return str(v or "").strip()
+        quality = _coerce_num_str(f.get("quality", ""))
+        fps_val = _coerce_num_str(f.get("fps_limit", ""))
+        vcodec = str(f.get("vcodec", "auto") or "auto").strip()
+        fps_suffix = f"[fps<={fps_val}]" if fps_val else ""
         q_str = f"[height<={quality}]" if quality else ""
-        vc_filter = {"av1": "[vcodec^=av01]", "vp9": "[vcodec^=vp9]", "h264": "[vcodec^=avc1]"}.get(f.get("vcodec", "auto"), "")
-        fmt = f"bestvideo{q_str}{fps_suffix}{vc_filter}+bestaudio/best{q_str}{fps_suffix}"
-        cmd += ["-f", fmt]
+        vc_map = {"av1": "[vcodec~='^av0?1']", "vp9": "[vcodec~='^vp0?9']", "h264": "[vcodec~='^avc']"}
+        vc_filter = vc_map.get(vcodec, "")
+        q_fps = q_str + fps_suffix
+        if vc_filter:
+            fmt = f"bv{q_str}{fps_suffix}{vc_filter}+ba/b{q_str}{fps_suffix}{vc_filter}/bv{q_str}{fps_suffix}+ba/b{q_str}{fps_suffix}"
+        else:
+            fmt = f"bv{q_str}{fps_suffix}+ba/b{q_str}{fps_suffix}"
+        cmd += ["-f", fmt, "-S", "res,ext:mp4:m4a:webm,codec:h264:vp9:av01"]
 
-        v_preset = f.get("video_preset", "davinci_dnxhr")
+        v_preset = f.get("video_preset", "default")
+        if not v_preset:
+            v_preset = "default"
         if v_preset == "custom":
             ext = (f.get("custom_ext") or "mp4").strip(".")
-            flags = f.get("custom_flags") or "-c:v libx264 -c:a aac"
+            flags = f.get("custom_flags") or "-c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k"
             cmd += ["--recode-video", ext, "--postprocessor-args", f"ffmpeg:{flags}"]
         elif v_preset in VIDEO_PRESETS:
             cmd += VIDEO_PRESETS[v_preset]["args"]

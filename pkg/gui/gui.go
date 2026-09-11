@@ -128,6 +128,7 @@ func RunGUI() {
 	urlEntry.SetPlaceHolder("Paste media URL (YouTube, VK, Twitch, etc.) and press Enter...")
 
 	presetSelect := widget.NewSelect([]string{
+		"0. Original / Lossless Merge — Best Quality [Recommended]",
 		"1. Standard MP4 (H.264 + AAC) [Universal]",
 		"2. Modern MKV (AV1 + Opus/AAC) [Next-Gen]",
 		"3. High Efficiency MP4 (H.265 / HEVC)",
@@ -136,7 +137,7 @@ func RunGUI() {
 		"6. Audio Only: MP3 320 kbps",
 		"7. Audio Only: FLAC Lossless",
 	}, func(string) {})
-	presetSelect.SetSelected("1. Standard MP4 (H.264 + AAC) [Universal]")
+	presetSelect.SetSelected("0. Original / Lossless Merge — Best Quality [Recommended]")
 
 	qualitySelect := widget.NewSelect([]string{
 		"Best Available (Max)",
@@ -199,6 +200,8 @@ func RunGUI() {
 
 		fields := core.GetInitialPresetFields()
 		switch presetSelect.Selected {
+		case "0. Original / Lossless Merge — Best Quality [Recommended]":
+			fields["video_preset"] = "default"
 		case "1. Standard MP4 (H.264 + AAC) [Universal]":
 			fields["video_preset"] = "standard_mp4"
 		case "2. Modern MKV (AV1 + Opus/AAC) [Next-Gen]":

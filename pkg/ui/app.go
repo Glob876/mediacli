@@ -116,10 +116,10 @@ func RunApp() error {
 
 	s, err := tcell.NewScreen()
 	if err != nil {
-		return err
+		return fmt.Errorf("tcell.NewScreen failed (TERM=%q): %w — убедись что запускаешь в интерактивном терминале с TERM=xterm-256color", os.Getenv("TERM"), err)
 	}
 	if err := s.Init(); err != nil {
-		return err
+		return fmt.Errorf("tcell.Init failed (TERM=%q): %w — нет TTY (/dev/tty) или TERM=dumb; запусти в реальном терминале", os.Getenv("TERM"), err)
 	}
 	defer s.Fini()
 	s.HideCursor()

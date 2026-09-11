@@ -39,7 +39,7 @@ printf "[1/2] Compiling native binary for %s/%s... " "$HOST_OS" "$HOST_ARCH"
 
 START_BUILD=$(date +%s)
 
-if CGO_ENABLED=0 GOOS="$HOST_OS" GOARCH="$HOST_ARCH" go build \
+if CGO_ENABLED=1 GOOS="$HOST_OS" GOARCH="$HOST_ARCH" go build \
     -trimpath \
     -ldflags="$LDFLAGS" \
     -o "$TARGET_PATH" \

@@ -68,18 +68,18 @@ func GetConfigDir() string {
 	home, _ := os.UserHomeDir()
 
 	switch runtime.GOOS {
-	case "windows":
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "mediacli")
-		}
-		return filepath.Join(home, "AppData", "Roaming", "mediacli")
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "mediacli")
-	default:
-		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-			return filepath.Join(xdg, "mediacli")
-		}
-		return filepath.Join(home, ".config", "mediacli")
+		case "windows":
+			if appData := os.Getenv("APPDATA"); appData != "" {
+				return filepath.Join(appData, "mediacli")
+			}
+			return filepath.Join(home, "AppData", "Roaming", "mediacli")
+		case "darwin":
+			return filepath.Join(home, "Library", "Application Support", "mediacli")
+		default:
+			if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+				return filepath.Join(xdg, "mediacli")
+			}
+			return filepath.Join(home, ".config", "mediacli")
 	}
 }
 
@@ -96,7 +96,7 @@ func GetDefaultConfig() Config {
 		UserGoal:              "editing",
 		CookiesMode:           "none",
 		CookiesFile:           filepath.Join(configDir, "cookies.txt"),
-		CookiesBrowser:        "",
+		CookiesBrowser:        "chrome",
 		VideoPreset:           "default",
 		Theme:                 "cyan",
 		UseTerminalBG:         true,
@@ -644,45 +644,45 @@ var (
 	stagePatterns = []StagePattern{
 		{
 			Regex: regexp.MustCompile(`\[(youtube|vk|twitch|generic|bilibili|soundcloud)[^\]]*\]\s*([^:]+):\s*(Downloading.*|Extracting.*)`),
-			Formatter: func(m []string) string {
-				return fmt.Sprintf("[%s] %s", strings.ToUpper(m[1]), m[3])
-			},
+     Formatter: func(m []string) string {
+	     return fmt.Sprintf("[%s] %s", strings.ToUpper(m[1]), m[3])
+     },
 		},
 		{
 			Regex: regexp.MustCompile(`\[SponsorBlock\]\s*(.*)`),
-			Formatter: func(m []string) string { return fmt.Sprintf("[SponsorBlock] %s", m[1]) },
+     Formatter: func(m []string) string { return fmt.Sprintf("[SponsorBlock] %s", m[1]) },
 		},
 		{
 			Regex: regexp.MustCompile(`\[Merger\]\s*(.*)`),
-			Formatter: func(m []string) string { return fmt.Sprintf("[Merger] %s", m[1]) },
+     Formatter: func(m []string) string { return fmt.Sprintf("[Merger] %s", m[1]) },
 		},
 		{
 			Regex: regexp.MustCompile(`\[VideoConvertor\]\s*(.*)`),
-			Formatter: func(m []string) string { return fmt.Sprintf("[Convert] %s", m[1]) },
+     Formatter: func(m []string) string { return fmt.Sprintf("[Convert] %s", m[1]) },
 		},
 		{
 			Regex: regexp.MustCompile(`\[ExtractAudio\]\s*(.*)`),
-			Formatter: func(m []string) string { return fmt.Sprintf("[AudioExtract] %s", m[1]) },
+     Formatter: func(m []string) string { return fmt.Sprintf("[AudioExtract] %s", m[1]) },
 		},
 		{
 			Regex: regexp.MustCompile(`\[ThumbnailsConvertor\]\s*(.*)`),
-			Formatter: func(m []string) string { return fmt.Sprintf("[ThumbConvert] %s", m[1]) },
+     Formatter: func(m []string) string { return fmt.Sprintf("[ThumbConvert] %s", m[1]) },
 		},
 		{
 			Regex: regexp.MustCompile(`\[download\]\s+Destination:\s*(.+)`),
-			Formatter: func(m []string) string { return fmt.Sprintf("[Download] Saving %s", filepath.Base(m[1])) },
+     Formatter: func(m []string) string { return fmt.Sprintf("[Download] Saving %s", filepath.Base(m[1])) },
 		},
 		{
 			Regex: regexp.MustCompile(`\[download\]\s+(\d+(?:\.\d+)?%).*at\s+([^\s]+)\s+ETA\s+([^\s]+)`),
-			Formatter: func(m []string) string {
-				return fmt.Sprintf("[Download] %s (Speed: %s, ETA: %s)", m[1], m[2], m[3])
-			},
+     Formatter: func(m []string) string {
+	     return fmt.Sprintf("[Download] %s (Speed: %s, ETA: %s)", m[1], m[2], m[3])
+     },
 		},
 		{
 			Regex: regexp.MustCompile(`frame=\s*(\d+)\s+fps=\s*(\d+).*time=([^\s]+).*speed=\s*([^\s]+)`),
-			Formatter: func(m []string) string {
-				return fmt.Sprintf("[FFmpeg] Frame %s (%s fps, Time: %s, Speed: %s)", m[1], m[2], m[3], m[4])
-			},
+     Formatter: func(m []string) string {
+	     return fmt.Sprintf("[FFmpeg] Frame %s (%s fps, Time: %s, Speed: %s)", m[1], m[2], m[3], m[4])
+     },
 		},
 	}
 )
@@ -963,32 +963,49 @@ func BuildCookieArgs(cfg Config, f map[string]interface{}) []string {
 		}
 	}
 
+	if mode == "default" {
+		mode = cfg.CookiesMode
+	}
+
 	switch mode {
-	case "none":
-		return nil
-	case "file":
-		cFile := cfg.CookiesFile
-		if f != nil {
-			if cf := GetString(f, "cookies_file"); cf != "" {
-				cFile = cf
+		case "none":
+			return nil
+		case "file":
+			cFile := cfg.CookiesFile
+			if f != nil {
+				if cf := GetString(f, "cookies_file"); cf != "" {
+					cFile = cf
+				}
 			}
-		}
-		if cFile != "" {
-			p := ParseUserPath(cFile)
-			if _, err := os.Stat(p); err == nil {
+			if cFile != "" {
+				p := ParseUserPath(cFile)
+				if _, err := os.Stat(p); err == nil {
+					return []string{"--cookies", p}
+				}
+				if !filepath.IsAbs(p) {
+					home, _ := os.UserHomeDir()
+					altP := filepath.Join(home, p)
+					if _, err := os.Stat(altP); err == nil {
+						return []string{"--cookies", altP}
+					}
+					altDownloads := filepath.Join(home, "Downloads", p)
+					if _, err := os.Stat(altDownloads); err == nil {
+						return []string{"--cookies", altDownloads}
+					}
+				}
 				return []string{"--cookies", p}
 			}
-		}
-	case "browser":
-		browser := cfg.CookiesBrowser
-		if f != nil {
-			if cb := GetString(f, "cookies_browser"); cb != "" {
-				browser = cb
+		case "browser":
+			browser := cfg.CookiesBrowser
+			if f != nil {
+				if cb := GetString(f, "cookies_browser"); cb != "" {
+					browser = cb
+				}
 			}
-		}
-		if browser != "" {
+			if browser == "" {
+				browser = "chrome"
+			}
 			return []string{"--cookies-from-browser", browser}
-		}
 	}
 	return nil
 }
@@ -1033,7 +1050,6 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	}
 	cmd = append(cmd, "--retries", retries, "--fragment-retries", retries)
 	cmd = append(cmd, "--buffer-size", "16M")
-	cmd = append(cmd, "--extractor-args", "youtube:player_client=web,web_creator,android")
 
 	if cfg.NoMtime || GetBool(f, "no_mtime") {
 		cmd = append(cmd, "--no-mtime")
@@ -1073,50 +1089,34 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	} else {
 		quality := GetString(f, "quality")
 		fps := GetString(f, "fps_limit")
-		fpsSuffix := ""
-		if fps != "" {
-			fpsSuffix = fmt.Sprintf("[fps<=%s]", fps)
-		}
-		qStr := ""
-		if quality != "" {
-			qStr = fmt.Sprintf("[height<=%s]", quality)
-		}
-
 		vcodec := GetString(f, "vcodec")
-		vcFilter := ""
-		switch vcodec {
-		case "av1":
-			vcFilter = "[vcodec^=av01]"
-		case "vp9":
-			vcFilter = "[vcodec^=vp9]"
-		case "h264":
-			vcFilter = "[vcodec^=avc1]"
-		}
 
-		formatExpr := fmt.Sprintf("bv*%s%s%s+ba/b%s%s", qStr, fpsSuffix, vcFilter, qStr, fpsSuffix)
+		formatExpr := BuildFormatExpr(quality, fps, vcodec)
 		cmd = append(cmd, "-f", formatExpr)
+		// Prefer higher resolution and mp4/m4a when yt-dlp has to choose between equal heights
+		cmd = append(cmd, "-S", "res,ext:mp4:m4a:webm,codec:h264:vp9:av01")
 
-		vPresetKey := GetString(f, "video_preset")
-		if vPresetKey == "" {
-			vPresetKey = cfg.VideoPreset
-		}
-		if vPresetKey == "" {
-			vPresetKey = "default"
-		}
+			vPresetKey := GetString(f, "video_preset")
+			if vPresetKey == "" {
+				vPresetKey = cfg.VideoPreset
+			}
+			if vPresetKey == "" {
+				vPresetKey = "default"
+			}
 
-		if vPresetKey == "custom" {
-			ext := GetString(f, "custom_ext")
-			if ext == "" {
-				ext = "mp4"
+			if vPresetKey == "custom" {
+				ext := GetString(f, "custom_ext")
+				if ext == "" {
+					ext = "mp4"
+				}
+				flags := GetString(f, "custom_flags")
+				if flags == "" {
+					flags = "-c:v libx264 -crf 18 -c:a aac"
+				}
+				cmd = append(cmd, "--recode-video", strings.TrimPrefix(ext, "."), "--postprocessor-args", "ffmpeg:"+flags)
+			} else if p, ok := VideoPresets[vPresetKey]; ok {
+				cmd = append(cmd, p.Args...)
 			}
-			flags := GetString(f, "custom_flags")
-			if flags == "" {
-				flags = "-c:v libx264 -crf 18 -c:a aac"
-			}
-			cmd = append(cmd, "--recode-video", strings.TrimPrefix(ext, "."), "--postprocessor-args", "ffmpeg:"+flags)
-		} else if p, ok := VideoPresets[vPresetKey]; ok {
-			cmd = append(cmd, p.Args...)
-		}
 	}
 
 	if GetBool(f, "geobypass") {
@@ -1233,11 +1233,59 @@ func CheckDependencies() []DependencyStatus {
 
 func GetString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
+		switch val := v.(type) {
+		case string:
+			return val
+		case float64:
+			if val == float64(int64(val)) {
+				return strconv.Itoa(int(val))
+			}
+			return strconv.FormatFloat(val, 'f', -1, 64)
+		case float32:
+			if val == float32(int(val)) {
+				return strconv.Itoa(int(val))
+			}
+			return strconv.FormatFloat(float64(val), 'f', -1, 64)
+		case int:
+			return strconv.Itoa(val)
+		case int64:
+			return strconv.FormatInt(val, 10)
+		case int32:
+			return strconv.Itoa(int(val))
+		case json.Number:
+			return val.String()
 		}
 	}
 	return ""
+}
+
+// BuildFormatExpr builds a yt-dlp -f expression that respects quality/fps/vcodec
+// and never falls back to unconditional /best (which yields 360p progressive).
+func BuildFormatExpr(quality, fps, vcodec string) string {
+	fpsSuffix := ""
+	if fps != "" {
+		fpsSuffix = fmt.Sprintf("[fps<=%s]", fps)
+	}
+	qStr := ""
+	if quality != "" {
+		qStr = fmt.Sprintf("[height<=%s]", quality)
+	}
+	vcFilter := ""
+	switch vcodec {
+	case "av1":
+		vcFilter = "[vcodec~='^av0?1']"
+	case "vp9":
+		vcFilter = "[vcodec~='^vp0?9']"
+	case "h264":
+		vcFilter = "[vcodec~='^avc']"
+	}
+	// Prefer bestvideo+bestaudio with height/fps + optional codec; progressive fallback keeps height/fps(+codec)
+	// Using bv/ba aliases (yt-dlp) and b for best progressive.
+	if vcFilter != "" {
+		// With codec: try codec-constrained bv+ba, then codec-constrained progressive, then any codec bv+ba, then any progressive
+		return fmt.Sprintf("bv%s%s%s+ba/b%s%s%s/bv%s%s+ba/b%s%s", qStr, fpsSuffix, vcFilter, qStr, fpsSuffix, vcFilter, qStr, fpsSuffix, qStr, fpsSuffix)
+	}
+	return fmt.Sprintf("bv%s%s+ba/b%s%s", qStr, fpsSuffix, qStr, fpsSuffix)
 }
 
 func GetBool(m map[string]interface{}, key string) bool {

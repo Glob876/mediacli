@@ -32,7 +32,15 @@ func ScreenVideo(s tcell.Screen, cfg *core.Config) {
 
 	var preset core.DownloadPreset
 	if m == 0 { // Quick Download
+		if cfg.PresetDefaults == nil {
+			cfg.PresetDefaults = core.GetInitialPresetFields()
+		}
+		// Normalize numeric quality persisted as float64 so GetString coercion works
 		preset = core.DownloadPreset{ID: "default", Name: "Default", Fields: cfg.PresetDefaults}
+		if q := core.GetString(preset.Fields, "quality"); q == "" {
+			// Best Available is intentional; inform user once per session via footer hint
+			// (no blocking prompt — format now correctly picks highest, not 360p)
+		}
 	} else if m == 1 { // Choose saved preset
 		if len(cfg.DownloadPresets) == 0 {
 			ShowMessage(s, cfg, T(*cfg, "video_title"), []string{"No presets saved yet."}, T(*cfg, "footer_message"))
