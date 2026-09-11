@@ -478,13 +478,26 @@ class BackgroundQueueManager:
     def _monitor_proc(self, task: BackgroundTask):
         proc = task.proc
         re_pct = re.compile(r'(\d+(?:\.\d+)?)%')
+        # Robust чтение: yt-dlp прогресс пишет через \r без \n, readline() засыпает
+        # и буфер без границы → зависание на [Merger] из-за переполнения pipe.
+        leftover = ""
         while proc.poll() is None:
             try:
-                line = proc.stdout.readline()
-                if not line:
+                # non-blocking check чтобы не виснуть на readline без \n
+                rlist, _, _ = select.select([proc.stdout], [], [], 0.2)
+                if not rlist:
+                    continue
+                chunk = proc.stdout.read(4096)
+                if not chunk:
                     break
-                text = line.decode("utf-8", errors="replace").strip()
-                if text:
+                text_chunk = leftover + chunk.decode("utf-8", errors="replace")
+                text_chunk = text_chunk.replace("\r", "\n")
+                parts = text_chunk.split("\n")
+                leftover = parts[-1]
+                for raw in parts[:-1]:
+                    text = raw.strip()
+                    if not text:
+                        continue
                     task.log_lines.append(text)
                     task.stage = DynamicStageDetector.detect(text, task.stage)
                     m = re_pct.search(text)
@@ -495,6 +508,40 @@ class BackgroundQueueManager:
                             pass
             except Exception:
                 break
+        # Флашим остатки + додрениваем pipe после завершения процесса
+        try:
+            leftover = leftover.strip()
+            if leftover:
+                task.log_lines.append(leftover)
+                task.stage = DynamicStageDetector.detect(leftover, task.stage)
+                m = re_pct.search(leftover)
+                if m:
+                    try:
+                        task.pct = float(m.group(1))
+                    except ValueError:
+                        pass
+            # додренить всё что осталось в pipe
+            while True:
+                rlist, _, _ = select.select([proc.stdout], [], [], 0.1)
+                if not rlist:
+                    break
+                chunk = proc.stdout.read(4096)
+                if not chunk:
+                    break
+                for raw in chunk.decode("utf-8", errors="replace").replace("\r", "\n").split("\n"):
+                    text = raw.strip()
+                    if not text:
+                        continue
+                    task.log_lines.append(text)
+                    task.stage = DynamicStageDetector.detect(text, task.stage)
+                    m = re_pct.search(text)
+                    if m:
+                        try:
+                            task.pct = float(m.group(1))
+                        except ValueError:
+                            pass
+        except Exception:
+            pass
         proc.wait()
         task.exit_code = proc.returncode
         task.status = "done" if task.exit_code == 0 else f"failed ({task.exit_code})"
@@ -1587,8 +1634,13 @@ def run_with_log(stdscr, cfg: dict, cmd: list[str], op_type: str = "Task", sourc
             chunk = proc.stdout.read(4096)
             if chunk:
                 text_chunk = chunk.decode("utf-8", errors="replace")
-                buf += text_chunk
-                for line in text_chunk.splitlines():
+                # Нормализуем \r (прогресс yt-dlp/ffmpeg) в \n — иначе buf растёт до сотен КБ без \n
+                # и не флашится в lines, а pipe переполняется → hang на [Merger].
+                text_chunk_norm = text_chunk.replace("\r", "\n")
+                buf += text_chunk_norm
+                for line in text_chunk_norm.splitlines():
+                    if not line.strip():
+                        continue
                     current_stage = DynamicStageDetector.detect(line, current_stage)
                     m = re_pct.search(line)
                     if m:
@@ -1599,6 +1651,12 @@ def run_with_log(stdscr, cfg: dict, cmd: list[str], op_type: str = "Task", sourc
                 while "\n" in buf:
                     p, buf = buf.split("\n", 1)
                     if p.strip(): lines.append(p.strip())
+                # защита от раздувания buf если вдруг нет \n долго (обрезаем хвост)
+                if len(buf) > 8192:
+                    # флашим как есть, чтобы не копить мега-строку прогресса
+                    if buf.strip():
+                        lines.append(buf.strip()[:200])
+                    buf = ""
 
         h, w = stdscr.getmaxyx()
         stdscr.erase()
@@ -1623,6 +1681,34 @@ def run_with_log(stdscr, cfg: dict, cmd: list[str], op_type: str = "Task", sourc
 
         draw_footer(stdscr, t(cfg, "log_footer_running"), w, h)
         stdscr.refresh()
+
+    # Додренить остатки pipe после выхода из цикла (последний [Merger]/[EmbedThumbnail] без перевода строки)
+    try:
+        while True:
+            rlist, _, _ = select.select([proc.stdout], [], [], 0.1)
+            if not rlist:
+                break
+            chunk = proc.stdout.read(4096)
+            if not chunk:
+                break
+            text_chunk = chunk.decode("utf-8", errors="replace").replace("\r", "\n")
+            buf += text_chunk
+            for line in text_chunk.splitlines():
+                if line.strip():
+                    current_stage = DynamicStageDetector.detect(line.strip(), current_stage)
+                    m = re_pct.search(line)
+                    if m:
+                        try: pct = float(m.group(1))
+                        except ValueError: pass
+            while "\n" in buf:
+                p, buf = buf.split("\n", 1)
+                if p.strip():
+                    lines.append(p.strip())
+        if buf.strip():
+            lines.append(buf.strip())
+            buf = ""
+    except Exception:
+        pass
 
     proc.wait()
     stdscr.nodelay(False)

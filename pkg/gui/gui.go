@@ -1,7 +1,7 @@
 package gui
 
 import (
-	"bufio"
+	"io"
 	"fmt"
 	"image/color"
 	"mediacli/pkg/core"
@@ -582,27 +582,84 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 		return
 	}
 
-	scanner := bufio.NewScanner(stdout)
 	currentStage := "Downloading..."
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		currentStage = core.DetectStage(line, currentStage)
-		card.StageLabel.SetText(currentStage)
-
-		if strings.HasPrefix(line, "[download] Destination:") {
-			dest := strings.TrimPrefix(line, "[download] Destination:")
-			card.TitleLabel.SetText(filepath.Base(strings.TrimSpace(dest)))
-		}
-
-		if pct, speed, ok := core.ExtractProgress(line); ok {
-			card.ProgressBar.SetValue(pct / 100.0)
-			if speed != "" {
-				card.StageLabel.SetText(fmt.Sprintf("%s (%s)", currentStage, speed))
+	// chunk reader вместо bufio.Scanner — прогресс yt-dlp через \r без \n даёт мега-строку >64KB → token too long + блокировка pipe → hang на [Merger]
+	buf := make([]byte, 4096)
+	leftover := ""
+	for {
+		n, err := stdout.Read(buf)
+		if n > 0 {
+			chunk := leftover + string(buf[:n])
+			chunk = strings.ReplaceAll(chunk, "\r", "\n")
+			parts := strings.Split(chunk, "\n")
+			leftover = parts[len(parts)-1]
+			for _, raw := range parts[:len(parts)-1] {
+				line := strings.TrimSpace(raw)
+				if line == "" {
+					continue
+				}
+				currentStage = core.DetectStage(line, currentStage)
+				card.StageLabel.SetText(currentStage)
+				if strings.HasPrefix(line, "[download] Destination:") {
+					dest := strings.TrimPrefix(line, "[download] Destination:")
+					card.TitleLabel.SetText(filepath.Base(strings.TrimSpace(dest)))
+				}
+				if pct, speed, ok := core.ExtractProgress(line); ok {
+					card.ProgressBar.SetValue(pct / 100.0)
+					if speed != "" {
+						card.StageLabel.SetText(fmt.Sprintf("%s (%s)", currentStage, speed))
+					}
+				}
 			}
+			if err != nil {
+				leftover = strings.TrimSpace(leftover)
+				if leftover != "" {
+					line := leftover
+					currentStage = core.DetectStage(line, currentStage)
+					card.StageLabel.SetText(currentStage)
+					if strings.HasPrefix(line, "[download] Destination:") {
+						dest := strings.TrimPrefix(line, "[download] Destination:")
+						card.TitleLabel.SetText(filepath.Base(strings.TrimSpace(dest)))
+					}
+					if pct, speed, ok := core.ExtractProgress(line); ok {
+						card.ProgressBar.SetValue(pct / 100.0)
+						if speed != "" {
+							card.StageLabel.SetText(fmt.Sprintf("%s (%s)", currentStage, speed))
+						}
+					}
+				}
+				break
+			}
+		}
+		if err != nil {
+			if err != io.EOF && leftover != "" {
+				leftover = strings.TrimSpace(leftover)
+				if leftover != "" {
+					line := leftover
+					currentStage = core.DetectStage(line, currentStage)
+					card.StageLabel.SetText(currentStage)
+					if pct, speed, ok := core.ExtractProgress(line); ok {
+						card.ProgressBar.SetValue(pct / 100.0)
+						if speed != "" {
+							card.StageLabel.SetText(fmt.Sprintf("%s (%s)", currentStage, speed))
+						}
+					}
+				}
+			} else if err == io.EOF && leftover != "" {
+				leftover = strings.TrimSpace(leftover)
+				if leftover != "" {
+					line := leftover
+					currentStage = core.DetectStage(line, currentStage)
+					card.StageLabel.SetText(currentStage)
+					if pct, speed, ok := core.ExtractProgress(line); ok {
+						card.ProgressBar.SetValue(pct / 100.0)
+						if speed != "" {
+							card.StageLabel.SetText(fmt.Sprintf("%s (%s)", currentStage, speed))
+						}
+					}
+				}
+			}
+			break
 		}
 	}
 

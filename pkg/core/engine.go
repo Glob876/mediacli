@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -907,20 +908,70 @@ func (qm *BackgroundQueueManager) monitorTask(task *BackgroundTask) {
 		return
 	}
 
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		text := strings.TrimSpace(scanner.Text())
-		if text == "" {
-			continue
+	// Robust chunk reader: yt-dlp прогресс пишет через \r без \n,
+	// а bufio.Scanner падает с token too long >64KB и блокирует pipe → hang на [Merger].
+	buf := make([]byte, 4096)
+	leftover := ""
+	for {
+		n, err := stdout.Read(buf)
+		if n > 0 {
+			chunk := leftover + string(buf[:n])
+			chunk = strings.ReplaceAll(chunk, "\r", "\n")
+			parts := strings.Split(chunk, "\n")
+			leftover = parts[len(parts)-1]
+			for _, raw := range parts[:len(parts)-1] {
+				text := strings.TrimSpace(raw)
+				if text == "" {
+					continue
+				}
+				qm.mu.Lock()
+				task.LogLines = append(task.LogLines, text)
+				task.Stage = DetectStage(text, task.Stage)
+				if pct, _, ok := ExtractProgress(text); ok {
+					task.Progress = pct
+				}
+				qm.mu.Unlock()
+			}
+			if err != nil {
+				leftover = strings.TrimSpace(leftover)
+				if leftover != "" {
+					qm.mu.Lock()
+					task.LogLines = append(task.LogLines, leftover)
+					task.Stage = DetectStage(leftover, task.Stage)
+					if pct, _, ok := ExtractProgress(leftover); ok {
+						task.Progress = pct
+					}
+					qm.mu.Unlock()
+				}
+				break
+			}
 		}
-
-		qm.mu.Lock()
-		task.LogLines = append(task.LogLines, text)
-		task.Stage = DetectStage(text, task.Stage)
-		if pct, _, ok := ExtractProgress(text); ok {
-			task.Progress = pct
+		if err != nil {
+			if err != io.EOF && leftover != "" {
+				leftover = strings.TrimSpace(leftover)
+				if leftover != "" {
+					qm.mu.Lock()
+					task.LogLines = append(task.LogLines, leftover)
+					task.Stage = DetectStage(leftover, task.Stage)
+					if pct, _, ok := ExtractProgress(leftover); ok {
+						task.Progress = pct
+					}
+					qm.mu.Unlock()
+				}
+			} else if err == io.EOF && leftover != "" {
+				leftover = strings.TrimSpace(leftover)
+				if leftover != "" {
+					qm.mu.Lock()
+					task.LogLines = append(task.LogLines, leftover)
+					task.Stage = DetectStage(leftover, task.Stage)
+					if pct, _, ok := ExtractProgress(leftover); ok {
+						task.Progress = pct
+					}
+					qm.mu.Unlock()
+				}
+			}
+			break
 		}
-		qm.mu.Unlock()
 	}
 
 	exitCode := 0

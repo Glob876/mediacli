@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"mediacli/pkg/core"
 	"os/exec"
 	"strings"
@@ -31,15 +31,53 @@ func RunWithLogHook(s tcell.Screen, cfg *core.Config, cmdList []string, opType, 
 		return
 	}
 
-	logChan := make(chan string, 200)
+	logChan := make(chan string, 1024)
 	doneChan := make(chan struct{})
 
 	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			logChan <- scanner.Text()
+		defer close(doneChan)
+		buf := make([]byte, 4096)
+		leftover := ""
+		for {
+			n, err := stdout.Read(buf)
+			if n > 0 {
+				chunk := leftover + string(buf[:n])
+				// yt-dlp пишет прогресс через \r без \n — нормализуем оба как разделители
+				chunk = strings.ReplaceAll(chunk, "\r", "\n")
+				parts := strings.Split(chunk, "\n")
+				// последняя часть может быть неполной — сохраняем на следующую итерацию
+				leftover = parts[len(parts)-1]
+				for _, p := range parts[:len(parts)-1] {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						logChan <- p
+					}
+				}
+				if err != nil {
+					// EOF одновременно с данными — флашим остаток
+					leftover = strings.TrimSpace(leftover)
+					if leftover != "" {
+						logChan <- leftover
+					}
+					break
+				}
+			}
+			if err != nil {
+				if err != io.EOF {
+					// не EOF — всё равно флашим
+					leftover = strings.TrimSpace(leftover)
+					if leftover != "" {
+						logChan <- leftover
+					}
+				} else if leftover != "" {
+					leftover = strings.TrimSpace(leftover)
+					if leftover != "" {
+						logChan <- leftover
+					}
+				}
+				break
+			}
 		}
-		close(doneChan)
 	}()
 
 	lines := []string{"[cmd] " + strings.Join(cmdList, " "), ""}
