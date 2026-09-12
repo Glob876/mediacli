@@ -2,7 +2,7 @@
 // MediaCLI Electron shell: spawns `mediacli daemon --port 0`, reads
 // MEDIACLI_DAEMON_PORT from its stdout and opens the renderer against it.
 // Dev/mock UI without Go: `npm run dev` (=> --mock, no daemon spawned).
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, Menu } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const path = require('node:path');
@@ -40,19 +40,23 @@ function waitForPort(proc, timeoutMs = 15000) {
 }
 
 async function createWindow() {
+  // Верхняя системная панель (Файл/Правка/Вид...) не нужна — убираем полностью.
+  Menu.setApplicationMenu(null);
   const win = new BrowserWindow({
     width: 1140,
     height: 750,
     minWidth: 900,
     minHeight: 600,
-    title: 'MediaCLI — Pastel Media Suite',
-    backgroundColor: '#111614',
+    title: 'MediaCLI',
+    backgroundColor: '#000000',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
+  win.setMenuBarVisibility(false);
 
   if (MOCK) {
     await win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { mock: '1' } });

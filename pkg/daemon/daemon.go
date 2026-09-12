@@ -510,6 +510,13 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		if e.IsDir() {
 			continue
 		}
+		name := e.Name()
+		ln := strings.ToLower(name)
+		// Технический мусор yt-dlp/ffmpeg не показываем в предпросмотре.
+		if strings.HasSuffix(ln, ".part") || strings.HasSuffix(ln, ".ytdl") ||
+			strings.HasSuffix(ln, ".tmp") || strings.Contains(ln, ".temp.") {
+			continue
+		}
 		info, err := e.Info()
 		if err != nil {
 			continue
@@ -599,6 +606,11 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	for _, e := range entries {
 		if e.IsDir() {
 			dirs = append(dirs, e.Name())
+			continue
+		}
+		ln := strings.ToLower(e.Name())
+		if strings.HasSuffix(ln, ".part") || strings.HasSuffix(ln, ".ytdl") ||
+			strings.HasSuffix(ln, ".tmp") || strings.Contains(ln, ".temp.") {
 			continue
 		}
 		info, err := e.Info()
