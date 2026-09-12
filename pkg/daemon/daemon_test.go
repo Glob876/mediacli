@@ -318,3 +318,35 @@ func TestResetConfig(t *testing.T) {
 		t.Fatalf("reset must return factory defaults: %+v", cfg)
 	}
 }
+
+func TestEmbedThumbnailToggle(t *testing.T) {
+	mkpreset := func(fields map[string]interface{}) core.DownloadPreset {
+		return core.DownloadPreset{ID: "x", Name: "x", Fields: fields}
+	}
+	cfg := core.GetDefaultConfig()
+	// По умолчанию (как раньше): и метаданные, и обложка.
+	def := core.BuildYtDlpArgs(mkpreset(core.GetInitialPresetFields()), cfg, "/tmp", false)
+	if !containsArg(def, "--embed-metadata", "") || !containsArg(def, "--embed-thumbnail", "") {
+		t.Fatalf("defaults must embed metadata+thumbnail: %v", def)
+	}
+	// Обложка выключена — метаданные остаются, охоты за миниатюрами нет.
+	f := core.GetInitialPresetFields()
+	f["embed_thumbnail"] = false
+	noThumb := core.BuildYtDlpArgs(mkpreset(f), cfg, "/tmp", false)
+	if containsArg(noThumb, "--embed-thumbnail", "") {
+		t.Fatalf("embed_thumbnail=false must drop --embed-thumbnail: %v", noThumb)
+	}
+	if !containsArg(noThumb, "--embed-metadata", "") {
+		t.Fatalf("metadata must stay when only thumbnail disabled: %v", noThumb)
+	}
+	// Метаданные выключены — обложка остаётся.
+	f2 := core.GetInitialPresetFields()
+	f2["embed_metadata"] = false
+	noMeta := core.BuildYtDlpArgs(mkpreset(f2), cfg, "/tmp", false)
+	if containsArg(noMeta, "--embed-metadata", "") {
+		t.Fatalf("embed_metadata=false must drop --embed-metadata: %v", noMeta)
+	}
+	if !containsArg(noMeta, "--embed-thumbnail", "") {
+		t.Fatalf("thumbnail must stay when only metadata disabled: %v", noMeta)
+	}
+}

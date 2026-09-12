@@ -17,6 +17,7 @@ const I18N = {
     dlPreset: 'Пресет кодека:', dlQuality: 'Макс. качество:',
     qBest: 'Лучшее доступное (Max)', dlCut: 'Вырезка по времени (напр. 00:01:00-00:03:30, либо не указывайте):',
     dlSubs: 'Субтитры (ru,en)', dlSponsor: 'SponsorBlock (вырезать спонсорские сегменты)',
+    dlMeta: 'Встраивать метаданные', dlThumb: 'Встраивать обложку (поиск миниатюр + перезапись файла)',
     brandHint1: 'Вставьте ссылку выше и нажмите Enter — начнётся загрузка',
     brandHint2: 'Перетащите файл в окно — откроется конвертация',
     slotsTitle: 'Загрузки', slotSizeHint: 'Ctrl + колесо — размер слотов',
@@ -80,6 +81,7 @@ const I18N = {
     dlPreset: 'Codec preset:', dlQuality: 'Max quality:',
     qBest: 'Best available (Max)', dlCut: 'Time range cut (e.g. 00:01:00-00:03:30, or leave empty):',
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
+    dlMeta: 'Embed metadata', dlThumb: 'Embed thumbnail (thumbnail hunt + file rewrite)',
     brandHint1: 'Paste a link above and press Enter to start a download',
     brandHint2: 'Drag a file into the window to convert it',
     slotsTitle: 'Downloads', slotSizeHint: 'Ctrl + wheel — slot size',
@@ -143,6 +145,7 @@ const I18N = {
     dlPreset: 'Codec preset:', dlQuality: 'Max quality:',
     qBest: 'Best available (Max)', dlCut: 'Time range cut (e.g. 00:01:00-00:03:30, or leave empty):',
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
+    dlMeta: 'Embed metadata', dlThumb: 'Embed thumbnail (thumbnail hunt + file rewrite)',
     brandHint1: 'Paste a link above and press Enter to start a download',
     brandHint2: 'Drag a file into the window to convert it',
     slotsTitle: 'Downloads', slotSizeHint: 'Ctrl + wheel — slot size',
@@ -754,6 +757,8 @@ async function startDownload() {
   if (el('timerange').value.trim()) fields.download_section = el('timerange').value.trim();
   if (el('subs').checked) { fields.subs_enabled = true; fields.embed_subs = true; }
   if (el('sponsor').checked) fields.sponsorblock = 'remove';
+  fields.embed_metadata = el('emb-meta').checked;
+  fields.embed_thumbnail = el('emb-thumb').checked;
   el('url').value = '';
   el('dlpanel').classList.add('hidden');
   edgeFlash();

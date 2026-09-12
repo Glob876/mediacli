@@ -147,6 +147,7 @@ func GetInitialPresetFields() map[string]interface{} {
 		"auto_subs":            false,
 		"embed_subs":           false,
 		"embed_metadata":       true,
+		"embed_thumbnail":      true,
 		"embed_chapters":       true,
 		"split_chapters":       false,
 		"write_extra":          false,
@@ -1634,7 +1635,13 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 
 	if !GetBool(f, "audio_only") {
 		if GetBoolDefault(f, "embed_metadata", true) {
-			cmd = append(cmd, "--embed-metadata", "--embed-thumbnail")
+			cmd = append(cmd, "--embed-metadata")
+		}
+		// Обложка — отдельный флаг: её поиск (перебор миниатюр 43…37) и
+		// вшивание через mutagen (перезапись всего файла) — самая долгая
+		// часть постобработки, отключается без потери видео/аудио.
+		if GetBoolDefault(f, "embed_thumbnail", true) {
+			cmd = append(cmd, "--embed-thumbnail")
 		}
 		if GetBoolDefault(f, "embed_chapters", true) {
 			cmd = append(cmd, "--embed-chapters")

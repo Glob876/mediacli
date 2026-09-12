@@ -67,10 +67,12 @@
         <label><span data-i18n="dlCut">Вырезка по времени (напр. 00:01:00-00:03:30, либо не указывайте):</span>
           <input id="timerange" type="text" placeholder="00:01:00-00:03:30" spellcheck="false" />
         </label>
-        <div class="checks">
-          <label><input id="subs" type="checkbox" /> <span data-i18n="dlSubs">Субтитры (ru,en)</span></label>
-          <label><input id="sponsor" type="checkbox" /> <span data-i18n="dlSponsor">SponsorBlock (вырезать спонсорские сегменты)</span></label>
-        </div>
+      <div class="checks">
+        <label><input id="subs" type="checkbox" /> <span data-i18n="dlSubs">Субтитры (ru,en)</span></label>
+        <label><input id="sponsor" type="checkbox" /> <span data-i18n="dlSponsor">SponsorBlock (вырезать спонсорские сегменты)</span></label>
+        <label><input id="emb-meta" type="checkbox" checked /> <span data-i18n="dlMeta">Встраивать метаданные</span></label>
+        <label><input id="emb-thumb" type="checkbox" checked /> <span data-i18n="dlThumb">Встраивать обложку (поиск миниатюр + перезапись файла)</span></label>
+      </div>
       </section>
 
       <!-- Пустое состояние: только бренд и пара подсказок -->
