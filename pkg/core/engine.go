@@ -56,6 +56,7 @@ type Config struct {
 	DefaultDownloadPreset string                 `json:"default_download_preset"`
 	PresetDefaults        map[string]interface{} `json:"preset_defaults"`
 	TranscodeMode         string                 `json:"transcode_mode"` // "embedded" (yt-dlp --recode) | "external" (yt-dlp merge + ffmpeg)
+	AccentColor           string                 `json:"accent_color"`   // акцент Electron-оболочки, напр. "#bfff00"
 }
 
 type DownloadPreset struct {
@@ -125,6 +126,7 @@ func GetDefaultConfig() Config {
 		DefaultDownloadPreset: "",
 		PresetDefaults:        GetInitialPresetFields(),
 		TranscodeMode:         "embedded",
+		AccentColor:           "#bfff00",
 	}
 }
 

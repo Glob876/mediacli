@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"mediacli/pkg/core"
 )
 
 func testServer() *Server {
@@ -142,5 +145,49 @@ func TestQueryTokenFallback(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("bad query token: want 401, got %d", rec.Code)
+	}
+}
+
+func TestLibraryThumbValidation(t *testing.T) {
+	srv := testServer()
+	// Пустое имя: guard resolveLibraryPath не проходит.
+	if rec := doReq(t, srv, "GET", "/api/library/thumb", "", "secret"); rec.Code != http.StatusForbidden {
+		t.Fatalf("empty name: want 403, got %d", rec.Code)
+	}
+	// Несуществующий файл внутри downloadDir → 404.
+	if rec := doReq(t, srv, "GET", "/api/library/thumb?name=no-such-video.mp4", "", "secret"); rec.Code != http.StatusNotFound {
+		t.Fatalf("missing file: want 404, got %d", rec.Code)
+	}
+	// Выход за пределы downloadDir → 403.
+	if rec := doReq(t, srv, "GET", "/api/library/thumb?name=/etc/passwd", "", "secret"); rec.Code != http.StatusForbidden {
+		t.Fatalf("traversal: want 403, got %d", rec.Code)
+	}
+	// Аутентификация обязательна и здесь.
+	if rec := doReq(t, srv, "GET", "/api/library/thumb?name=x.mp4", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token: want 401, got %d", rec.Code)
+	}
+}
+
+func TestResolveLibraryPath(t *testing.T) {
+	base := string(filepath.Separator) + "dl"
+	if p, ok := resolveLibraryPath("a.mp4", base); !ok || p != filepath.Join(base, "a.mp4") {
+		t.Fatalf("basename: got %q, %v", p, ok)
+	}
+	if _, ok := resolveLibraryPath("", base); ok {
+		t.Fatal("empty name must not resolve")
+	}
+	if _, ok := resolveLibraryPath("/etc/passwd", base); ok {
+		t.Fatal("absolute path outside base must not resolve")
+	}
+	// basename нейтрализует traversal: "../evil.mp4" → base/evil.mp4 (внутри).
+	if p, ok := resolveLibraryPath("../evil.mp4", base); !ok || p != filepath.Join(base, "evil.mp4") {
+		t.Fatalf("traversal basename must stay inside base: got %q, %v", p, ok)
+	}
+}
+
+func TestDefaultAccentColor(t *testing.T) {
+	cfg := core.GetDefaultConfig()
+	if cfg.AccentColor == "" {
+		t.Fatal("default accent color must not be empty")
 	}
 }

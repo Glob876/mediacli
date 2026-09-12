@@ -9,12 +9,15 @@ package daemon
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"sort"
@@ -59,6 +62,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/convert", s.handleCreateConvert)
 	s.mux.HandleFunc("GET /api/library", s.handleLibrary)
 	s.mux.HandleFunc("GET /api/library/file", s.handleLibraryFile)
+	s.mux.HandleFunc("GET /api/library/thumb", s.handleLibraryThumb)
 	s.mux.HandleFunc("GET /api/browse", s.handleBrowse)
 }
 
@@ -536,6 +540,93 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// resolveLibraryPath проверяет имя файла из библиотеки: basename либо
+// абсолютный путь строго внутри downloadDir. Возвращает абсолютный путь.
+func resolveLibraryPath(name, outDir string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", false
+	}
+	candidate := name
+	if !filepath.IsAbs(candidate) {
+		candidate = filepath.Join(outDir, filepath.Base(candidate))
+	}
+	candidate = filepath.Clean(candidate)
+	base := filepath.Clean(outDir)
+	rel, err := filepath.Rel(base, candidate)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	return candidate, true
+}
+
+func isVideoFile(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v":
+		return true
+	}
+	return false
+}
+
+// GET /api/library/thumb?name=<file> — JPEG-превью видеофайла (кадр ~1с,
+// ширина 320) для сетки «Видео». Кеш в <configDir>/thumbs, инвалидация по
+// размеру+mtime исходника. Токен можно передать ?token= (тег <img> не умеет
+// в заголовки). Не-видео и ошибки ffmpeg → 404, фронт показывает иконку.
+func (s *Server) handleLibraryThumb(w http.ResponseWriter, r *http.Request) {
+	cfg, err := core.LoadConfig()
+	if err != nil {
+		cfg = core.GetDefaultConfig()
+	}
+	outDir := core.ParseUserPath(cfg.DownloadDir)
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		name = r.URL.Query().Get("path")
+	}
+	candidate, ok := resolveLibraryPath(name, outDir)
+	if !ok {
+		writeErr(w, http.StatusForbidden, "outside download dir")
+		return
+	}
+	st, err := os.Stat(candidate)
+	if err != nil || st.IsDir() {
+		writeErr(w, http.StatusNotFound, "file not found")
+		return
+	}
+	if !isVideoFile(candidate) {
+		writeErr(w, http.StatusNotFound, "no thumbnail for non-video")
+		return
+	}
+
+	cacheDir := filepath.Join(core.GetConfigDir(), "thumbs")
+	_ = os.MkdirAll(cacheDir, 0755)
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%s|%d|%d", candidate, st.Size(), st.ModTime().UnixNano())
+	cached := filepath.Join(cacheDir, hex.EncodeToString(h.Sum(nil))+".jpg")
+
+	if cst, err := os.Stat(cached); err == nil && !cst.IsDir() &&
+		!cst.ModTime().Before(st.ModTime()) {
+		http.ServeFile(w, r, cached)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
+	defer cancel()
+	//nolint:gosec // candidate и cached построены из проверенных путей выше.
+	cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-v", "error",
+		"-ss", "1", "-i", candidate,
+		"-vframes", "1", "-vf", "scale=320:-1", "-q:v", "4", cached)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		_ = os.Remove(cached)
+		if ctx.Err() == context.DeadlineExceeded {
+			writeErr(w, http.StatusGatewayTimeout, "thumbnail timeout")
+			return
+		}
+		writeErr(w, http.StatusNotFound, "thumbnail failed: "+strings.TrimSpace(string(out)))
+		return
+	}
+	http.ServeFile(w, r, cached)
+}
+
 // GET /api/library/file?name=<file> — отдать файл для <video>/<audio>
 // предпросмотра. Токен можно передать ?token= (тег не умеет в заголовки).
 // Guard от traversal: только basename внутри downloadDir.
@@ -549,20 +640,12 @@ func (s *Server) handleLibraryFile(w http.ResponseWriter, r *http.Request) {
 	if name == "" {
 		name = r.URL.Query().Get("path")
 	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		writeErr(w, http.StatusBadRequest, "name is required")
-		return
-	}
-	// Разрешаем либо basename, либо абсолютный путь строго внутри outDir.
-	candidate := name
-	if !filepath.IsAbs(candidate) {
-		candidate = filepath.Join(outDir, filepath.Base(candidate))
-	}
-	candidate = filepath.Clean(candidate)
-	base := filepath.Clean(outDir)
-	rel, err := filepath.Rel(base, candidate)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+	candidate, ok := resolveLibraryPath(name, outDir)
+	if !ok {
+		if strings.TrimSpace(name) == "" {
+			writeErr(w, http.StatusBadRequest, "name is required")
+			return
+		}
 		writeErr(w, http.StatusForbidden, "outside download dir")
 		return
 	}
