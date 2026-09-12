@@ -52,6 +52,26 @@ const I18N = {
     tBadAccent: 'Укажите цвет в формате hex, например #bfff00.',
     tDropNoPath: 'Не удалось получить путь к файлу. Укажите его вручную в «Конвертации».',
     tErr: 'Ошибка', loading: 'Загрузка…',
+    setTabGen: 'Основные', setTabCodecs: 'Видео и кодеки', setTabNet: 'Ускорение и сеть', setTabTools: 'Инструменты', setTabIface: 'Интерфейс',
+    userGoal: 'Основная цель:', cookiesMode: 'Авторизация (Cookies):',
+    cookiesFile: 'Путь к cookies.txt:', cookiesBrowser: 'Браузер для чтения cookies:',
+    archiveFile: 'Файл архива:', proxyUrl: 'Proxy URL:',
+    transcodeMode: 'Движок транскодинга:', transcEmbedded: 'Встроенный (yt-dlp --recode)',
+    transcExternal: 'Внешний FFmpeg (отдельно, тот же результат)',
+    thumbFormat: 'Формат обложек:', ffmpegSuffix: 'Суффиксы в именах FFmpeg',
+    overwriteOrig: 'Заменять исходный файл',
+    ffmpegPath: 'Путь к ffmpeg:', ffmpegPathPh: 'Пусто — искать в PATH',
+    ffmpegHint: 'Укажите полный путь, если yt-dlp не находит ffmpeg из PATH.', ffmpegCheck: 'Проверить',
+    tuiTheme: 'Тема консоли (TUI):', progressStyle: 'Стиль прогресса (консоль):',
+    termBg: 'Прозрачный фон терминала', notifyBell: 'Звуковой сигнал по завершении',
+    autoCheck: 'Проверять зависимости при старте', logoMode: 'Режим логотипа (консоль):',
+    logoAscii: 'ASCII-пресет:', logoProto: 'Протокол картинок:', logoImage: 'Картинка логотипа (путь):',
+    logoNote: 'Картинки работают только в Kitty / iTerm2 / WezTerm.',
+    defaultEditor: 'Редактор по умолчанию:', resetBtn: 'Сбросить к заводским',
+    confirmReset: 'Сбросить все настройки к заводским?',
+    logWaiting: 'Логов пока нет — слот ожидает очереди.', logEmpty: 'Логов пока нет.',
+    ckNone: 'Отключено', ckFile: 'Файл cookies.txt', ckBrowser: 'Из браузера',
+    logoAsciiMode: 'ASCII', logoImgMode: 'Картинка',
   },
   en: {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
@@ -95,6 +115,26 @@ const I18N = {
     tBadAccent: 'Please enter a hex colour, e.g. #bfff00.',
     tDropNoPath: 'Could not read the file path. Please enter it manually in Convert.',
     tErr: 'Error', loading: 'Loading…',
+    setTabGen: 'General', setTabCodecs: 'Video & Codecs', setTabNet: 'Speed & Network', setTabTools: 'Tools', setTabIface: 'Interface',
+    userGoal: 'Primary use-case:', cookiesMode: 'Authentication (Cookies):',
+    cookiesFile: 'Path to cookies.txt:', cookiesBrowser: 'Browser to read cookies from:',
+    archiveFile: 'Archive file:', proxyUrl: 'Proxy URL:',
+    transcodeMode: 'Transcoding engine:', transcEmbedded: 'Embedded (yt-dlp --recode)',
+    transcExternal: 'External FFmpeg (separate, same output)',
+    thumbFormat: 'Thumbnail format:', ffmpegSuffix: 'FFmpeg filename suffixes',
+    overwriteOrig: 'Replace the source file',
+    ffmpegPath: 'Path to ffmpeg:', ffmpegPathPh: 'Empty — search in PATH',
+    ffmpegHint: 'Set a full path if yt-dlp cannot find ffmpeg from PATH.', ffmpegCheck: 'Check',
+    tuiTheme: 'Console theme (TUI):', progressStyle: 'Progress style (console):',
+    termBg: 'Transparent terminal background', notifyBell: 'Bell on finish',
+    autoCheck: 'Check dependencies at startup', logoMode: 'Logo mode (console):',
+    logoAscii: 'ASCII preset:', logoProto: 'Image protocol:', logoImage: 'Logo image (path):',
+    logoNote: 'Images work only in Kitty / iTerm2 / WezTerm.',
+    defaultEditor: 'Default editor:', resetBtn: 'Reset to defaults',
+    confirmReset: 'Reset all settings to factory defaults?',
+    logWaiting: 'No logs yet — the slot is queued.', logEmpty: 'No logs yet.',
+    ckNone: 'Disabled', ckFile: 'cookies.txt file', ckBrowser: 'From browser',
+    logoAsciiMode: 'ASCII', logoImgMode: 'Image',
   },
   'en-US': {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
@@ -138,6 +178,26 @@ const I18N = {
     tBadAccent: 'Please enter a hex color, e.g. #bfff00.',
     tDropNoPath: 'Could not read the file path. Please enter it manually in Convert.',
     tErr: 'Error', loading: 'Loading…',
+    setTabGen: 'General', setTabCodecs: 'Video & Codecs', setTabNet: 'Speed & Network', setTabTools: 'Tools', setTabIface: 'Interface',
+    userGoal: 'Primary use-case:', cookiesMode: 'Authentication (Cookies):',
+    cookiesFile: 'Path to cookies.txt:', cookiesBrowser: 'Browser to read cookies from:',
+    archiveFile: 'Archive file:', proxyUrl: 'Proxy URL:',
+    transcodeMode: 'Transcoding engine:', transcEmbedded: 'Embedded (yt-dlp --recode)',
+    transcExternal: 'External FFmpeg (separate, same output)',
+    thumbFormat: 'Thumbnail format:', ffmpegSuffix: 'FFmpeg filename suffixes',
+    overwriteOrig: 'Replace the source file',
+    ffmpegPath: 'Path to ffmpeg:', ffmpegPathPh: 'Empty — search in PATH',
+    ffmpegHint: 'Set a full path if yt-dlp cannot find ffmpeg from PATH.', ffmpegCheck: 'Check',
+    tuiTheme: 'Console theme (TUI):', progressStyle: 'Progress style (console):',
+    termBg: 'Transparent terminal background', notifyBell: 'Bell on finish',
+    autoCheck: 'Check dependencies at startup', logoMode: 'Logo mode (console):',
+    logoAscii: 'ASCII preset:', logoProto: 'Image protocol:', logoImage: 'Logo image (path):',
+    logoNote: 'Images work only in Kitty / iTerm2 / WezTerm.',
+    defaultEditor: 'Default editor:', resetBtn: 'Reset to defaults',
+    confirmReset: 'Reset all settings to factory defaults?',
+    logWaiting: 'No logs yet — the slot is queued.', logEmpty: 'No logs yet.',
+    ckNone: 'Disabled', ckFile: 'cookies.txt file', ckBrowser: 'From browser',
+    logoAsciiMode: 'ASCII', logoImgMode: 'Image',
   },
 };
 
@@ -157,11 +217,47 @@ function applyI18n() {
     cselectSet('conv-preset', convertPresetsCache.map((p) => ({ value: p.id, label: convPresetLabel(p) })), cselectGet('conv-preset'));
     updateConvertDesc();
   }
+  rebuildSettingsSelects();
   renderSlots();
 }
 
 function presetLabel(p) { return state.lang === 'ru' ? (p.name_ru || p.name_en) : p.name_en; }
 function convPresetLabel(p) { return state.lang === 'ru' ? (p.name_ru || p.name_en) : p.name_en; }
+function themeLabel(t) { return state.lang === 'ru' ? (t.name_ru || t.name_en) : t.name_en; }
+
+const GOALS = {
+  ru: {
+    editing: 'Видеомонтаж (DaVinci / Premiere)', downloading: 'Обычная загрузка видео',
+    audio: 'Извлечение и архивация аудио', transcoding: 'Локальная конвертация FFmpeg',
+  },
+  en: {
+    editing: 'Video Editing (DaVinci / Premiere)', downloading: 'General Media Downloading',
+    audio: 'Audio Extraction & Archiving', transcoding: 'FFmpeg Transcoding & Encoding',
+  },
+  'en-US': {
+    editing: 'Video Editing (DaVinci / Premiere)', downloading: 'General Media Downloading',
+    audio: 'Audio Extraction & Archiving', transcoding: 'FFmpeg Transcoding & Encoding',
+  },
+};
+const goalLabel = (v) => ((GOALS[state.lang] || GOALS.ru)[v] || v);
+
+/* Справочники из GET /api/meta (single source of truth — Go). */
+let metaCache = {
+  themes: [],
+  browsers: ['chrome', 'firefox', 'brave', 'edge', 'opera', 'vivaldi', 'chromium', 'safari'],
+  logo_ascii: ['standard', 'coder_mini', 'toilet', 'rubifont'],
+  logo_protocols: ['kitty', 'iterm2'],
+  progress_styles: ['blocks', 'classic', 'dots', 'minimal'],
+  user_goals: ['editing', 'downloading', 'audio', 'transcoding'],
+  thumbnail_format: ['png', 'jpg', 'webp'],
+  audio_formats: ['mp3', 'flac', 'wav', 'm4a', 'opus'],
+};
+async function loadMeta() {
+  try {
+    const m = await backend.meta();
+    if (m) metaCache = { ...metaCache, ...m };
+  } catch { /* fallback-списки выше */ }
+}
 
 /* ================= Тосты ================= */
 function toast(msg, isError) {
@@ -320,7 +416,11 @@ const api = {
   historyClear: () => api.req('DELETE', '/api/history'),
   config: () => api.req('GET', '/api/config'),
   saveConfig: (cfg) => api.req('PUT', '/api/config', cfg),
+  resetConfig: () => api.req('POST', '/api/config/reset'),
   status: () => api.req('GET', '/api/status'),
+  meta: () => api.req('GET', '/api/meta'),
+  task: (id) => api.req('GET', `/api/tasks/${id}`),
+  ffmpegCheck: (path) => api.req('GET', '/api/tools/ffmpeg?path=' + encodeURIComponent(path || '')),
   eventsUrl: (id) => `${BASE}/api/tasks/${id}/events?token=${encodeURIComponent(TOKEN)}`,
   fileUrl: (name) => `${BASE}/api/library/file?name=${encodeURIComponent(name)}&token=${encodeURIComponent(TOKEN)}`,
   thumbUrl: (name) => `${BASE}/api/library/thumb?name=${encodeURIComponent(name)}&token=${encodeURIComponent(TOKEN)}`,
@@ -420,6 +520,35 @@ const mockApi = {
   async historyClear() { this._history = []; return { ok: true }; },
   async config() { return { ...this._config }; },
   async saveConfig(cfg) { this._config = { ...cfg }; return { ...this._config }; },
+  async resetConfig() {
+    this._config = {
+      download_dir: '/tmp/MediaCLI', language: 'ru', video_preset: 'default',
+      audio_format: 'mp3', sub_langs: 'ru,en', proxy_mode: 'system', proxy_url: '',
+      concurrent_fragments: 4, bg_queue_max: 3, no_mtime: true, windows_filenames: true, use_archive: false,
+      accent_color: '#bfff00', ffmpeg_path: '',
+    };
+    return { ...this._config };
+  },
+  async meta() {
+    return {
+      themes: [
+        { id: 'cyan', name_en: 'Arch Cyan (Default)', name_ru: 'Arch Cyan (По умолчанию)' },
+        { id: 'nord', name_en: 'Nord Blue', name_ru: 'Nord Blue' },
+      ],
+      browsers: ['chrome', 'firefox'], logo_ascii: ['standard'], logo_protocols: ['kitty', 'iterm2'],
+      progress_styles: ['blocks', 'classic'], user_goals: ['editing', 'downloading'],
+      thumbnail_format: ['png', 'jpg'], audio_formats: ['mp3', 'flac'],
+    };
+  },
+  async task(id) {
+    const t = this._tasks.find((x) => x.id === Number(id));
+    if (!t) throw new Error('not found');
+    return { ...t, log_tail: [t.stage || t.status] };
+  },
+  async ffmpegCheck(path) {
+    if (path && path.includes('bad')) return { configured: path, resolved: path, found: false, error: 'mock: file not found' };
+    return { configured: path || '', resolved: 'ffmpeg', found: true, version: 'mock ffmpeg 7.x' };
+  },
   async status() {
     return {
       ok: true, version: 'mock',
@@ -501,8 +630,10 @@ function restoreUI() {
     groupSeq = data.groupSeq || groups.length;
     slotSeq = data.slotSeq || slots.length;
     // Задачи прошлого запуска мертвы вместе с демоном — помечаем честно.
+    // Развёрнутые логи закрываем: контент подтянется заново при клике.
     slots.forEach((s) => {
       if (s.status === 'active') { s.status = 'failed'; s.stage = T('interrupted'); s.progress = 0; }
+      s.open = false;
     });
     // Чистим ссылки на удалённые группы.
     const gids = new Set(groups.map((g) => g.id));
@@ -632,22 +763,77 @@ async function startDownload() {
 }
 
 /* ---------- Рендер слотов ---------- */
+const logTimers = {};
+
+function stopAllLogPolls() {
+  Object.keys(logTimers).forEach((k) => { clearInterval(logTimers[k]); delete logTimers[k]; });
+}
+
+async function fetchSlotLogs(slot) {
+  const div = el(`slot-${slot.key}`);
+  const pre = div && div.querySelector('.slot-log');
+  if (!pre) return;
+  if (slot.status === 'waiting' || !slot.taskId) {
+    pre.textContent = T('logWaiting');
+    return;
+  }
+  try {
+    const snap = await backend.task(slot.taskId);
+    const lines = snap.log_tail || [];
+    pre.textContent = lines.length ? lines.join('\n') : T('logEmpty');
+    pre.scrollTop = pre.scrollHeight;
+  } catch (e) {
+    pre.textContent = `${T('tErr')}: ${e.message}`;
+  }
+}
+
+function syncLogPolls() {
+  stopAllLogPolls();
+  slots.forEach((s) => {
+    if (!s.open) return;
+    void fetchSlotLogs(s);
+    if (s.status === 'active' && s.taskId) {
+      logTimers[s.key] = setInterval(() => { void fetchSlotLogs(s); }, 1000);
+    }
+  });
+}
+
 function slotCard(slot, idx) {
   const div = document.createElement('div');
   div.className = 'dl-card slot' + (slot.status === 'active' ? ' active' : '') +
-    (slot.status === 'failed' ? ' failed' : '') + (slot.status === 'waiting' ? ' waiting' : '');
+    (slot.status === 'failed' ? ' failed' : '') + (slot.status === 'waiting' ? ' waiting' : '') +
+    (slot.open ? ' open' : '');
   div.id = `slot-${slot.key}`;
   div.style.setProperty('--i', idx);
+
+  // Клик по заголовку/статусу разворачивает логи с анимацией.
+  const main = document.createElement('div');
+  main.className = 'slot-main';
+  main.title = slot.url;
+  main.onclick = () => {
+    slot.open = !slot.open;
+    div.classList.toggle('open', slot.open);
+    if (slot.open) {
+      void fetchSlotLogs(slot);
+      if (slot.status === 'active' && slot.taskId && !logTimers[slot.key]) {
+        logTimers[slot.key] = setInterval(() => { void fetchSlotLogs(slot); }, 1000);
+      }
+    } else if (logTimers[slot.key]) {
+      clearInterval(logTimers[slot.key]);
+      delete logTimers[slot.key];
+    }
+  };
 
   const title = document.createElement('div');
   title.className = 'dl-title';
   title.textContent = slot.title || slot.url;
   title.title = slot.url;
-  div.appendChild(title);
+  main.appendChild(title);
 
   const stage = document.createElement('div');
   stage.className = 'dl-stage';
-  div.appendChild(stage);
+  main.appendChild(stage);
+  div.appendChild(main);
 
   const bar = document.createElement('progress');
   bar.max = 100;
@@ -703,6 +889,12 @@ function slotCard(slot, idx) {
     foot.appendChild(sel);
   }
   div.appendChild(foot);
+  const logwrap = document.createElement('div');
+  logwrap.className = 'slot-logwrap';
+  const logpre = document.createElement('pre');
+  logpre.className = 'slot-log';
+  logwrap.appendChild(logpre);
+  div.appendChild(logwrap);
   paintSlotInto(slot, div);
   return div;
 }
@@ -733,6 +925,7 @@ function renderSlots() {
   const wrap = el('slots-wrap');
   const box = el('slots');
   const gbox = el('groups');
+  stopAllLogPolls();
   if (!slots.length) {
     empty.classList.remove('hidden');
     wrap.classList.add('hidden');
@@ -791,6 +984,7 @@ function renderSlots() {
   // Вне групп.
   box.innerHTML = '';
   slots.filter((s) => !s.groupId).forEach((s, i) => box.appendChild(slotCard(s, i)));
+  syncLogPolls();
 }
 
 /* ================= Главная ================= */
@@ -1114,50 +1308,153 @@ async function loadHistory() {
 /* ================= Настройки ================= */
 let settingsCache = null;
 
+/* ================= Настройки: вкладки слева ================= */
+function showSetPane(name) {
+  document.querySelectorAll('.settab').forEach((b) => b.classList.toggle('active', b.dataset.spane === name));
+  document.querySelectorAll('.setpane').forEach((p) => {
+    const show = p.id === `sp-${name}`;
+    p.classList.toggle('hidden', !show);
+    if (show) {
+      p.classList.remove('page-enter');
+      void p.offsetWidth;
+      p.classList.add('page-enter');
+    }
+  });
+}
+
+function cookiesModeOptions() {
+  return [
+    { value: 'none', label: T('ckNone') },
+    { value: 'file', label: T('ckFile') },
+    { value: 'browser', label: T('ckBrowser') },
+  ];
+}
+
+function transcodeOptions() {
+  return [
+    { value: 'embedded', label: T('transcEmbedded') },
+    { value: 'external', label: T('transcExternal') },
+  ];
+}
+
+function goalOptions() {
+  return (metaCache.user_goals || ['editing']).map((v) => ({ value: v, label: goalLabel(v) }));
+}
+
+function themeOptions() {
+  return (metaCache.themes || []).map((t) => ({ value: t.id, label: themeLabel(t) }));
+}
+
+function rebuildSettingsSelects(cfg) {
+  cfg = cfg || settingsCache || {};
+  cselectSet('set-language', [
+    { value: 'ru', label: 'Русский' },
+    { value: 'en', label: 'English' },
+    { value: 'en-US', label: 'English (US)' },
+  ], cfg.language || 'ru');
+  cselectSet('set-user-goal', goalOptions(), cfg.user_goal || 'editing');
+  cselectSet('set-cookies-mode', cookiesModeOptions(), cfg.cookies_mode || 'none');
+  cselectSet('set-cookies-browser',
+    (metaCache.browsers || ['chrome']).map((v) => ({ value: v, label: v })),
+    cfg.cookies_browser || 'chrome');
+  cselectSet('set-proxy-mode',
+    ['system', 'custom', 'none'].map((v) => ({ value: v, label: v })),
+    cfg.proxy_mode || 'system');
+  cselectSet('set-video-preset',
+    videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) })),
+    cfg.video_preset || 'default');
+  cselectSet('set-transcode-mode', transcodeOptions(), cfg.transcode_mode || 'embedded');
+  cselectSet('set-audio-format',
+    (metaCache.audio_formats || ['mp3']).map((v) => ({ value: v, label: v })),
+    cfg.audio_format || 'mp3');
+  cselectSet('set-thumb-format',
+    (metaCache.thumbnail_format || ['png']).map((v) => ({ value: v, label: v.toUpperCase() })),
+    cfg.thumbnail_format || 'png');
+  cselectSet('set-fragments',
+    ['2', '4', '8', '16'].map((v) => ({ value: v, label: v })),
+    String(cfg.concurrent_fragments || 4));
+  cselectSet('set-queue-max',
+    ['1', '2', '3', '4'].map((v) => ({ value: v, label: v })),
+    String(cfg.bg_queue_max || 3));
+  cselectSet('set-theme', themeOptions(), cfg.theme || 'cyan');
+  cselectSet('set-progress-style',
+    (metaCache.progress_styles || ['blocks']).map((v) => ({ value: v, label: v })),
+    cfg.progress_style || 'blocks');
+  cselectSet('set-logo-mode', [
+    { value: 'ascii', label: T('logoAsciiMode') },
+    { value: 'image', label: T('logoImgMode') },
+  ], cfg.logo_mode || 'ascii');
+  cselectSet('set-logo-ascii',
+    (metaCache.logo_ascii || ['standard']).map((v) => ({ value: v, label: v })),
+    cfg.logo_ascii_preset || 'standard');
+  cselectSet('set-logo-protocol',
+    (metaCache.logo_protocols || ['kitty']).map((v) => ({ value: v, label: v })),
+    cfg.logo_protocol || 'kitty');
+  syncConditionalRows();
+}
+
+function syncConditionalRows() {
+  const cm = cselectGet('set-cookies-mode');
+  el('row-cookies-file').classList.toggle('hidden', cm !== 'file');
+  el('row-cookies-browser').classList.toggle('hidden', cm !== 'browser');
+  const lm = cselectGet('set-logo-mode');
+  el('row-logo-ascii').classList.toggle('hidden', lm !== 'ascii');
+  el('row-logo-img').classList.toggle('hidden', lm !== 'image');
+}
+
+async function checkFfmpeg() {
+  const box = el('ffmpeg-status');
+  const path = el('set-ffmpeg-path').value.trim();
+  box.className = 'muted small';
+  box.textContent = T('checking');
+  try {
+    const r = await backend.ffmpegCheck(path);
+    if (r.found) {
+      box.className = 'small ff-ok';
+      box.textContent = `✓ ${r.version || 'ffmpeg'} (${r.resolved})`;
+    } else {
+      box.className = 'small ff-bad';
+      box.textContent = `✗ ${r.error || '?'} (${r.resolved})`;
+    }
+  } catch (e) {
+    box.className = 'small ff-bad';
+    box.textContent = `✗ ${e.message}`;
+  }
+}
+
 async function loadSettings() {
   try {
+    await loadMeta();
     const cfg = await backend.config();
     settingsCache = cfg;
     if (cfg.accent_color && hexToRgb(cfg.accent_color)) applyAccent(cfg.accent_color);
     if (cfg.language && I18N[cfg.language]) {
       if (state.lang !== cfg.language) { state.lang = cfg.language; applyI18n(); }
     }
-    el('set-download-dir').value = cfg.download_dir || '';
-    el('set-sub-langs').value = cfg.sub_langs || '';
-    el('set-proxy-url').value = cfg.proxy_url || '';
-    el('set-no-mtime').checked = !!cfg.no_mtime;
-    el('set-win-names').checked = !!cfg.windows_filenames;
-    el('set-archive').checked = !!cfg.use_archive;
-    cselectSet('set-language', [
-      { value: 'ru', label: 'Русский' },
-      { value: 'en', label: 'English' },
-      { value: 'en-US', label: 'English (US)' },
-    ], cfg.language || 'ru');
-    cselectSet('set-audio-format',
-      ['mp3', 'flac', 'wav', 'm4a', 'opus'].map((v) => ({ value: v, label: v })),
-      cfg.audio_format || 'mp3');
-    cselectSet('set-proxy-mode',
-      ['system', 'custom', 'none'].map((v) => ({ value: v, label: v })),
-      cfg.proxy_mode || 'system');
-    cselectSet('set-fragments',
-      ['2', '4', '8', '16'].map((v) => ({ value: v, label: v })),
-      String(cfg.concurrent_fragments || 4));
-    cselectSet('set-queue-max',
-      ['1', '2', '3', '4'].map((v) => ({ value: v, label: v })),
-      String(cfg.bg_queue_max || 3));
-    if (videoPresetsCache.length) {
-      cselectSet('set-video-preset',
-        videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) })),
-        cfg.video_preset || 'default');
-    } else {
+    if (!videoPresetsCache.length) {
       try {
         const { video_presets } = await backend.presets();
         videoPresetsCache = video_presets || [];
-        cselectSet('set-video-preset',
-          videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) })),
-          cfg.video_preset || 'default');
       } catch { /* ignore */ }
     }
+    el('set-download-dir').value = cfg.download_dir || '';
+    el('set-sub-langs').value = cfg.sub_langs || '';
+    el('set-proxy-url').value = cfg.proxy_url || '';
+    el('set-cookies-file').value = cfg.cookies_file || '';
+    el('set-archive-file').value = cfg.archive_file || '';
+    el('set-ffmpeg-path').value = cfg.ffmpeg_path || '';
+    el('set-logo-image').value = cfg.logo_image_path || '';
+    el('set-default-editor').value = cfg.default_editor || '';
+    el('set-no-mtime').checked = !!cfg.no_mtime;
+    el('set-win-names').checked = !!cfg.windows_filenames;
+    el('set-archive').checked = !!cfg.use_archive;
+    el('set-ffmpeg-suffix').checked = cfg.use_ffmpeg_suffix !== false;
+    el('set-overwrite').checked = !!cfg.overwrite_original;
+    el('set-terminal-bg').checked = cfg.use_terminal_bg !== false;
+    el('set-notify-bell').checked = cfg.notify_bell !== false;
+    el('set-auto-check-deps').checked = cfg.auto_check_deps !== false;
+    rebuildSettingsSelects(cfg);
+    void checkFfmpeg();
   } catch (e) { toast(`${T('tLoadFail')} ${e.message}`, true); }
 }
 
@@ -1227,12 +1524,25 @@ async function init() {
   cselectInit('quality');
   cselectInit('conv-preset');
   cselectInit('set-language');
+  cselectInit('set-user-goal');
+  cselectInit('set-cookies-mode', () => syncConditionalRows());
+  cselectInit('set-cookies-browser');
   cselectInit('set-video-preset');
+  cselectInit('set-transcode-mode');
   cselectInit('set-audio-format');
+  cselectInit('set-thumb-format');
   cselectInit('set-proxy-mode');
   cselectInit('set-fragments');
   cselectInit('set-queue-max');
+  cselectInit('set-theme');
+  cselectInit('set-progress-style');
+  cselectInit('set-logo-mode', () => syncConditionalRows());
+  cselectInit('set-logo-ascii');
+  cselectInit('set-logo-protocol');
   cselectSet('quality', qualityOptions(), '');
+  document.querySelectorAll('.settab').forEach((b) => {
+    b.onclick = () => showSetPane(b.dataset.spane);
+  });
 
   try {
     const slotmin = localStorage.getItem('mc_slotmin_v1');
@@ -1253,6 +1563,7 @@ async function init() {
 
   await loadVideoPresets();
   await loadConvertPresets();
+  await loadMeta();
   renderSlots();
   pumpQueue();
 
@@ -1351,26 +1662,61 @@ async function init() {
     if (hexToRgb(v)) applyAccent(v);
     else el('accent-prev').style.background = 'transparent';
   });
+  el('btn-ffmpeg-check').onclick = () => { void checkFfmpeg(); };
+  el('btn-settings-reset').onclick = async () => {
+    if (!confirm(T('confirmReset'))) return;
+    try {
+      settingsCache = await backend.resetConfig();
+      if (settingsCache.language && I18N[settingsCache.language]) state.lang = settingsCache.language;
+      if (settingsCache.accent_color && hexToRgb(settingsCache.accent_color)) state.accent = settingsCache.accent_color;
+      applyI18n();
+      applyAccent(state.accent);
+      await loadSettings();
+      toast(T('tSaved'));
+    } catch (e) { toast(`${T('tSaveFail')} ${e.message}`, true); }
+  };
   el('btn-settings-save').onclick = async () => {
     if (!settingsCache) return;
     const accentRaw = el('set-accent').value.trim();
     const accent = accentRaw === '' ? state.accent : accentRaw;
     if (!hexToRgb(accent)) { toast(T('tBadAccent'), true); return; }
     applyAccent(accent);
+    const cookiesMode = cselectGet('set-cookies-mode');
+    const logoMode = cselectGet('set-logo-mode');
     const cfg = {
       ...settingsCache,
       download_dir: el('set-download-dir').value.trim(),
       language: cselectGet('set-language'),
-      video_preset: cselectGet('set-video-preset'),
-      audio_format: cselectGet('set-audio-format'),
-      sub_langs: el('set-sub-langs').value.trim(),
+      user_goal: cselectGet('set-user-goal') || 'editing',
+      cookies_mode: cookiesMode || 'none',
+      cookies_file: cookiesMode === 'file' ? el('set-cookies-file').value.trim() : (settingsCache.cookies_file || ''),
+      cookies_browser: cookiesMode === 'browser' ? (cselectGet('set-cookies-browser') || 'chrome') : (settingsCache.cookies_browser || 'chrome'),
       proxy_mode: cselectGet('set-proxy-mode'),
       proxy_url: el('set-proxy-url').value.trim(),
+      use_archive: el('set-archive').checked,
+      archive_file: el('set-archive-file').value.trim(),
+      video_preset: cselectGet('set-video-preset'),
+      transcode_mode: cselectGet('set-transcode-mode') || 'embedded',
+      audio_format: cselectGet('set-audio-format'),
+      sub_langs: el('set-sub-langs').value.trim(),
+      thumbnail_format: cselectGet('set-thumb-format') || 'png',
+      use_ffmpeg_suffix: el('set-ffmpeg-suffix').checked,
+      overwrite_original: el('set-overwrite').checked,
       concurrent_fragments: parseInt(cselectGet('set-fragments'), 10),
       bg_queue_max: parseInt(cselectGet('set-queue-max'), 10),
       no_mtime: el('set-no-mtime').checked,
       windows_filenames: el('set-win-names').checked,
-      use_archive: el('set-archive').checked,
+      ffmpeg_path: el('set-ffmpeg-path').value.trim(),
+      theme: cselectGet('set-theme') || 'cyan',
+      progress_style: cselectGet('set-progress-style') || 'blocks',
+      use_terminal_bg: el('set-terminal-bg').checked,
+      notify_bell: el('set-notify-bell').checked,
+      auto_check_deps: el('set-auto-check-deps').checked,
+      logo_mode: logoMode || 'ascii',
+      logo_ascii_preset: cselectGet('set-logo-ascii') || 'standard',
+      logo_protocol: cselectGet('set-logo-protocol') || 'kitty',
+      logo_image_path: logoMode === 'image' ? el('set-logo-image').value.trim() : (settingsCache.logo_image_path || ''),
+      default_editor: el('set-default-editor').value.trim(),
       accent_color: state.accent,
     };
     try {
@@ -1379,6 +1725,7 @@ async function init() {
         state.lang = settingsCache.language;
       }
       applyI18n();
+      void checkFfmpeg();
       toast(T('tSaved'));
     } catch (e) { toast(`${T('tSaveFail')} ${e.message}`, true); }
   };

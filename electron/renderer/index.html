@@ -142,55 +142,142 @@
       </div>
     </section>
 
-    <!-- НАСТРОЙКИ -->
+    <!-- НАСТРОЙКИ: слева вкладки, справа содержимое (как в консольной версии) -->
     <section id="view-settings" class="view hidden">
-      <div class="card form">
-        <b class="card-title" data-i18n="appearance">Оформление</b>
-        <div class="swatches" id="accent-swatches"></div>
-        <label><span data-i18n="accentCustom">Свой акцентный цвет (hex):</span>
-          <span class="colorrow"><input id="set-accent" type="text" placeholder="#bfff00" spellcheck="false" /><span class="colorprev" id="accent-prev"></span></span>
-        </label>
-        <div class="grid2">
-          <label><span data-i18n="language">Язык интерфейса:</span>
-            <div class="cselect" id="set-language"></div>
-          </label>
-          <label><span data-i18n="videoPreset">Видео-пресет по умолчанию:</span>
-            <div class="cselect" id="set-video-preset"></div>
-          </label>
+      <div class="setlayout">
+        <nav class="settabs" id="settabs">
+          <button class="settab active" data-spane="gen" data-i18n="setTabGen">Основные</button>
+          <button class="settab" data-spane="codecs" data-i18n="setTabCodecs">Видео и кодеки</button>
+          <button class="settab" data-spane="net" data-i18n="setTabNet">Ускорение и сеть</button>
+          <button class="settab" data-spane="tools" data-i18n="setTabTools">Инструменты</button>
+          <button class="settab" data-spane="iface" data-i18n="setTabIface">Интерфейс</button>
+        </nav>
+        <div class="setpanes">
+          <div class="setpane card form" id="sp-gen">
+            <label><span data-i18n="dlDir">Папка загрузок:</span> <input id="set-download-dir" type="text" /></label>
+            <div class="grid2">
+              <label><span data-i18n="language">Язык интерфейса:</span>
+                <div class="cselect" id="set-language"></div>
+              </label>
+              <label><span data-i18n="userGoal">Основная цель:</span>
+                <div class="cselect" id="set-user-goal"></div>
+              </label>
+            </div>
+            <div class="muted small" data-i18n="langNote">Американский английский (en-US) поддерживается полностью.</div>
+            <label><span data-i18n="cookiesMode">Авторизация (Cookies):</span>
+              <div class="cselect" id="set-cookies-mode"></div>
+            </label>
+            <label id="row-cookies-file"><span data-i18n="cookiesFile">Путь к cookies.txt:</span>
+              <input id="set-cookies-file" type="text" spellcheck="false" />
+            </label>
+            <label id="row-cookies-browser"><span data-i18n="cookiesBrowser">Браузер для чтения cookies:</span>
+              <div class="cselect" id="set-cookies-browser"></div>
+            </label>
+            <div class="grid2">
+              <label><span data-i18n="proxy">Прокси:</span>
+                <div class="cselect" id="set-proxy-mode"></div>
+              </label>
+              <label><span data-i18n="proxyUrl">Proxy URL:</span> <input id="set-proxy-url" type="text" /></label>
+            </div>
+            <div class="checks">
+              <label><input id="set-archive" type="checkbox" /> <span data-i18n="archive">Архив загрузок (без повторов)</span></label>
+            </div>
+            <label><span data-i18n="archiveFile">Файл архива:</span> <input id="set-archive-file" type="text" /></label>
+          </div>
+
+          <div class="setpane card form hidden" id="sp-codecs">
+            <label><span data-i18n="videoPreset">Видео-пресет по умолчанию:</span>
+              <div class="cselect" id="set-video-preset"></div>
+            </label>
+            <label><span data-i18n="transcodeMode">Движок транскодинга:</span>
+              <div class="cselect" id="set-transcode-mode"></div>
+            </label>
+            <div class="grid2">
+              <label><span data-i18n="audioFmt">Аудио-формат:</span>
+                <div class="cselect" id="set-audio-format"></div>
+              </label>
+              <label><span data-i18n="subLangs">Языки субтитров:</span> <input id="set-sub-langs" type="text" /></label>
+            </div>
+            <label><span data-i18n="thumbFormat">Формат обложек:</span>
+              <div class="cselect" id="set-thumb-format"></div>
+            </label>
+            <div class="checks">
+              <label><input id="set-ffmpeg-suffix" type="checkbox" /> <span data-i18n="ffmpegSuffix">Суффиксы в именах FFmpeg</span></label>
+              <label><input id="set-overwrite" type="checkbox" /> <span data-i18n="overwriteOrig">Заменять исходный файл</span></label>
+            </div>
+          </div>
+
+          <div class="setpane card form hidden" id="sp-net">
+            <div class="grid2">
+              <label><span data-i18n="frags">Параллельных фрагментов:</span>
+                <div class="cselect" id="set-fragments"></div>
+              </label>
+              <label><span data-i18n="queueMax">Макс. фоновых задач:</span>
+                <div class="cselect" id="set-queue-max"></div>
+              </label>
+            </div>
+            <div class="checks">
+              <label><input id="set-no-mtime" type="checkbox" /> <span data-i18n="noMtime">Не изменять время файла (--no-mtime)</span></label>
+              <label><input id="set-win-names" type="checkbox" /> <span data-i18n="winNames">Безопасные имена файлов (--windows-filenames)</span></label>
+            </div>
+          </div>
+
+          <div class="setpane card form hidden" id="sp-tools">
+            <label><span data-i18n="ffmpegPath">Путь к ffmpeg:</span>
+              <input id="set-ffmpeg-path" type="text" data-i18n-ph="ffmpegPathPh" placeholder="Пусто — искать в PATH" spellcheck="false" />
+            </label>
+            <div class="muted small" data-i18n="ffmpegHint">Укажите полный путь, если yt-dlp не находит ffmpeg из PATH.</div>
+            <div class="row" style="justify-content:flex-start">
+              <button id="btn-ffmpeg-check" class="btn small" data-i18n="ffmpegCheck">Проверить</button>
+            </div>
+            <div class="muted small" id="ffmpeg-status"></div>
+          </div>
+
+          <div class="setpane card form hidden" id="sp-iface">
+            <b class="card-title" data-i18n="appearance">Оформление</b>
+            <div class="swatches" id="accent-swatches"></div>
+            <label><span data-i18n="accentCustom">Свой акцентный цвет (hex):</span>
+              <span class="colorrow"><input id="set-accent" type="text" placeholder="#bfff00" spellcheck="false" /><span class="colorprev" id="accent-prev"></span></span>
+            </label>
+            <div class="grid2">
+              <label><span data-i18n="tuiTheme">Тема консоли (TUI):</span>
+                <div class="cselect" id="set-theme"></div>
+              </label>
+              <label><span data-i18n="progressStyle">Стиль прогресса (консоль):</span>
+                <div class="cselect" id="set-progress-style"></div>
+              </label>
+            </div>
+            <div class="checks">
+              <label><input id="set-terminal-bg" type="checkbox" /> <span data-i18n="termBg">Прозрачный фон терминала</span></label>
+              <label><input id="set-notify-bell" type="checkbox" /> <span data-i18n="notifyBell">Звуковой сигнал по завершении</span></label>
+              <label><input id="set-auto-check-deps" type="checkbox" /> <span data-i18n="autoCheck">Проверять зависимости при старте</span></label>
+            </div>
+            <label><span data-i18n="logoMode">Режим логотипа (консоль):</span>
+              <div class="cselect" id="set-logo-mode"></div>
+            </label>
+            <label id="row-logo-ascii"><span data-i18n="logoAscii">ASCII-пресет:</span>
+              <div class="cselect" id="set-logo-ascii"></div>
+            </label>
+            <div class="grid2" id="row-logo-img">
+              <label><span data-i18n="logoProto">Протокол картинок:</span>
+                <div class="cselect" id="set-logo-protocol"></div>
+              </label>
+              <label><span data-i18n="logoImage">Картинка логотипа (путь):</span>
+                <input id="set-logo-image" type="text" spellcheck="false" />
+              </label>
+            </div>
+            <div class="muted small" data-i18n="logoNote">Картинки работают только в Kitty / iTerm2 / WezTerm.</div>
+            <label><span data-i18n="defaultEditor">Редактор по умолчанию:</span>
+              <input id="set-default-editor" type="text" spellcheck="false" />
+            </label>
+            <div class="row" style="justify-content:flex-start">
+              <button id="btn-settings-reset" class="btn small danger" data-i18n="resetBtn">Сбросить к заводским</button>
+            </div>
+          </div>
         </div>
-        <div class="muted small" data-i18n="langNote">Американский английский (en-US) поддерживается полностью.</div>
       </div>
-      <div class="card form">
-        <b class="card-title" data-i18n="dlSettingsGroup">Загрузки</b>
-        <label><span data-i18n="dlDir">Папка загрузок:</span> <input id="set-download-dir" type="text" /></label>
-        <div class="grid2">
-          <label><span data-i18n="audioFmt">Аудио-формат:</span>
-            <div class="cselect" id="set-audio-format"></div>
-          </label>
-          <label><span data-i18n="subLangs">Языки субтитров:</span> <input id="set-sub-langs" type="text" /></label>
-        </div>
-        <div class="grid2">
-          <label><span data-i18n="proxy">Прокси:</span>
-            <div class="cselect" id="set-proxy-mode"></div>
-          </label>
-          <label>Proxy URL: <input id="set-proxy-url" type="text" /></label>
-        </div>
-        <div class="grid2">
-          <label><span data-i18n="frags">Параллельных фрагментов:</span>
-            <div class="cselect" id="set-fragments"></div>
-          </label>
-          <label><span data-i18n="queueMax">Макс. фоновых задач:</span>
-            <div class="cselect" id="set-queue-max"></div>
-          </label>
-        </div>
-        <div class="checks">
-          <label><input id="set-no-mtime" type="checkbox" /> <span data-i18n="noMtime">Не изменять время файла (--no-mtime)</span></label>
-          <label><input id="set-win-names" type="checkbox" /> <span data-i18n="winNames">Безопасные имена файлов (--windows-filenames)</span></label>
-          <label><input id="set-archive" type="checkbox" /> <span data-i18n="archive">Архив загрузок (без повторов)</span></label>
-        </div>
-        <div class="row">
-          <button id="btn-settings-save" class="btn primary" data-i18n="save">Сохранить настройки</button>
-        </div>
+      <div class="row setactions">
+        <button id="btn-settings-save" class="btn primary" data-i18n="save">Сохранить настройки</button>
       </div>
     </section>
 

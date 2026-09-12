@@ -183,7 +183,60 @@ body {
 .selbox:hover { border-color: var(--lime); box-shadow: 0 0 8px var(--lime-dim); }
 .selbox.on { background: var(--lime); border-color: var(--lime); }
 
-/* ================= Ghost-навигация ================= */
+/* ================= Настройки: вкладки слева, контент справа ================= */
+.setlayout { display: grid; grid-template-columns: 150px 1fr; gap: 8px; align-items: start; }
+.settabs { display: flex; flex-direction: column; gap: 4px; }
+.settab {
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid var(--lime);
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+  transition: background-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+.settab:hover {
+  background: color-mix(in srgb, var(--lime) 16%, #000000);
+  box-shadow: 0 0 10px var(--lime-dim);
+}
+.settab.active { background: var(--lime); color: #000000; font-weight: 700; }
+.setpanes { min-width: 0; }
+.setpane { animation: fadeSlide 0.25s ease; margin-bottom: 0; }
+.setactions { margin-top: 8px; }
+.ff-ok { color: var(--lime); }
+.ff-bad { color: var(--danger); }
+@media (max-width: 760px) {
+  .setlayout { grid-template-columns: 1fr; }
+  .settabs { flex-direction: row; flex-wrap: wrap; }
+}
+
+/* ================= Логи слота (разворот по клику) ================= */
+.slot-main { cursor: pointer; }
+.slot-logwrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.32s ease, opacity 0.25s ease, margin 0.32s ease;
+  margin-top: 0;
+}
+.dl-card.open .slot-logwrap { grid-template-rows: 1fr; opacity: 1; margin-top: 6px; }
+.slot-log {
+  min-height: 0;
+  overflow: hidden auto;
+  max-height: 170px;
+  margin: 0;
+  padding: 0 7px;
+  background: #000;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+.dl-card.open .slot-log { border-color: color-mix(in srgb, var(--lime) 50%, transparent); }
 #ghostnav {
   position: fixed;
   right: 10px;
