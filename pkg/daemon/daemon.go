@@ -58,6 +58,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/presets", s.handlePresets)
 	s.mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	s.mux.HandleFunc("PUT /api/config", s.handlePutConfig)
+	s.mux.HandleFunc("POST /api/config/reset", s.handleResetConfig)
 	s.mux.HandleFunc("GET /api/convert/presets", s.handleConvertPresets)
 	s.mux.HandleFunc("POST /api/convert", s.handleCreateConvert)
 	s.mux.HandleFunc("GET /api/library", s.handleLibrary)
@@ -367,6 +368,17 @@ func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
 	if cfg.BGQueueMax > 8 {
 		cfg.BGQueueMax = 8
 	}
+	if err := core.SaveConfig(cfg); err != nil {
+		writeErr(w, http.StatusInternalServerError, "cannot save config: "+err.Error())
+		return
+	}
+	core.GlobalQueue.SyncMaxTasksFromConfig(cfg)
+	writeJSON(w, http.StatusOK, cfg)
+}
+
+// POST /api/config/reset — сбросить настройки к заводским (как в TUI).
+func (s *Server) handleResetConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := core.GetDefaultConfig()
 	if err := core.SaveConfig(cfg); err != nil {
 		writeErr(w, http.StatusInternalServerError, "cannot save config: "+err.Error())
 		return

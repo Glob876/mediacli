@@ -302,3 +302,19 @@ func TestMetaThemesMatchUI(t *testing.T) {
 		}
 	}
 }
+
+func TestResetConfig(t *testing.T) {
+	srv := testServer()
+	rec := doReq(t, srv, "POST", "/api/config/reset", "", "secret")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reset: want 200, got %d", rec.Code)
+	}
+	var cfg core.Config
+	if err := json.Unmarshal(rec.Body.Bytes(), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	def := core.GetDefaultConfig()
+	if cfg.DownloadDir != def.DownloadDir || cfg.Language != def.Language || cfg.BGQueueMax != def.BGQueueMax {
+		t.Fatalf("reset must return factory defaults: %+v", cfg)
+	}
+}
