@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MediaCLI — Pastel Media Suite</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <input id="url" type="text" placeholder="Paste media URL (YouTube, VK, Twitch, etc.)…" spellcheck="false" />
+    <button id="btn-go" class="btn primary">Configure</button>
+  </header>
+
+  <section id="confirm" class="card hidden">
+    <div class="grid2">
+      <label>Target Codec Preset:
+        <select id="preset"></select>
+      </label>
+      <label>Max Quality:
+        <select id="quality">
+          <option value="">Best Available (Max)</option>
+          <option value="2160">4K Ultra HD (2160p)</option>
+          <option value="1440">2K Quad HD (1440p)</option>
+          <option value="1080">Full HD (1080p)</option>
+          <option value="720">HD (720p)</option>
+          <option value="480">SD (480p)</option>
+        </select>
+      </label>
+    </div>
+    <label>Time range cut (e.g. 00:01:00-00:03:30 or leave empty):
+      <input id="timerange" type="text" placeholder="00:01:00-00:03:30" spellcheck="false" />
+    </label>
+    <div class="checks">
+      <label><input id="subs" type="checkbox" /> Download Subtitles (ru,en)</label>
+      <label><input id="sponsor" type="checkbox" /> SponsorBlock (Cut Sponsorships)</label>
+    </div>
+    <div class="row">
+      <button id="btn-cancel" class="btn">Cancel</button>
+      <button id="btn-start" class="btn primary">Start Download</button>
+    </div>
+  </section>
+
+  <main id="cards" class="cards"></main>
+
+  <script src="app.js"></script>
+</body>
+</html>

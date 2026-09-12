@@ -65,9 +65,13 @@ func (s *Server) Handler() http.Handler {
 		}
 		if s.token != "" {
 			user, pass, _ := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+			// EventSource не умеет ставить заголовки, поэтому для SSE
+			// разрешён ?token= в query (только loopback, см. Run).
 			if !strings.EqualFold(user, "Bearer") || pass != s.token {
-				writeErr(w, http.StatusUnauthorized, "missing or invalid bearer token")
-				return
+				if r.URL.Query().Get("token") != s.token {
+					writeErr(w, http.StatusUnauthorized, "missing or invalid bearer token")
+					return
+				}
 			}
 		}
 		s.mux.ServeHTTP(w, r)

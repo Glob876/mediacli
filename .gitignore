@@ -225,3 +225,7 @@ mediacli.exe
 *.out
 /vendor/
 dist/
+
+# Electron shell
+electron/node_modules/
+electron/dist/

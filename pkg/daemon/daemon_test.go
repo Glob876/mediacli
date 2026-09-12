@@ -114,3 +114,19 @@ func TestCORSPreflight(t *testing.T) {
 		t.Fatalf("preflight: want 204, got %d", rec.Code)
 	}
 }
+
+func TestQueryTokenFallback(t *testing.T) {
+	srv := testServer()
+	req := httptest.NewRequest("GET", "/api/status?token=secret", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("query token: want 200, got %d", rec.Code)
+	}
+	req = httptest.NewRequest("GET", "/api/status?token=wrong", nil)
+	rec = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("bad query token: want 401, got %d", rec.Code)
+	}
+}

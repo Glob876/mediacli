@@ -1,0 +1,14 @@
+{
+  "name": "mediacli-shell",
+  "version": "0.1.0",
+  "description": "MediaCLI desktop shell (Electron) over the Go daemon API",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --mock"
+  },
+  "devDependencies": {
+    "electron": "^36.0.0"
+  }
+}
