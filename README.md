@@ -155,7 +155,11 @@ Endpoints: `GET /api/status`, `POST /api/downloads`, `GET /api/tasks`,
 (Range-стрим для плеера, токен через `?token=`),
 `GET /api/library/thumb?name=` (JPEG-превью кадра, кеш в `<configDir>/thumbs`),
 `GET /api/browse?path=` (обзор ФС для вкладки конвертации),
-`GET/PUT /api/config` (включая `accent_color` для темы оболочки). Without `MEDIACLI_TOKEN` (or
+`GET /api/tools/ffmpeg[?path=]` (какой ffmpeg реально используется + версия),
+`GET /api/meta` (справочники для форм: темы, браузеры, пресеты),
+`GET/PUT /api/config` (включая `accent_color` и `ffmpeg_path` —
+путь уходит в yt-dlp `--ffmpeg-location`, convert и превью),
+`POST /api/config/reset` (заводские, как в TUI). Without `MEDIACLI_TOKEN` (or
 `--token`) auth is disabled — dev mode only.
 
 ## 🖥️ Desktop Shell (Electron, experimental)
@@ -181,7 +185,9 @@ Shell UI: пустая главная с полупрозрачным полем
 `⚙` открывает пресеты — обе SVG), drag&drop файла в окно открывает Конвертацию;
 старт загрузки подсвечивает периметр экрана, слоты заменяют заголовок
 (размер — Ctrl+колесо, группировка — очередь строго по одной, состояние
-переживает перезапуск); `Shift+H` — история, `Shift+I` — настройки,
+переживает перезапуск, клик по слоту разворачивает живые логи);
+настройки — вкладки слева как в TUI (все опции консоли + путь к ffmpeg
+с проверкой); `Shift+H` — история, `Shift+I` — настройки,
 `Esc` — закрыть. Языки `ru` / `en` / `en-US`,
 акцентный цвет настраивается (`accent_color` в конфиге).
 
