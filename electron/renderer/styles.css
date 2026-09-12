@@ -1,4 +1,4 @@
-/* MediaCLI — black × accent. Острые углы, компакт, анимации. */
+/* MediaCLI — максимальный минимализм: black × accent, острые углы, компакт. */
 :root {
   --bg: #000000;
   --panel: #0a0a0a;
@@ -10,13 +10,14 @@
   --lime-dim: rgba(191, 255, 0, 0.35);
   --border: #242424;
   --danger: #ff4444;
+  --slotmin: 190px;
 }
 
 * { box-sizing: border-box; border-radius: 0 !important; }
 
 body {
   margin: 0;
-  padding: 10px 12px;
+  padding: 12px 14px 52px;
   background: var(--bg);
   color: var(--fg);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -36,10 +37,6 @@ body {
 @keyframes cardIn {
   from { opacity: 0; transform: scale(0.97) translateY(5px); }
   to { opacity: 1; transform: none; }
-}
-@keyframes glowPulse {
-  0%, 100% { text-shadow: 0 0 6px var(--lime-dim); }
-  50% { text-shadow: 0 0 22px var(--lime); }
 }
 @keyframes barShimmer {
   from { filter: brightness(1); }
@@ -75,109 +72,164 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
+/* Полоса по краям экрана при старте загрузки. */
+@keyframes edgeRun { to { stroke-dashoffset: 0; } }
+@keyframes edgeFade {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  100% { opacity: 0; }
+}
 
-/* ================= Вкладки ================= */
-.tabs { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+/* ================= Виды (вкладок больше нет) ================= */
+.view { animation: pageIn 0.28s ease; }
+.view.hidden { display: none; }
+.view.page-enter { animation: fadeSlide 0.28s ease; }
 
-.tab {
-  background: #000000;
-  color: #ffffff;
-  border: 1px solid var(--lime);
-  padding: 6px 13px;
-  cursor: pointer;
-  font-size: 13px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: background-color 0.25s ease, color 0.25s ease,
-    box-shadow 0.25s ease, transform 0.12s ease, border-color 0.25s ease;
-}
-/* Выраженное состояние при наведении: тёмная заливка акцентом + свечение. */
-.tab:hover {
-  background: color-mix(in srgb, var(--lime) 16%, #000000);
-  color: #ffffff;
-  box-shadow: 0 0 12px var(--lime-dim), inset 0 0 8px var(--lime-dim);
-}
-.tab:active { transform: scale(0.96); }
-.tab.active {
-  background: var(--lime);
-  color: #000000;
-  border-color: var(--lime);
-  font-weight: 700;
-  box-shadow: 0 0 14px var(--lime-dim);
-}
-.tab.active:hover {
-  background: var(--lime);
-  color: #000000;
-  box-shadow: 0 0 20px var(--lime);
-}
-.badge {
-  background: #000;
-  color: var(--lime);
-  border: 1px solid currentColor;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 0 5px;
-  min-width: 16px;
-  text-align: center;
-}
-.tab.active .badge { background: #000; color: var(--lime); border-color: #000; }
-
-.tabpage { animation: pageIn 0.28s ease; }
-.tabpage.hidden { display: none; }
-.tabpage.page-enter { animation: fadeSlide 0.28s ease; }
-
-/* ================= Главная: пустое окно ================= */
+/* ================= Главная: почти пусто ================= */
 .topbar { display: flex; gap: 6px; margin-bottom: 8px; }
 .topbar input { flex: 1; }
 
-.dropzone {
-  border: 1px dashed color-mix(in srgb, var(--lime) 45%, transparent);
-  background:
-    radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--lime) 7%, transparent), transparent 65%),
-    var(--panel);
-  padding: 44px 16px;
-  text-align: center;
-  margin-bottom: 8px;
-  cursor: copy;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
-  animation: cardIn 0.35s ease;
+/* Полупрозрачность до наведения/фокуса. */
+.topbar.ghost input,
+.topbar.ghost .btn {
+  opacity: 0.45;
 }
-.dropzone.slim { padding: 12px; margin-bottom: 8px; }
-.dropzone:hover {
-  border-color: var(--lime);
-  box-shadow: 0 0 14px var(--lime-dim);
+.topbar.ghost:hover input,
+.topbar.ghost:hover .btn,
+.topbar.ghost input:focus,
+.topbar.ghost .btn:focus-visible {
+  opacity: 1;
 }
-.dropzone.dragover {
-  border-style: solid;
-  border-color: var(--lime);
-  background-color: color-mix(in srgb, var(--lime) 8%, #000000);
-  animation: dropPulse 1.1s ease-in-out infinite;
+.topbar.ghost input,
+.topbar.ghost .btn {
+  transition: opacity 0.25s ease, border-color 0.2s ease, box-shadow 0.2s ease,
+    background-color 0.22s ease, transform 0.1s ease;
 }
-.logo {
-  font-size: 34px;
-  font-weight: 900;
-  letter-spacing: 5px;
-  color: var(--lime);
-  animation: glowPulse 2.6s ease-in-out infinite;
-}
-.drop-hint { margin-top: 10px; font-size: 13px; }
-.drop-sub { margin-top: 4px; }
 
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; }
-.stat {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  padding: 8px;
+#home-empty {
   text-align: center;
-  animation: cardIn 0.35s ease backwards;
-  animation-delay: calc(var(--i, 0) * 60ms);
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.15s ease;
+  padding: 12vh 12px 10vh;
+  border: 1px dashed transparent;
+  transition: border-color 0.25s ease, background-color 0.25s ease;
 }
-.stat:hover { border-color: var(--lime); box-shadow: 0 0 10px var(--lime-dim); transform: translateY(-1px); }
-.stat-num { font-size: 19px; font-weight: 800; color: var(--lime); }
-.stat-label { color: var(--muted); font-size: 11px; }
-.shortcuts { text-align: center; padding: 2px 0 6px; }
+#home-empty.dragover {
+  border-color: var(--lime);
+  background: color-mix(in srgb, var(--lime) 6%, transparent);
+}
+/* Обычный полупрозрачный белый текст, без свечения. */
+.brand {
+  font-size: clamp(38px, 7vw, 60px);
+  font-weight: 400;
+  letter-spacing: 6px;
+  color: #ffffff;
+  opacity: 0.55;
+  animation: pageIn 0.5s ease;
+}
+.hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #ffffff;
+  opacity: 0.42;
+  animation: pageIn 0.5s ease backwards;
+  animation-delay: 120ms;
+}
+.hint + .hint { animation-delay: 220ms; }
+
+/* ================= Слоты загрузок ================= */
+.slots-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.slots-title { font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+.slots-size-hint { opacity: 0.6; }
+
+.group {
+  border: 1px solid color-mix(in srgb, var(--lime) 45%, transparent);
+  margin-bottom: 8px;
+  animation: cardIn 0.3s ease;
+}
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: color-mix(in srgb, var(--lime) 7%, #000000);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.group-head b { color: var(--lime); font-weight: 600; }
+.group-head .cnt { color: var(--muted); font-size: 11px; }
+.group .cards { padding: 8px; }
+
+.slot { position: relative; }
+.slot-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.gtag {
+  font-size: 10px;
+  color: var(--lime);
+  border: 1px solid color-mix(in srgb, var(--lime) 55%, transparent);
+  padding: 0 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+.selbox {
+  width: 15px;
+  height: 15px;
+  border: 1px solid var(--muted);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  flex: none;
+  transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.selbox:hover { border-color: var(--lime); box-shadow: 0 0 8px var(--lime-dim); }
+.selbox.on { background: var(--lime); border-color: var(--lime); }
+
+/* ================= Ghost-навигация ================= */
+#ghostnav {
+  position: fixed;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 4px;
+  z-index: 50;
+}
+.gnav {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.22s ease, border-color 0.22s ease, color 0.22s ease,
+    box-shadow 0.22s ease, transform 0.12s ease;
+}
+.gnav:hover { opacity: 1; border-color: var(--lime); box-shadow: 0 0 10px var(--lime-dim); }
+.gnav:active { transform: scale(0.92); }
+.gnav.active { opacity: 1; border-color: var(--lime); color: var(--lime); }
+.ic { width: 15px; height: 15px; }
+
+/* ================= Полоса по краям ================= */
+.edge-run {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 300;
+  animation: edgeFade 1.05s ease forwards;
+}
+.edge-run svg { width: 100%; height: 100%; display: block; }
+.edge-run rect {
+  fill: none;
+  stroke: var(--lime);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: edgeRun 0.75s ease-out forwards;
+  filter: drop-shadow(0 0 6px var(--lime));
+}
 
 /* ================= Общие элементы ================= */
 input[type="text"] {
@@ -187,7 +239,7 @@ input[type="text"] {
   padding: 7px 9px;
   font-size: 13px;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.25s ease;
 }
 input[type="text"]:focus { border-color: var(--lime); box-shadow: 0 0 8px var(--lime-dim); }
 
@@ -198,8 +250,11 @@ input[type="text"]:focus { border-color: var(--lime); box-shadow: 0 0 8px var(--
   padding: 7px 13px;
   cursor: pointer;
   font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   transition: background-color 0.22s ease, color 0.22s ease, box-shadow 0.22s ease,
-    transform 0.1s ease;
+    transform 0.1s ease, opacity 0.25s ease;
 }
 .btn:hover {
   background: color-mix(in srgb, var(--lime) 18%, #000000);
@@ -229,12 +284,11 @@ input[type="text"]:focus { border-color: var(--lime); box-shadow: 0 0 8px var(--
   padding: 6px 9px;
   animation: cardIn 0.25s ease backwards;
   animation-delay: calc(var(--i, 0) * 30ms);
-  transition: border-color 0.22s ease, background-color 0.22s ease, transform 0.15s ease;
+  transition: border-color 0.22s ease, background-color 0.22s ease;
 }
 .hrow:hover { border-color: var(--lime); background: var(--panel2); }
 .hrow.failed { border-color: var(--danger); }
 .hrow b { font-size: 12px; }
-.hrow .small { font-size: 11px; }
 
 .muted { color: var(--muted); }
 .small { font-size: 11px; }
@@ -307,7 +361,7 @@ input[type="checkbox"] { accent-color: var(--lime); width: 14px; height: 14px; }
 .cselect-opt.selected { background: var(--lime); color: #000; font-weight: 700; }
 
 /* ================= Карточки / превьюшки ================= */
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--slotmin), 1fr)); gap: 8px; }
 .dl-card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -320,6 +374,7 @@ input[type="checkbox"] { accent-color: var(--lime); width: 14px; height: 14px; }
 .dl-card:hover { border-color: var(--lime); box-shadow: 0 0 10px var(--lime-dim); transform: translateY(-2px); }
 .dl-card.active { border-color: var(--lime); box-shadow: 0 0 10px var(--lime-dim); }
 .dl-card.failed { border-color: var(--danger); }
+.dl-card.waiting { border-style: dashed; opacity: 0.85; }
 .dl-title { font-weight: 700; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
 .dl-stage { font-style: italic; color: var(--muted); margin-bottom: 6px; font-size: 11px; min-height: 14px; }
 
@@ -355,7 +410,6 @@ input[type="checkbox"] { accent-color: var(--lime); width: 14px; height: 14px; }
   border: 2px solid var(--border); border-top-color: var(--lime);
   animation: spin 0.8s linear infinite;
 }
-audio.mini { width: 100%; height: 28px; margin-bottom: 6px; }
 
 progress {
   width: 100%; height: 8px;
@@ -370,6 +424,24 @@ progress::-moz-progress-bar { background: var(--lime); }
 .livedot { display: inline-block; width: 7px; height: 7px; background: var(--lime); margin-right: 5px; animation: blinkDot 1.2s ease-in-out infinite; }
 
 /* ================= Конвертация ================= */
+.dropzone {
+  border: 1px dashed color-mix(in srgb, var(--lime) 45%, transparent);
+  background: var(--panel);
+  padding: 12px;
+  text-align: center;
+  margin-bottom: 8px;
+  cursor: copy;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease;
+  animation: cardIn 0.35s ease;
+}
+.dropzone:hover { border-color: var(--lime); box-shadow: 0 0 14px var(--lime-dim); }
+.dropzone.dragover {
+  border-style: solid;
+  border-color: var(--lime);
+  background-color: color-mix(in srgb, var(--lime) 8%, #000000);
+  animation: dropPulse 1.1s ease-in-out infinite;
+}
+.drop-hint { font-size: 12px; opacity: 0.75; }
 .convert-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .browse-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-bottom: 6px; }
 .browse-head b { color: var(--lime); font-size: 12px; }
@@ -464,7 +536,4 @@ progress::-moz-progress-bar { background: var(--lime); }
 @media (max-width: 760px) {
   .convert-layout { grid-template-columns: 1fr; }
   .grid2 { grid-template-columns: 1fr; }
-  .stats { grid-template-columns: repeat(3, 1fr); }
-  .dropzone { padding: 30px 10px; }
-  .logo { font-size: 27px; }
 }

@@ -7,171 +7,211 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <nav class="tabs" id="tabs">
-    <button class="tab active" data-tab="home"><span data-i18n="tabHome">Главная</span></button>
-    <button class="tab" data-tab="downloads"><span data-i18n="tabDownloads">Загрузки</span><span class="badge hidden" id="badge-tasks"></span></button>
-    <button class="tab" data-tab="library"><span data-i18n="tabLibrary">Видео</span></button>
-    <button class="tab" data-tab="convert"><span data-i18n="tabConvert">Конвертация</span></button>
-    <button class="tab" data-tab="settings"><span data-i18n="tabSettings">Настройки</span></button>
-    <button class="tab" data-tab="doctor"><span data-i18n="tabDoctor">Система</span></button>
-  </nav>
+  <!-- Векторные иконки: тонкий контур, currentColor -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="4" y1="12" x2="20" y2="12"/><polyline points="13.5 5.5 20 12 13.5 18.5"/>
+      </symbol>
+      <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt">
+        <circle cx="12" cy="12" r="7" stroke-width="3.1" stroke-dasharray="3.12 2.38"/>
+        <circle cx="12" cy="12" r="2.7" stroke-width="1.5"/>
+      </symbol>
+      <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11.5 12 4.5l8 7"/><path d="M6.5 10.5V20h11v-9.5"/>
+      </symbol>
+      <symbol id="i-film" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="6" width="18" height="13"/><path d="M10.2 10.2l4.8 2.3-4.8 2.3z" fill="currentColor" stroke="none"/>
+      </symbol>
+      <symbol id="i-convert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 7.5h12.5L13.5 4.5"/><path d="M20 16.5H7.5l3 3"/>
+      </symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="8.3"/><polyline points="12 7.5 12 12 15.3 14"/>
+      </symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+        <line x1="4" y1="8" x2="20" y2="8"/><circle cx="15" cy="8" r="2.3" fill="#000"/>
+        <line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="16" r="2.3" fill="#000"/>
+      </symbol>
+      <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 12 7.5 12 10.5 5.5 13.5 18.5 16.5 12 21 12"/>
+      </symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+        <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+      </symbol>
+    </defs>
+  </svg>
 
-  <!-- ГЛАВНАЯ: топбар ссылки + пустое окно с дропзоной -->
-  <section id="tab-home" class="tabpage">
-    <header class="topbar">
-      <input id="url" type="text" data-i18n-ph="urlPh" placeholder="Вставьте ссылку (YouTube, VK, Twitch…) и нажмите Enter…" spellcheck="false" />
-      <button id="btn-dl-settings" class="btn icon" data-i18n-title="dlSettings" title="Настройки загрузки (пресеты)">⚙</button>
-      <button id="btn-dl-start" class="btn primary"><span aria-hidden="true">→</span> <span data-i18n="download">Скачать</span></button>
-    </header>
+  <main>
+    <!-- ГЛАВНАЯ -->
+    <section id="view-home" class="view">
+      <header class="topbar ghost">
+        <input id="url" type="text" data-i18n-ph="urlPh" placeholder="Вставьте ссылку (YouTube, VK, Twitch…) и нажмите Enter…" spellcheck="false" />
+        <button id="btn-dl-settings" class="btn icon" data-i18n-title="dlSettings" title="Настройки загрузки (пресеты)">
+          <svg class="ic"><use href="#i-gear"/></svg>
+        </button>
+        <button id="btn-dl-start" class="btn primary">
+          <svg class="ic"><use href="#i-arrow"/></svg><span data-i18n="download">Скачать</span>
+        </button>
+      </header>
 
-    <section id="dlpanel" class="card hidden">
-      <div class="grid2">
-        <label><span data-i18n="dlPreset">Пресет кодека:</span>
-          <div class="cselect" id="preset"></div>
+      <section id="dlpanel" class="card hidden">
+        <div class="grid2">
+          <label><span data-i18n="dlPreset">Пресет кодека:</span>
+            <div class="cselect" id="preset"></div>
+          </label>
+          <label><span data-i18n="dlQuality">Макс. качество:</span>
+            <div class="cselect" id="quality"></div>
+          </label>
+        </div>
+        <label><span data-i18n="dlCut">Вырезка по времени (напр. 00:01:00-00:03:30, либо не указывайте):</span>
+          <input id="timerange" type="text" placeholder="00:01:00-00:03:30" spellcheck="false" />
         </label>
-        <label><span data-i18n="dlQuality">Макс. качество:</span>
-          <div class="cselect" id="quality"></div>
-        </label>
+        <div class="checks">
+          <label><input id="subs" type="checkbox" /> <span data-i18n="dlSubs">Субтитры (ru,en)</span></label>
+          <label><input id="sponsor" type="checkbox" /> <span data-i18n="dlSponsor">SponsorBlock (вырезать спонсорские сегменты)</span></label>
+        </div>
+      </section>
+
+      <!-- Пустое состояние: только бренд и пара подсказок -->
+      <div id="home-empty">
+        <div class="brand">MediaCLI</div>
+        <div class="hint" data-i18n="brandHint1">Вставьте ссылку выше и нажмите Enter — начнётся загрузка</div>
+        <div class="hint" data-i18n="brandHint2">Перетащите файл в окно — откроется конвертация</div>
       </div>
-      <label><span data-i18n="dlCut">Вырезка по времени (напр. 00:01:00-00:03:30, либо не указывайте):</span>
-        <input id="timerange" type="text" placeholder="00:01:00-00:03:30" spellcheck="false" />
-      </label>
-      <div class="checks">
-        <label><input id="subs" type="checkbox" /> <span data-i18n="dlSubs">Субтитры (ru,en)</span></label>
-        <label><input id="sponsor" type="checkbox" /> <span data-i18n="dlSponsor">SponsorBlock (вырезать спонсорские сегменты)</span></label>
+
+      <!-- Слоты загрузок (заменяют бренд с подсказками) -->
+      <div id="slots-wrap" class="hidden">
+        <div class="slots-head">
+          <span class="slots-title" data-i18n="slotsTitle">Загрузки</span>
+          <span class="muted small slots-size-hint" data-i18n="slotSizeHint">Ctrl + колесо — размер слотов</span>
+          <span class="spacer"></span>
+          <button id="btn-group" class="btn small hidden"></button>
+          <button id="btn-clear-done" class="btn small" data-i18n="clearDone">Очистить завершённые</button>
+        </div>
+        <div id="groups"></div>
+        <div id="slots" class="cards"></div>
       </div>
     </section>
 
-    <div id="home-drop" class="dropzone">
-      <div class="logo">MediaCLI</div>
-      <div class="drop-hint" data-i18n="dropHint">Перетащите файл в это окно, чтобы конвертировать его</div>
-      <div class="drop-sub muted small" data-i18n="dropSub">Файл будет открыт во вкладке «Конвертация»</div>
-    </div>
+    <!-- ВИДЕО -->
+    <section id="view-library" class="view hidden">
+      <div class="row bar">
+        <span class="muted small" id="lib-dir"></span>
+        <span class="spacer"></span>
+        <button id="btn-library-refresh" class="btn small" data-i18n="refresh">Обновить</button>
+      </div>
+      <div id="library" class="cards thumbs"></div>
+    </section>
 
-    <div class="stats" id="home-stats">
-      <div class="stat"><div class="stat-num" id="st-tasks">–</div><div class="stat-label" data-i18n="stTasks">активных задач</div></div>
-      <div class="stat"><div class="stat-num" id="st-files">–</div><div class="stat-label" data-i18n="stFiles">файлов в папке</div></div>
-      <div class="stat"><div class="stat-num" id="st-daemon">–</div><div class="stat-label">daemon</div></div>
-    </div>
-    <div class="shortcuts muted small"><span data-i18n="shortcuts">Shift+H — история • Shift+I — настройки • Esc — закрыть</span></div>
-  </section>
-
-  <!-- ЗАГРУЗКИ -->
-  <section id="tab-downloads" class="tabpage hidden">
-    <div class="row bar">
-      <span class="muted small" data-i18n="tasksHint">Активные и завершённые задачи загрузки</span>
-      <span class="spacer"></span>
-      <button id="btn-tasks-refresh" class="btn small" data-i18n="refresh">Обновить</button>
-    </div>
-    <main id="cards" class="cards"></main>
-  </section>
-
-  <!-- ВИДЕО / ПРЕВЬЮШКИ -->
-  <section id="tab-library" class="tabpage hidden">
-    <div class="row bar">
-      <span class="muted small" id="lib-dir"></span>
-      <span class="spacer"></span>
-      <button id="btn-library-refresh" class="btn small" data-i18n="refresh">Обновить</button>
-    </div>
-    <div id="library" class="cards thumbs"></div>
-  </section>
-
-  <!-- КОНВЕРТАЦИЯ -->
-  <section id="tab-convert" class="tabpage hidden">
-    <div id="conv-drop" class="dropzone slim">
-      <div class="drop-hint" data-i18n="convDrop">Перетащите медиафайл сюда либо выберите его ниже</div>
-    </div>
-    <div class="convert-layout">
-      <div class="card browse">
-        <div class="browse-head">
-          <b data-i18n="browse">Обзор файлов</b>
-          <div class="row">
-            <button id="btn-browse-up" class="btn small">↑ <span data-i18n="up">Вверх</span></button>
-            <button id="btn-browse-refresh" class="btn small" data-i18n="refresh">Обновить</button>
+    <!-- КОНВЕРТАЦИЯ -->
+    <section id="view-convert" class="view hidden">
+      <div id="conv-drop" class="dropzone slim">
+        <div class="drop-hint" data-i18n="convDrop">Перетащите медиафайл сюда либо выберите его ниже</div>
+      </div>
+      <div class="convert-layout">
+        <div class="card browse">
+          <div class="browse-head">
+            <b data-i18n="browse">Обзор файлов</b>
+            <div class="row">
+              <button id="btn-browse-up" class="btn small">↑ <span data-i18n="up">Вверх</span></button>
+              <button id="btn-browse-refresh" class="btn small" data-i18n="refresh">Обновить</button>
+            </div>
           </div>
+          <div class="muted small browse-path" id="browse-path">…</div>
+          <div id="browse-dirs" class="browselist"></div>
+          <div id="browse-files" class="browselist"></div>
         </div>
-        <div class="muted small browse-path" id="browse-path">…</div>
-        <div id="browse-dirs" class="browselist"></div>
-        <div id="browse-files" class="browselist"></div>
+        <div class="card convform">
+          <label><span data-i18n="convInput">Входной файл:</span>
+            <input id="conv-input" type="text" data-i18n-ph="convInputPh" placeholder="Выберите файл слева, перетащите его или укажите путь…" spellcheck="false" />
+          </label>
+          <div class="muted small" id="conv-fileinfo" data-i18n="noFile">Файл не выбран</div>
+          <label><span data-i18n="convPreset">Профиль конвертации:</span>
+            <div class="cselect" id="conv-preset"></div>
+          </label>
+          <div class="muted small" id="conv-preset-desc"></div>
+          <label><span data-i18n="convOutput">Выходной файл (необязательно):</span>
+            <input id="conv-output" type="text" data-i18n-ph="convOutputPh" placeholder="Не указывайте — имя будет подобрано автоматически" spellcheck="false" />
+          </label>
+          <div class="row">
+            <button id="btn-convert-start" class="btn primary" data-i18n="convertBtn">Конвертировать</button>
+          </div>
+          <div id="convert-tasks" class="list"></div>
+        </div>
       </div>
-      <div class="card convform">
-        <label><span data-i18n="convInput">Входной файл:</span>
-          <input id="conv-input" type="text" data-i18n-ph="convInputPh" placeholder="Выберите файл слева, перетащите его или укажите путь…" spellcheck="false" />
+    </section>
+
+    <!-- НАСТРОЙКИ -->
+    <section id="view-settings" class="view hidden">
+      <div class="card form">
+        <b class="card-title" data-i18n="appearance">Оформление</b>
+        <div class="swatches" id="accent-swatches"></div>
+        <label><span data-i18n="accentCustom">Свой акцентный цвет (hex):</span>
+          <span class="colorrow"><input id="set-accent" type="text" placeholder="#bfff00" spellcheck="false" /><span class="colorprev" id="accent-prev"></span></span>
         </label>
-        <div class="muted small" id="conv-fileinfo" data-i18n="noFile">Файл не выбран</div>
-        <label><span data-i18n="convPreset">Профиль конвертации:</span>
-          <div class="cselect" id="conv-preset"></div>
-        </label>
-        <div class="muted small" id="conv-preset-desc"></div>
-        <label><span data-i18n="convOutput">Выходной файл (необязательно):</span>
-          <input id="conv-output" type="text" data-i18n-ph="convOutputPh" placeholder="Не указывайте — имя будет подобрано автоматически" spellcheck="false" />
-        </label>
+        <div class="grid2">
+          <label><span data-i18n="language">Язык интерфейса:</span>
+            <div class="cselect" id="set-language"></div>
+          </label>
+          <label><span data-i18n="videoPreset">Видео-пресет по умолчанию:</span>
+            <div class="cselect" id="set-video-preset"></div>
+          </label>
+        </div>
+        <div class="muted small" data-i18n="langNote">Американский английский (en-US) поддерживается полностью.</div>
+      </div>
+      <div class="card form">
+        <b class="card-title" data-i18n="dlSettingsGroup">Загрузки</b>
+        <label><span data-i18n="dlDir">Папка загрузок:</span> <input id="set-download-dir" type="text" /></label>
+        <div class="grid2">
+          <label><span data-i18n="audioFmt">Аудио-формат:</span>
+            <div class="cselect" id="set-audio-format"></div>
+          </label>
+          <label><span data-i18n="subLangs">Языки субтитров:</span> <input id="set-sub-langs" type="text" /></label>
+        </div>
+        <div class="grid2">
+          <label><span data-i18n="proxy">Прокси:</span>
+            <div class="cselect" id="set-proxy-mode"></div>
+          </label>
+          <label>Proxy URL: <input id="set-proxy-url" type="text" /></label>
+        </div>
+        <div class="grid2">
+          <label><span data-i18n="frags">Параллельных фрагментов:</span>
+            <div class="cselect" id="set-fragments"></div>
+          </label>
+          <label><span data-i18n="queueMax">Макс. фоновых задач:</span>
+            <div class="cselect" id="set-queue-max"></div>
+          </label>
+        </div>
+        <div class="checks">
+          <label><input id="set-no-mtime" type="checkbox" /> <span data-i18n="noMtime">Не изменять время файла (--no-mtime)</span></label>
+          <label><input id="set-win-names" type="checkbox" /> <span data-i18n="winNames">Безопасные имена файлов (--windows-filenames)</span></label>
+          <label><input id="set-archive" type="checkbox" /> <span data-i18n="archive">Архив загрузок (без повторов)</span></label>
+        </div>
         <div class="row">
-          <button id="btn-convert-start" class="btn primary" data-i18n="convertBtn">Конвертировать</button>
+          <button id="btn-settings-save" class="btn primary" data-i18n="save">Сохранить настройки</button>
         </div>
-        <div id="convert-tasks" class="list"></div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- НАСТРОЙКИ -->
-  <section id="tab-settings" class="tabpage hidden">
-    <div class="card form">
-      <b class="card-title" data-i18n="appearance">Оформление</b>
-      <div class="swatches" id="accent-swatches"></div>
-      <label><span data-i18n="accentCustom">Свой акцентный цвет (hex):</span>
-        <span class="colorrow"><input id="set-accent" type="text" placeholder="#bfff00" spellcheck="false" /><span class="colorprev" id="accent-prev"></span></span>
-      </label>
-      <div class="grid2">
-        <label><span data-i18n="language">Язык интерфейса:</span>
-          <div class="cselect" id="set-language"></div>
-        </label>
-        <label><span data-i18n="videoPreset">Видео-пресет по умолчанию:</span>
-          <div class="cselect" id="set-video-preset"></div>
-        </label>
+    <!-- СИСТЕМА -->
+    <section id="view-doctor" class="view hidden">
+      <div class="row bar">
+        <button id="btn-doctor-refresh" class="btn small" data-i18n="recheck">Проверить снова</button>
       </div>
-      <div class="muted small" data-i18n="langNote">Американский английский (en-US) поддерживается полностью.</div>
-    </div>
-    <div class="card form">
-      <b class="card-title" data-i18n="dlSettingsGroup">Загрузки</b>
-      <label><span data-i18n="dlDir">Папка загрузок:</span> <input id="set-download-dir" type="text" /></label>
-      <div class="grid2">
-        <label><span data-i18n="audioFmt">Аудио-формат:</span>
-          <div class="cselect" id="set-audio-format"></div>
-        </label>
-        <label><span data-i18n="subLangs">Языки субтитров:</span> <input id="set-sub-langs" type="text" /></label>
-      </div>
-      <div class="grid2">
-        <label><span data-i18n="proxy">Прокси:</span>
-          <div class="cselect" id="set-proxy-mode"></div>
-        </label>
-        <label>Proxy URL: <input id="set-proxy-url" type="text" /></label>
-      </div>
-      <div class="grid2">
-        <label><span data-i18n="frags">Параллельных фрагментов:</span>
-          <div class="cselect" id="set-fragments"></div>
-        </label>
-        <label><span data-i18n="queueMax">Макс. фоновых задач:</span>
-          <div class="cselect" id="set-queue-max"></div>
-        </label>
-      </div>
-      <div class="checks">
-        <label><input id="set-no-mtime" type="checkbox" /> <span data-i18n="noMtime">Не изменять время файла (--no-mtime)</span></label>
-        <label><input id="set-win-names" type="checkbox" /> <span data-i18n="winNames">Безопасные имена файлов (--windows-filenames)</span></label>
-        <label><input id="set-archive" type="checkbox" /> <span data-i18n="archive">Архив загрузок (без повторов)</span></label>
-      </div>
-      <div class="row">
-        <button id="btn-settings-save" class="btn primary" data-i18n="save">Сохранить настройки</button>
-      </div>
-    </div>
-  </section>
+      <div id="doctor" class="list"></div>
+    </section>
+  </main>
 
-  <section id="tab-doctor" class="tabpage hidden">
-    <div class="row bar">
-      <button id="btn-doctor-refresh" class="btn small" data-i18n="recheck">Проверить снова</button>
-    </div>
-    <div id="doctor" class="list"></div>
-  </section>
+  <!-- Минималистичная навигация без вкладок -->
+  <nav id="ghostnav" aria-label="MediaCLI">
+    <button class="gnav active" data-view="home" data-i18n-title="navHome" title="Главная"><svg class="ic"><use href="#i-home"/></svg></button>
+    <button class="gnav" data-view="library" data-i18n-title="navLibrary" title="Видео"><svg class="ic"><use href="#i-film"/></svg></button>
+    <button class="gnav" data-view="convert" data-i18n-title="navConvert" title="Конвертация"><svg class="ic"><use href="#i-convert"/></svg></button>
+    <button class="gnav" id="gnav-history" data-i18n-title="navHistory" title="История операций"><svg class="ic"><use href="#i-clock"/></svg></button>
+    <button class="gnav" data-view="settings" data-i18n-title="navSettings" title="Настройки"><svg class="ic"><use href="#i-sliders"/></svg></button>
+    <button class="gnav" data-view="doctor" data-i18n-title="navDoctor" title="Система"><svg class="ic"><use href="#i-activity"/></svg></button>
+  </nav>
 
   <!-- История: выдвижная панель (Shift+H) -->
   <aside id="history-drawer" class="drawer hidden" aria-hidden="true">
@@ -179,7 +219,7 @@
       <b data-i18n="history">История операций</b>
       <div class="row">
         <button id="btn-history-clear" class="btn small danger" data-i18n="clear">Очистить</button>
-        <button id="btn-history-close" class="btn small">✕</button>
+        <button id="btn-history-close" class="btn small"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
     </div>
     <div id="history" class="list"></div>
@@ -191,7 +231,7 @@
     <div class="modal-box">
       <div class="modal-head">
         <b id="lightbox-title"></b>
-        <button id="btn-lightbox-close" class="btn small">✕</button>
+        <button id="btn-lightbox-close" class="btn small"><svg class="ic"><use href="#i-x"/></svg></button>
       </div>
       <div id="lightbox-body"></div>
     </div>

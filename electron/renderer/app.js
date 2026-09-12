@@ -6,26 +6,25 @@ const BASE = MOCK ? null : `http://127.0.0.1:${qs.get('port')}`;
 const TOKEN = MOCK ? null : qs.get('token');
 
 const el = (id) => document.getElementById(id);
-const cardsEl = el('cards');
 const state = { lang: 'ru', accent: '#bfff00' };
 
 /* ================= i18n (формальное «Вы»; en-US поддерживается) ================= */
 const I18N = {
   ru: {
-    tabHome: 'Главная', tabDownloads: 'Загрузки', tabLibrary: 'Видео', tabConvert: 'Конвертация', tabSettings: 'Настройки', tabDoctor: 'Система',
+    navHome: 'Главная', navLibrary: 'Видео', navConvert: 'Конвертация', navHistory: 'История операций', navSettings: 'Настройки', navDoctor: 'Система',
     urlPh: 'Вставьте ссылку (YouTube, VK, Twitch…) и нажмите Enter…',
     dlSettings: 'Настройки загрузки (пресеты)', download: 'Скачать',
     dlPreset: 'Пресет кодека:', dlQuality: 'Макс. качество:',
     qBest: 'Лучшее доступное (Max)', dlCut: 'Вырезка по времени (напр. 00:01:00-00:03:30, либо не указывайте):',
     dlSubs: 'Субтитры (ru,en)', dlSponsor: 'SponsorBlock (вырезать спонсорские сегменты)',
+    brandHint1: 'Вставьте ссылку выше и нажмите Enter — начнётся загрузка',
+    brandHint2: 'Перетащите файл в окно — откроется конвертация',
+    slotsTitle: 'Загрузки', slotSizeHint: 'Ctrl + колесо — размер слотов',
+    clearDone: 'Очистить завершённые', groupBtn: 'Сгруппировать', ungroup: 'Расформировать',
+    groupName: 'Группа', waiting: 'Ожидает очереди', queued: 'В очереди…',
+    interrupted: 'Прервано перезапуском', removeSlot: 'Убрать',
     dropHint: 'Перетащите файл в это окно, чтобы конвертировать его',
     dropSub: 'Файл будет открыт во вкладке «Конвертация»',
-    stTasks: 'активных задач', stFiles: 'файлов в папке',
-    shortcuts: 'Shift+H — история • Shift+I — настройки • Esc — закрыть',
-    tasksHint: 'Активные и завершённые задачи загрузки', refresh: 'Обновить',
-    tasksEmpty: 'Задач пока нет. Вставьте ссылку на главной и нажмите «Скачать».',
-    cancel: 'Отмена', queued: 'В очереди…',
-    libEmpty: 'Папка пуста. Скачайте что-нибудь — файлы появятся здесь с превью.',
     convDrop: 'Перетащите медиафайл сюда либо выберите его ниже',
     browse: 'Обзор файлов', up: 'Вверх', convInput: 'Входной файл:',
     convInputPh: 'Выберите файл слева, перетащите его или укажите путь…',
@@ -43,31 +42,32 @@ const I18N = {
     winNames: 'Безопасные имена файлов (--windows-filenames)', archive: 'Архив загрузок (без повторов)',
     save: 'Сохранить настройки', history: 'История операций', clear: 'Очистить',
     histEmpty: 'История пуста.', remove: 'Убрать', delFile: 'Удалить файл',
+    cancel: 'Отмена', refresh: 'Обновить',
+    libEmpty: 'Папка пуста. Скачайте что-нибудь — файлы появятся здесь с превью.',
     confirmDelFile: 'Удалить файл с диска?', confirmClear: 'Очистить всю историю операций?',
     recheck: 'Проверить снова', checking: 'Проверка…',
-    tDlStarted: 'Загрузка началась. Следите за прогрессом во вкладке «Загрузки».',
     tDlFail: 'Не удалось начать загрузку:', tConvStarted: 'Конвертация началась.',
     tConvFail: 'Конвертация не началась:', tSaved: 'Настройки сохранены.',
     tSaveFail: 'Не удалось сохранить:', tLoadFail: 'Не удалось загрузить настройки:',
     tBadAccent: 'Укажите цвет в формате hex, например #bfff00.',
-    tDropNoPath: 'Не удалось получить путь к файлу. Укажите его вручную во вкладке «Конвертация».',
+    tDropNoPath: 'Не удалось получить путь к файлу. Укажите его вручную в «Конвертации».',
     tErr: 'Ошибка', loading: 'Загрузка…',
   },
   en: {
-    tabHome: 'Home', tabDownloads: 'Downloads', tabLibrary: 'Library', tabConvert: 'Convert', tabSettings: 'Settings', tabDoctor: 'System',
+    navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
     urlPh: 'Paste a link (YouTube, VK, Twitch…) and press Enter…',
     dlSettings: 'Download settings (presets)', download: 'Download',
     dlPreset: 'Codec preset:', dlQuality: 'Max quality:',
     qBest: 'Best available (Max)', dlCut: 'Time range cut (e.g. 00:01:00-00:03:30, or leave empty):',
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
+    brandHint1: 'Paste a link above and press Enter to start a download',
+    brandHint2: 'Drag a file into the window to convert it',
+    slotsTitle: 'Downloads', slotSizeHint: 'Ctrl + wheel — slot size',
+    clearDone: 'Clear finished', groupBtn: 'Group', ungroup: 'Ungroup',
+    groupName: 'Group', waiting: 'Queued in group', queued: 'Queued…',
+    interrupted: 'Interrupted by restart', removeSlot: 'Remove',
     dropHint: 'Drag and drop a file here to convert it',
-    dropSub: 'The file will open in the Convert tab',
-    stTasks: 'active tasks', stFiles: 'files in folder',
-    shortcuts: 'Shift+H — history • Shift+I — settings • Esc — close',
-    tasksHint: 'Active and finished download tasks', refresh: 'Refresh',
-    tasksEmpty: 'No tasks yet. Paste a link on the home screen and press Download.',
-    cancel: 'Cancel', queued: 'Queued…',
-    libEmpty: 'The folder is empty. Download something — files will appear here with thumbnails.',
+    dropSub: 'The file will open in the Convert view',
     convDrop: 'Drag a media file here or pick one below',
     browse: 'Browse files', up: 'Up', convInput: 'Input file:',
     convInputPh: 'Pick a file on the left, drag it here or type a path…',
@@ -85,31 +85,32 @@ const I18N = {
     winNames: 'Safe filenames (--windows-filenames)', archive: 'Download archive (no duplicates)',
     save: 'Save settings', history: 'Operation history', clear: 'Clear',
     histEmpty: 'History is empty.', remove: 'Remove', delFile: 'Delete file',
+    cancel: 'Cancel', refresh: 'Refresh',
+    libEmpty: 'The folder is empty. Download something — files will appear here with thumbnails.',
     confirmDelFile: 'Delete the file from disk?', confirmClear: 'Clear the entire operation history?',
     recheck: 'Re-check', checking: 'Checking…',
-    tDlStarted: 'Download started. Watch the progress in the Downloads tab.',
     tDlFail: 'Could not start the download:', tConvStarted: 'Conversion started.',
     tConvFail: 'Could not start the conversion:', tSaved: 'Settings saved.',
     tSaveFail: 'Could not save:', tLoadFail: 'Could not load settings:',
     tBadAccent: 'Please enter a hex colour, e.g. #bfff00.',
-    tDropNoPath: 'Could not read the file path. Please enter it manually in the Convert tab.',
+    tDropNoPath: 'Could not read the file path. Please enter it manually in Convert.',
     tErr: 'Error', loading: 'Loading…',
   },
   'en-US': {
-    tabHome: 'Home', tabDownloads: 'Downloads', tabLibrary: 'Library', tabConvert: 'Convert', tabSettings: 'Settings', tabDoctor: 'System',
+    navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
     urlPh: 'Paste a link (YouTube, VK, Twitch…) and press Enter…',
     dlSettings: 'Download settings (presets)', download: 'Download',
     dlPreset: 'Codec preset:', dlQuality: 'Max quality:',
     qBest: 'Best available (Max)', dlCut: 'Time range cut (e.g. 00:01:00-00:03:30, or leave empty):',
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
+    brandHint1: 'Paste a link above and press Enter to start a download',
+    brandHint2: 'Drag a file into the window to convert it',
+    slotsTitle: 'Downloads', slotSizeHint: 'Ctrl + wheel — slot size',
+    clearDone: 'Clear finished', groupBtn: 'Group', ungroup: 'Ungroup',
+    groupName: 'Group', waiting: 'Queued in group', queued: 'Queued…',
+    interrupted: 'Interrupted by restart', removeSlot: 'Remove',
     dropHint: 'Drag and drop a file here to convert it',
-    dropSub: 'The file will open in the Convert tab',
-    stTasks: 'active tasks', stFiles: 'files in folder',
-    shortcuts: 'Shift+H — history • Shift+I — settings • Esc — close',
-    tasksHint: 'Active and finished download tasks', refresh: 'Refresh',
-    tasksEmpty: 'No tasks yet. Paste a link on the home screen and press Download.',
-    cancel: 'Cancel', queued: 'Queued…',
-    libEmpty: 'The folder is empty. Download something — files will appear here with thumbnails.',
+    dropSub: 'The file will open in the Convert view',
     convDrop: 'Drag a media file here or pick one below',
     browse: 'Browse files', up: 'Up', convInput: 'Input file:',
     convInputPh: 'Pick a file on the left, drag it here or type a path…',
@@ -127,14 +128,15 @@ const I18N = {
     winNames: 'Safe filenames (--windows-filenames)', archive: 'Download archive (no duplicates)',
     save: 'Save settings', history: 'Operation history', clear: 'Clear',
     histEmpty: 'History is empty.', remove: 'Remove', delFile: 'Delete file',
+    cancel: 'Cancel', refresh: 'Refresh',
+    libEmpty: 'The folder is empty. Download something — files will appear here with thumbnails.',
     confirmDelFile: 'Delete the file from disk?', confirmClear: 'Clear the entire operation history?',
     recheck: 'Re-check', checking: 'Checking…',
-    tDlStarted: 'Download started. Watch the progress in the Downloads tab.',
     tDlFail: 'Could not start the download:', tConvStarted: 'Conversion started.',
     tConvFail: 'Could not start the conversion:', tSaved: 'Settings saved.',
     tSaveFail: 'Could not save:', tLoadFail: 'Could not load settings:',
     tBadAccent: 'Please enter a hex color, e.g. #bfff00.',
-    tDropNoPath: 'Could not read the file path. Please enter it manually in the Convert tab.',
+    tDropNoPath: 'Could not read the file path. Please enter it manually in Convert.',
     tErr: 'Error', loading: 'Loading…',
   },
 };
@@ -146,7 +148,6 @@ function applyI18n() {
   document.querySelectorAll('[data-i18n-ph]').forEach((n) => { n.placeholder = T(n.dataset.i18nPh); });
   document.querySelectorAll('[data-i18n-title]').forEach((n) => { n.title = T(n.dataset.i18nTitle); });
   document.documentElement.lang = state.lang;
-  // Перестроить зависящие от языка списки с сохранением значений.
   cselectSet('quality', qualityOptions(), cselectGet('quality'));
   if (videoPresetsCache.length) {
     cselectSet('preset', videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) })), cselectGet('preset'));
@@ -156,6 +157,7 @@ function applyI18n() {
     cselectSet('conv-preset', convertPresetsCache.map((p) => ({ value: p.id, label: convPresetLabel(p) })), cselectGet('conv-preset'));
     updateConvertDesc();
   }
+  renderSlots();
 }
 
 function presetLabel(p) { return state.lang === 'ru' ? (p.name_ru || p.name_en) : p.name_en; }
@@ -261,10 +263,8 @@ function applyAccent(hex) {
   const rgb = hexToRgb(hex);
   if (!rgb) return false;
   state.accent = '#' + hex.trim().slice(1).toLowerCase();
-  const css = getComputedStyle(document.documentElement);
   document.documentElement.style.setProperty('--lime', state.accent);
   document.documentElement.style.setProperty('--lime-dim', `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.35)`);
-  void css;
   const prev = el('accent-prev');
   if (prev) prev.style.background = state.accent;
   const inp = el('set-accent');
@@ -442,11 +442,11 @@ if (MOCK) {
 
 const backend = MOCK ? mockApi : api;
 
-/* ================= Вкладки ================= */
-function switchTab(key) {
-  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === key));
-  document.querySelectorAll('.tabpage').forEach((p) => {
-    const show = p.id === `tab-${key}`;
+/* ================= Виды (вкладок нет — только ghost-навигация) ================= */
+function showView(name) {
+  document.querySelectorAll('.gnav[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
+  document.querySelectorAll('.view').forEach((p) => {
+    const show = p.id === `view-${name}`;
     p.classList.toggle('hidden', !show);
     if (show) {
       p.classList.remove('page-enter');
@@ -454,137 +454,165 @@ function switchTab(key) {
       p.classList.add('page-enter');
     }
   });
-  if (key === 'home') loadHome();
-  if (key === 'downloads') refreshTasks();
-  if (key === 'library') loadLibrary();
-  if (key === 'convert') { loadConvertPresets(); loadBrowse(currentBrowsePath); }
-  if (key === 'settings') loadSettings();
-  if (key === 'doctor') loadDoctor();
+  if (name === 'home') renderSlots();
+  if (name === 'library') loadLibrary();
+  if (name === 'convert') { loadConvertPresets(); loadBrowse(currentBrowsePath); }
+  if (name === 'settings') loadSettings();
+  if (name === 'doctor') loadDoctor();
 }
-document.querySelectorAll('.tab').forEach((btn) => {
-  btn.onclick = () => switchTab(btn.dataset.tab);
+document.querySelectorAll('.gnav[data-view]').forEach((btn) => {
+  btn.onclick = () => showView(btn.dataset.view);
 });
+el('gnav-history').onclick = openHistory;
 
-/* ================= Загрузки ================= */
-function cardShell(task) {
-  const div = document.createElement('div');
-  div.className = 'dl-card active';
-  div.id = `task-${task.id}`;
-  div.innerHTML = `
-    <div class="dl-title"></div>
-    <div class="dl-stage"></div>
-    <progress max="100" value="0"></progress>
-    <div class="dl-meta"><span class="st"></span><span class="pc"></span></div>
-    <div class="row"><button class="btn small btn-cancel-task"></button></div>`;
-  div.querySelector('.btn-cancel-task').textContent = T('cancel');
-  div.querySelector('.btn-cancel-task').onclick = async () => {
-    try { await backend.cancel(task.id); } catch (e) { toast(`${T('tErr')}: ${e.message}`, true); }
-  };
-  cardsEl.prepend(div);
-  return div;
+/* ================= Полоса по краям экрана ================= */
+function edgeFlash() {
+  const d = document.createElement('div');
+  d.className = 'edge-run';
+  d.innerHTML = '<svg preserveAspectRatio="none" viewBox="0 0 100 100"><rect x="1" y="1" width="98" height="98" pathLength="1"/></svg>';
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 1200);
 }
 
-function paint(id, snap) {
-  let div = el(`task-${id}`);
-  if (!div) div = cardShell(snap);
-  div.querySelector('.dl-title').textContent = snap.title || snap.source || `Task #${id}`;
-  const live = snap.status === 'running' || snap.status === 'queued';
-  div.querySelector('.dl-stage').innerHTML = '';
-  if (live) {
-    const dot = document.createElement('span');
-    dot.className = 'livedot';
-    div.querySelector('.dl-stage').appendChild(dot);
+/* ================= Слоты загрузок + группы ================= */
+let slots = [];   // {key,url,fields,status,taskId,groupId,createdAt,title,stage,progress}
+let groups = [];  // {id,name,createdAt}
+let groupSeq = 0;
+let slotSeq = 0;
+const selected = new Set();
+const TERMINAL = ['done', 'failed', 'cancelled'];
+const isTerminalSlot = (s) => TERMINAL.includes(s.status);
+
+function persistUI() {
+  try {
+    const term = slots.filter(isTerminalSlot).slice(-30);
+    const live = slots.filter((s) => !isTerminalSlot(s));
+    localStorage.setItem('mc_ui_v1', JSON.stringify({ slots: [...live, ...term], groups, groupSeq, slotSeq }));
+  } catch { /* приватный режим — просто не сохраняем */ }
+}
+
+function restoreUI() {
+  try {
+    const raw = localStorage.getItem('mc_ui_v1');
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    slots = Array.isArray(data.slots) ? data.slots : [];
+    groups = Array.isArray(data.groups) ? data.groups : [];
+    groupSeq = data.groupSeq || groups.length;
+    slotSeq = data.slotSeq || slots.length;
+    // Задачи прошлого запуска мертвы вместе с демоном — помечаем честно.
+    slots.forEach((s) => {
+      if (s.status === 'active') { s.status = 'failed'; s.stage = T('interrupted'); s.progress = 0; }
+    });
+    // Чистим ссылки на удалённые группы.
+    const gids = new Set(groups.map((g) => g.id));
+    slots.forEach((s) => { if (s.groupId && !gids.has(s.groupId)) s.groupId = null; });
+  } catch { slots = []; groups = []; }
+}
+
+function groupName(g) { return g.name; }
+function groupOf(slot) { return groups.find((g) => g.id === slot.groupId) || null; }
+
+/* Планировщик: вне групп — сразу, внутри группы — строго по очереди. */
+function pumpQueue() {
+  slots.filter((s) => s.status === 'waiting' && !s.groupId).forEach((s) => { void startSlot(s); });
+  groups.forEach((g) => {
+    const members = slots.filter((s) => s.groupId === g.id);
+    if (members.some((s) => s.status === 'active')) return;
+    const next = members.filter((s) => s.status === 'waiting').sort((a, b) => a.createdAt - b.createdAt)[0];
+    if (next) void startSlot(next);
+  });
+}
+
+async function startSlot(slot) {
+  if (slot.status !== 'waiting') return;
+  slot.status = 'active';
+  slot.stage = T('queued');
+  slot.progress = 0;
+  paintSlot(slot);
+  persistUI();
+  try {
+    const { task_id } = await backend.download({ url: slot.url, fields: slot.fields });
+    slot.taskId = task_id;
+    // Слот могли удалить/расформировать, пока шёл запрос, — проверяем.
+    if (!slots.includes(slot)) return;
+    subscribeSlot(slot);
+  } catch (e) {
+    if (!slots.includes(slot)) return;
+    slot.status = 'failed';
+    slot.stage = `${T('tErr')}: ${e.message}`;
+    renderSlots();
+    persistUI();
+    pumpQueue();
   }
-  div.querySelector('.dl-stage').appendChild(document.createTextNode(snap.stage || snap.status));
-  div.querySelector('progress').value = snap.progress || 0;
-  div.querySelector('.st').textContent = snap.status;
-  div.querySelector('.pc').textContent = `${(snap.progress || 0).toFixed(1)}%`;
-  div.classList.toggle('active', live);
-  div.classList.toggle('failed', String(snap.status).startsWith('fail'));
-  const btn = div.querySelector('.btn-cancel-task');
-  if (btn) btn.style.display = live ? '' : 'none';
 }
 
-function subscribe(id, onSnap) {
-  const paintBoth = (snap) => {
-    paint(id, snap);
-    if (onSnap) onSnap(snap);
-    // Бейдж активных задач — только по терминальным состояниям, иначе
-    // каждый SSE-кадр дёргал бы лишний GET /api/tasks.
-    if (['done', 'failed', 'cancelled'].includes(snap.status)) updateBadge();
+function subscribeSlot(slot) {
+  const onSnap = (snap) => {
+    if (!slots.includes(slot)) return;
+    slot.title = snap.title || snap.source || slot.title;
+    slot.stage = snap.stage || snap.status;
+    slot.progress = snap.progress || 0;
+    if (TERMINAL.includes(snap.status)) {
+      slot.status = snap.status;
+      trimTerminal();
+      renderSlots();
+      persistUI();
+      pumpQueue();
+    } else {
+      slot.status = 'active';
+      paintSlot(slot);
+    }
   };
   if (MOCK) {
-    mockApi.subscribe(id, paintBoth);
+    mockApi.subscribe(slot.taskId, onSnap);
     return;
   }
-  const es = new EventSource(backend.eventsUrl(id));
+  const es = new EventSource(backend.eventsUrl(slot.taskId));
   es.onmessage = (ev) => {
     try {
       const snap = JSON.parse(ev.data);
-      paintBoth(snap);
-      if (['done', 'failed', 'cancelled'].includes(snap.status)) es.close();
+      onSnap(snap);
+      if (TERMINAL.includes(snap.status)) es.close();
     } catch { /* keep-alive */ }
   };
   es.onerror = async () => {
     es.close();
     const timer = setInterval(async () => {
       try {
-        const snap = await backend.req('GET', `/api/tasks/${id}`);
-        paintBoth(snap);
-        if (['done', 'failed', 'cancelled'].includes(snap.status)) clearInterval(timer);
+        const snap = await backend.req('GET', `/api/tasks/${slot.taskId}`);
+        onSnap(snap);
+        if (TERMINAL.includes(snap.status)) clearInterval(timer);
       } catch { clearInterval(timer); }
     }, 1000);
   };
 }
 
-async function refreshTasks() {
-  try {
-    const { tasks } = await backend.tasks();
-    if (!tasks.length) {
-      cardsEl.innerHTML = `<div class="muted small">${T('tasksEmpty')}</div>`;
-    } else {
-      cardsEl.innerHTML = '';
-      tasks.forEach((t, i) => {
-        paint(t.id, t);
-        const div = el(`task-${t.id}`);
-        if (div) div.style.setProperty('--i', i);
-        if (t.status === 'running' || t.status === 'queued') subscribe(t.id);
-      });
-    }
-    updateBadge(tasks);
-  } catch { /* fresh start */ }
+function trimTerminal() {
+  const term = slots.filter(isTerminalSlot);
+  if (term.length > 30) {
+    const drop = new Set(term.slice(0, term.length - 30).map((s) => s.key));
+    slots = slots.filter((s) => !drop.has(s.key));
+  }
 }
 
-async function updateBadge(tasks) {
-  try {
-    const list = tasks || (await backend.tasks().catch(() => ({ tasks: [] }))).tasks || [];
-    const n = list.filter((t) => t.status === 'running' || t.status === 'queued').length;
-    const b = el('badge-tasks');
-    b.classList.toggle('hidden', !n);
-    b.textContent = String(n);
-  } catch { /* ignore */ }
-}
-
-/* ================= Главная ================= */
-function fmtSize(n) {
-  if (n == null) return '';
-  if (n < 1024) return `${n} B`;
-  if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1073741824) return `${(n / 1048576).toFixed(1)} MB`;
-  return `${(n / 1073741824).toFixed(2)} GB`;
-}
-
-async function loadHome() {
-  try {
-    const [{ tasks }, lib, st] = await Promise.all([
-      backend.tasks().catch(() => ({ tasks: [] })),
-      backend.library().catch(() => ({ files: [] })),
-      backend.status().catch(() => ({ version: '?' })),
-    ]);
-    el('st-tasks').textContent = String((tasks || []).filter((t) => t.status === 'running' || t.status === 'queued').length);
-    el('st-files').textContent = String((lib.files || []).length);
-    el('st-daemon').textContent = st.version || 'ok';
-  } catch { /* ignore */ }
+function createDownloadSlot(url, fields) {
+  const slot = {
+    key: `s${Date.now()}_${slotSeq++}`,
+    url, fields,
+    status: 'waiting',
+    taskId: null,
+    groupId: null,
+    createdAt: Date.now(),
+    title: url,
+    stage: T('queued'),
+    progress: 0,
+  };
+  slots.unshift(slot);
+  renderSlots();
+  persistUI();
+  pumpQueue();
+  return slot;
 }
 
 async function startDownload() {
@@ -595,20 +623,183 @@ async function startDownload() {
   if (el('timerange').value.trim()) fields.download_section = el('timerange').value.trim();
   if (el('subs').checked) { fields.subs_enabled = true; fields.embed_subs = true; }
   if (el('sponsor').checked) fields.sponsorblock = 'remove';
-  el('btn-dl-start').disabled = true;
-  try {
-    const { task_id } = await backend.download({ url, fields });
-    el('url').value = '';
-    el('dlpanel').classList.add('hidden');
-    toast(T('tDlStarted'));
-    updateBadge();
-    // Задача появится во вкладке «Загрузки» при следующем визите.
-    void task_id;
-  } catch (e) {
-    toast(`${T('tDlFail')}\n${e.message}`, true);
-  } finally {
-    el('btn-dl-start').disabled = false;
+  el('url').value = '';
+  el('dlpanel').classList.add('hidden');
+  edgeFlash();
+  // Слот появляется вместо заголовка с подсказками.
+  showView('home');
+  createDownloadSlot(url, fields);
+}
+
+/* ---------- Рендер слотов ---------- */
+function slotCard(slot, idx) {
+  const div = document.createElement('div');
+  div.className = 'dl-card slot' + (slot.status === 'active' ? ' active' : '') +
+    (slot.status === 'failed' ? ' failed' : '') + (slot.status === 'waiting' ? ' waiting' : '');
+  div.id = `slot-${slot.key}`;
+  div.style.setProperty('--i', idx);
+
+  const title = document.createElement('div');
+  title.className = 'dl-title';
+  title.textContent = slot.title || slot.url;
+  title.title = slot.url;
+  div.appendChild(title);
+
+  const stage = document.createElement('div');
+  stage.className = 'dl-stage';
+  div.appendChild(stage);
+
+  const bar = document.createElement('progress');
+  bar.max = 100;
+  bar.value = slot.progress || 0;
+  div.appendChild(bar);
+
+  const meta = document.createElement('div');
+  meta.className = 'dl-meta';
+  meta.innerHTML = '<span class="st"></span><span class="pc"></span>';
+  div.appendChild(meta);
+
+  const foot = document.createElement('div');
+  foot.className = 'slot-foot';
+  const act = document.createElement('button');
+  act.className = 'btn small' + (slot.status === 'active' ? '' : ' danger');
+  if (slot.status === 'active') {
+    act.textContent = T('cancel');
+    act.onclick = async () => {
+      try { await backend.cancel(slot.taskId); } catch (e) { toast(`${T('tErr')}: ${e.message}`, true); }
+    };
+  } else {
+    act.textContent = T('removeSlot');
+    act.onclick = () => {
+      slots = slots.filter((s) => s !== slot);
+      selected.delete(slot.key);
+      renderSlots();
+      persistUI();
+      pumpQueue();
+    };
   }
+  foot.appendChild(act);
+  const sp = document.createElement('span');
+  sp.className = 'spacer';
+  foot.appendChild(sp);
+  const g = groupOf(slot);
+  if (g) {
+    const tag = document.createElement('span');
+    tag.className = 'gtag';
+    tag.textContent = groupName(g);
+    tag.title = groupName(g);
+    foot.appendChild(tag);
+  }
+  if (!isTerminalSlot(slot)) {
+    const sel = document.createElement('button');
+    sel.type = 'button';
+    sel.className = 'selbox' + (selected.has(slot.key) ? ' on' : '');
+    sel.title = T('groupBtn');
+    sel.onclick = () => {
+      if (selected.has(slot.key)) selected.delete(slot.key);
+      else selected.add(slot.key);
+      renderSlots();
+    };
+    foot.appendChild(sel);
+  }
+  div.appendChild(foot);
+  paintSlotInto(slot, div);
+  return div;
+}
+
+function paintSlotInto(slot, div) {
+  div.querySelector('.dl-title').textContent = slot.title || slot.url;
+  const stageEl = div.querySelector('.dl-stage');
+  stageEl.innerHTML = '';
+  if (slot.status === 'active') {
+    const dot = document.createElement('span');
+    dot.className = 'livedot';
+    stageEl.appendChild(dot);
+  }
+  stageEl.appendChild(document.createTextNode(slot.stage || slot.status));
+  div.querySelector('progress').value = slot.progress || 0;
+  const st = div.querySelector('.st');
+  if (st) st.textContent = slot.status === 'waiting' ? T('waiting') : slot.status;
+  div.querySelector('.pc').textContent = `${(slot.progress || 0).toFixed(1)}%`;
+}
+
+function paintSlot(slot) {
+  const div = el(`slot-${slot.key}`);
+  if (div) paintSlotInto(slot, div);
+}
+
+function renderSlots() {
+  const empty = el('home-empty');
+  const wrap = el('slots-wrap');
+  const box = el('slots');
+  const gbox = el('groups');
+  if (!slots.length) {
+    empty.classList.remove('hidden');
+    wrap.classList.add('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  wrap.classList.remove('hidden');
+
+  // Кнопка группировки.
+  const gb = el('btn-group');
+  if (selected.size >= 2) {
+    gb.classList.remove('hidden');
+    gb.textContent = `${T('groupBtn')} (${selected.size})`;
+  } else {
+    gb.classList.add('hidden');
+  }
+
+  // Группы — в порядке создания.
+  gbox.innerHTML = '';
+  const ordered = [...groups].sort((a, b) => a.createdAt - b.createdAt);
+  ordered.forEach((g) => {
+    const members = slots.filter((s) => s.groupId === g.id);
+    if (!members.length) return;
+    const gd = document.createElement('div');
+    gd.className = 'group';
+    const head = document.createElement('div');
+    head.className = 'group-head';
+    const b = document.createElement('b');
+    b.textContent = groupName(g);
+    const cnt = document.createElement('span');
+    cnt.className = 'cnt';
+    cnt.textContent = `• ${members.length}`;
+    const sp = document.createElement('span');
+    sp.className = 'spacer';
+    const un = document.createElement('button');
+    un.className = 'btn small';
+    un.textContent = T('ungroup');
+    un.onclick = () => {
+      members.forEach((m) => { m.groupId = null; });
+      renderSlots();
+      persistUI();
+      pumpQueue();
+    };
+    head.appendChild(b);
+    head.appendChild(cnt);
+    head.appendChild(sp);
+    head.appendChild(un);
+    gd.appendChild(head);
+    const grid = document.createElement('div');
+    grid.className = 'cards';
+    members.forEach((m, i) => grid.appendChild(slotCard(m, i)));
+    gd.appendChild(grid);
+    gbox.appendChild(gd);
+  });
+
+  // Вне групп.
+  box.innerHTML = '';
+  slots.filter((s) => !s.groupId).forEach((s, i) => box.appendChild(slotCard(s, i)));
+}
+
+/* ================= Главная ================= */
+function fmtSize(n) {
+  if (n == null) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1048576) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1073741824) return `${(n / 1048576).toFixed(1)} MB`;
+  return `${(n / 1073741824).toFixed(2)} GB`;
 }
 
 /* ================= Библиотека (превьюшки) ================= */
@@ -770,8 +961,9 @@ async function loadBrowse(path) {
       const row = document.createElement('div');
       row.className = 'brow';
       row.style.setProperty('--i', i);
-      row.innerHTML = `<span>📁 </span>`;
-      row.firstChild.appendChild(document.createTextNode(d));
+      const label = document.createElement('span');
+      label.textContent = `📁 ${d}`;
+      row.appendChild(label);
       row.onclick = () => loadBrowse(currentBrowsePath + '/' + d);
       dirsBox.appendChild(row);
     });
@@ -831,37 +1023,36 @@ function paintConvertTask(id, snap) {
 }
 
 /* ================= Drag & Drop ================= */
-function setupDrop(zone, onFile) {
-  zone.addEventListener('dragenter', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+function dropFileOf(e) {
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if (!files || !files.length) return null;
+  const f = files[0];
+  const p = f.path || f.name;
+  if (!p || (MOCK && !f.path)) return MOCK && f.name ? f.name : null;
+  return p;
+}
+
+function setupDrop(zone, onFile, hoverEl) {
+  const hov = hoverEl || zone;
+  zone.addEventListener('dragenter', (e) => { e.preventDefault(); hov.classList.add('dragover'); });
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); hov.classList.add('dragover'); });
   zone.addEventListener('dragleave', (e) => {
-    if (e.target === zone) zone.classList.remove('dragover');
-    if (!zone.contains(e.relatedTarget)) zone.classList.remove('dragover');
+    if (!zone.contains(e.relatedTarget)) hov.classList.remove('dragover');
   });
   zone.addEventListener('drop', (e) => {
     e.preventDefault();
-    zone.classList.remove('dragover');
-    const files = e.dataTransfer && e.dataTransfer.files;
-    if (!files || !files.length) return;
-    const f = files[0];
-    // В Electron у File есть полный путь .path; в обычном браузере — только имя.
-    const p = f.path || f.name;
-    if (!p || (MOCK && !f.path)) {
-      // В mock-режиме браузера пути нет — подставляем имя для наглядности.
-      if (MOCK && f.name) { onFile(f.name, `${T('selected')}: ${f.name}`); return; }
-      toast(T('tDropNoPath'), true);
-      return;
-    }
+    hov.classList.remove('dragover');
+    const p = dropFileOf(e);
+    if (!p) { toast(T('tDropNoPath'), true); return; }
     onFile(p);
   });
 }
-// Чтобы перетаскивание мимо зон не открывало файл в окне.
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());
 
 function dropToConvert(path) {
   setConvertInput(path);
-  switchTab('convert');
+  showView('convert');
 }
 
 /* ================= История (drawer) ================= */
@@ -1009,7 +1200,6 @@ document.addEventListener('keydown', (e) => {
     if (!el('history-drawer').classList.contains('hidden')) { closeHistory(); }
     return;
   }
-  // Shift+H — история, Shift+I — настройки. В полях ввода не срабатывают.
   if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !typing) {
     if (e.code === 'KeyH') {
       e.preventDefault();
@@ -1017,15 +1207,22 @@ document.addEventListener('keydown', (e) => {
       else closeHistory();
     } else if (e.code === 'KeyI') {
       e.preventDefault();
-      switchTab('settings');
+      showView('settings');
     }
   }
 });
 
+/* ================= Размер слотов: Ctrl + колесо ================= */
+function getSlotMin() {
+  try {
+    const v = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--slotmin'), 10);
+    return Number.isFinite(v) && v > 0 ? v : 190;
+  } catch { return 190; }
+}
+
 /* ================= Init ================= */
 async function init() {
   buildSwatches();
-  // Dropdowns.
   cselectInit('preset');
   cselectInit('quality');
   cselectInit('conv-preset');
@@ -1037,7 +1234,14 @@ async function init() {
   cselectInit('set-queue-max');
   cselectSet('quality', qualityOptions(), '');
 
-  // Конфиг раньше всего: язык и акцент.
+  try {
+    const slotmin = localStorage.getItem('mc_slotmin_v1');
+    if (slotmin && parseInt(slotmin, 10) > 0) {
+      document.documentElement.style.setProperty('--slotmin', `${parseInt(slotmin, 10)}px`);
+    }
+  } catch { /* ignore */ }
+  restoreUI();
+
   try {
     const cfg = await backend.config();
     settingsCache = cfg;
@@ -1049,22 +1253,51 @@ async function init() {
 
   await loadVideoPresets();
   await loadConvertPresets();
-  await refreshTasks();
-  await loadHome();
+  renderSlots();
+  pumpQueue();
 
   // Главная: топбар.
-  el('btn-dl-start').onclick = startDownload;
+  el('btn-dl-start').onclick = () => { void startDownload(); };
   el('url').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') startDownload();
+    if (e.key === 'Enter') void startDownload();
   });
   el('btn-dl-settings').onclick = () => el('dlpanel').classList.toggle('hidden');
 
-  // Drag & drop: главная → конвертация, зона конвертации — на месте.
-  setupDrop(el('home-drop'), (p) => dropToConvert(p));
+  // Drag & drop: всё окно главной ведёт в конвертацию.
+  setupDrop(el('view-home'), (p) => dropToConvert(p), el('home-empty'));
   setupDrop(el('conv-drop'), (p) => setConvertInput(p));
 
-  // Загрузки / библиотека.
-  el('btn-tasks-refresh').onclick = refreshTasks;
+  // Ctrl + колесо — размер слотов.
+  el('view-home').addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    const next = Math.min(320, Math.max(140, getSlotMin() + (e.deltaY < 0 ? 15 : -15)));
+    document.documentElement.style.setProperty('--slotmin', `${next}px`);
+    try { localStorage.setItem('mc_slotmin_v1', String(next)); } catch { /* ignore */ }
+  }, { passive: false });
+
+  // Группировка и очистка.
+  el('btn-group').onclick = () => {
+    const keys = slots.filter((s) => selected.has(s.key))
+      .sort((a, b) => a.createdAt - b.createdAt).map((s) => s.key);
+    if (keys.length < 2) return;
+    groupSeq += 1;
+    const g = { id: `g${Date.now()}_${groupSeq}`, name: `${T('groupName')} ${groupSeq}`, createdAt: Date.now() };
+    groups.push(g);
+    slots.forEach((s) => { if (keys.includes(s.key)) s.groupId = g.id; });
+    selected.clear();
+    renderSlots();
+    persistUI();
+    pumpQueue();
+  };
+  el('btn-clear-done').onclick = () => {
+    const drop = new Set(slots.filter(isTerminalSlot).map((s) => s.key));
+    slots = slots.filter((s) => !drop.has(s.key));
+    renderSlots();
+    persistUI();
+  };
+
+  // Библиотека.
   el('btn-library-refresh').onclick = loadLibrary;
 
   // Конвертация.
@@ -1085,7 +1318,7 @@ async function init() {
     try {
       const { task_id } = await backend.convert({ input, preset_id, output });
       paintConvertTask(task_id, { id: task_id, title: `Convert: ${input}`, status: 'running', stage: T('queued'), progress: 0 });
-      subscribe(task_id, (snap) => paintConvertTask(task_id, snap));
+      subscribeConvert(task_id);
       toast(T('tConvStarted'));
     } catch (e) {
       toast(`${T('tConvFail')}\n${e.message}`, true);
@@ -1148,6 +1381,32 @@ async function init() {
       applyI18n();
       toast(T('tSaved'));
     } catch (e) { toast(`${T('tSaveFail')} ${e.message}`, true); }
+  };
+}
+
+function subscribeConvert(id) {
+  const onSnap = (snap) => paintConvertTask(id, snap);
+  if (MOCK) {
+    mockApi.subscribe(id, onSnap);
+    return;
+  }
+  const es = new EventSource(backend.eventsUrl(id));
+  es.onmessage = (ev) => {
+    try {
+      const snap = JSON.parse(ev.data);
+      onSnap(snap);
+      if (TERMINAL.includes(snap.status)) es.close();
+    } catch { /* keep-alive */ }
+  };
+  es.onerror = async () => {
+    es.close();
+    const timer = setInterval(async () => {
+      try {
+        const snap = await backend.req('GET', `/api/tasks/${id}`);
+        onSnap(snap);
+        if (TERMINAL.includes(snap.status)) clearInterval(timer);
+      } catch { clearInterval(timer); }
+    }, 1000);
   };
 }
 
