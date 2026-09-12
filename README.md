@@ -167,6 +167,13 @@ npm run dev          # UI-only mock mode, no Go binary needed
 ./build.sh --package # AppImage/deb into electron/release/ (--win/--mac on their OS)
 ```
 
+Shortcut for everything-at-once (build-if-stale, npm ci-if-missing,
+Electron download-if-missing, then launch, no sudo needed):
+
+```bash
+./build.sh --startelectron
+```
+
 > [!NOTE]
 > `yt-dlp` and `ffmpeg` stay external dependencies (checked via the System tab),
 > they are not bundled into the installer.

@@ -21,6 +21,57 @@ fi
 
 TARGET_PATH="$DIST_DIR/$BIN_NAME"
 
+# -----------------------------------------------------------------------------
+# Быстрый запуск Electron-оболочки: ./build.sh --startelectron
+# Только проверки + досборка недостающего, без установки в PATH (без sudo).
+# -----------------------------------------------------------------------------
+if [ "${1:-}" = "--startelectron" ]; then
+    echo "== MediaCLI Electron quick start =="
+
+    if ! command -v go >/dev/null 2>&1; then
+        echo "[FAIL] go not found in PATH"; exit 1
+    fi
+    if ! command -v npm >/dev/null 2>&1; then
+        echo "[FAIL] npm not found in PATH"; exit 1
+    fi
+
+    # Go-бинарник: пересобираем только если отсутствует или исходники новее.
+    if [ ! -x "$TARGET_PATH" ] || [ -n "$(find main.go go.mod go.sum pkg -newer "$TARGET_PATH" 2>/dev/null | head -n 1)" ]; then
+        echo "[1/3] (Re)building Go binary..."
+        CGO_ENABLED=1 go build -trimpath -ldflags="$LDFLAGS" -o "$TARGET_PATH" . >> "$LOG_FILE" 2>&1
+    else
+        echo "[1/3] Go binary is fresh, skipping build."
+    fi
+
+    # Node-зависимости оболочки.
+    if [ ! -d "electron/node_modules" ]; then
+        echo "[2/3] Installing electron deps (npm ci)..."
+        npm ci --prefix electron >> "$LOG_FILE" 2>&1
+    else
+        echo "[2/3] electron/node_modules present, skipping npm ci."
+    fi
+
+    # Бинарник Electron (postinstall часто блокируется политикой npm —
+    # тогда install.js не отработал и dist/ пуст).
+    if [ ! -x "electron/node_modules/electron/dist/electron" ]; then
+        echo "[3/3] Downloading Electron binary (one-time, ~110MB)..."
+        node electron/node_modules/electron/install.js >> "$LOG_FILE" 2>&1
+    else
+        echo "[3/3] Electron binary present."
+    fi
+    # path.txt обязан содержать ровно 'electron' без перевода строки,
+    # иначе electron/index.js склеит неверный путь (dist/dist/...).
+    printf electron > electron/node_modules/electron/path.txt
+    if [ ! -x "electron/node_modules/electron/dist/electron" ]; then
+        echo "[FAIL] Electron binary still missing. Check network/CDN access and rerun."
+        echo "       Log: $LOG_FILE"
+        exit 1
+    fi
+
+    echo "Starting shell..."
+    exec npm start --prefix electron
+fi
+
 START_TOTAL=$(date +%s)
 
 echo "================================================================"
