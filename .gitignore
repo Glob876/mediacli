@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Go build artifacts (project is Go-first; legacy ytcli.py removed)
+mediacli
+mediacli.exe
+*.exe
+*.test
+*.out
+/vendor/
+dist/
