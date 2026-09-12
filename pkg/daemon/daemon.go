@@ -48,6 +48,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/tasks/{id}/cancel", s.handleCancelTask)
 	s.mux.HandleFunc("GET /api/tasks/{id}/events", s.handleTaskEvents)
 	s.mux.HandleFunc("GET /api/history", s.handleHistory)
+	s.mux.HandleFunc("DELETE /api/history", s.handleClearHistory)
+	s.mux.HandleFunc("POST /api/history/delete", s.handleDeleteHistoryItem)
 	s.mux.HandleFunc("GET /api/presets", s.handlePresets)
 	s.mux.HandleFunc("GET /api/config", s.handleGetConfig)
 	s.mux.HandleFunc("PUT /api/config", s.handlePutConfig)
@@ -262,6 +264,42 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		entries = []core.HistoryEntry{}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{"history": entries})
+}
+
+// DELETE /api/history — wipe the operation log.
+func (s *Server) handleClearHistory(w http.ResponseWriter, r *http.Request) {
+	if err := core.ClearHistory(); err != nil {
+		writeErr(w, http.StatusInternalServerError, "cannot clear history: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+}
+
+type deleteHistoryReq struct {
+	Time       string `json:"time"`
+	Source     string `json:"source"`
+	Target     string `json:"target"`
+	DeleteFile bool   `json:"delete_file"`
+}
+
+// POST /api/history/delete — remove one entry, optionally with the file.
+// File deletion is guarded to the download dir (see core.DeleteHistoryItem).
+func (s *Server) handleDeleteHistoryItem(w http.ResponseWriter, r *http.Request) {
+	var req deleteHistoryReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	cfg, err := core.LoadConfig()
+	if err != nil {
+		cfg = core.GetDefaultConfig()
+	}
+	entry := core.HistoryEntry{Time: req.Time, Source: req.Source, Target: req.Target}
+	if err := core.DeleteHistoryItem(entry, req.DeleteFile, cfg.DownloadDir); err != nil {
+		writeErr(w, http.StatusInternalServerError, "cannot delete: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 }
 
 // GET /api/presets — codec presets + saved download presets (single source

@@ -7,41 +7,107 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <input id="url" type="text" placeholder="Paste media URL (YouTube, VK, Twitch, etc.)…" spellcheck="false" />
-    <button id="btn-go" class="btn primary">Configure</button>
-  </header>
+  <nav class="tabs">
+    <button class="tab active" data-tab="downloads">Downloads</button>
+    <button class="tab" data-tab="history">History</button>
+    <button class="tab" data-tab="settings">Settings</button>
+    <button class="tab" data-tab="doctor">System</button>
+  </nav>
 
-  <section id="confirm" class="card hidden">
-    <div class="grid2">
-      <label>Target Codec Preset:
-        <select id="preset"></select>
+  <section id="tab-downloads" class="tabpage">
+    <header class="topbar">
+      <input id="url" type="text" placeholder="Paste media URL (YouTube, VK, Twitch, etc.)…" spellcheck="false" />
+      <button id="btn-go" class="btn primary">Configure</button>
+    </header>
+
+    <section id="confirm" class="card hidden">
+      <div class="grid2">
+        <label>Target Codec Preset:
+          <select id="preset"></select>
+        </label>
+        <label>Max Quality:
+          <select id="quality">
+            <option value="">Best Available (Max)</option>
+            <option value="2160">4K Ultra HD (2160p)</option>
+            <option value="1440">2K Quad HD (1440p)</option>
+            <option value="1080">Full HD (1080p)</option>
+            <option value="720">HD (720p)</option>
+            <option value="480">SD (480p)</option>
+          </select>
+        </label>
+      </div>
+      <label>Time range cut (e.g. 00:01:00-00:03:30 or leave empty):
+        <input id="timerange" type="text" placeholder="00:01:00-00:03:30" spellcheck="false" />
       </label>
-      <label>Max Quality:
-        <select id="quality">
-          <option value="">Best Available (Max)</option>
-          <option value="2160">4K Ultra HD (2160p)</option>
-          <option value="1440">2K Quad HD (1440p)</option>
-          <option value="1080">Full HD (1080p)</option>
-          <option value="720">HD (720p)</option>
-          <option value="480">SD (480p)</option>
-        </select>
-      </label>
+      <div class="checks">
+        <label><input id="subs" type="checkbox" /> Download Subtitles (ru,en)</label>
+        <label><input id="sponsor" type="checkbox" /> SponsorBlock (Cut Sponsorships)</label>
+      </div>
+      <div class="row">
+        <button id="btn-cancel" class="btn">Cancel</button>
+        <button id="btn-start" class="btn primary">Start Download</button>
+      </div>
+    </section>
+
+    <main id="cards" class="cards"></main>
+  </section>
+
+  <section id="tab-history" class="tabpage hidden">
+    <div class="row bar">
+      <button id="btn-history-refresh" class="btn">Refresh</button>
+      <button id="btn-history-clear" class="btn danger">Clear history</button>
     </div>
-    <label>Time range cut (e.g. 00:01:00-00:03:30 or leave empty):
-      <input id="timerange" type="text" placeholder="00:01:00-00:03:30" spellcheck="false" />
-    </label>
-    <div class="checks">
-      <label><input id="subs" type="checkbox" /> Download Subtitles (ru,en)</label>
-      <label><input id="sponsor" type="checkbox" /> SponsorBlock (Cut Sponsorships)</label>
-    </div>
-    <div class="row">
-      <button id="btn-cancel" class="btn">Cancel</button>
-      <button id="btn-start" class="btn primary">Start Download</button>
+    <div id="history" class="list"></div>
+  </section>
+
+  <section id="tab-settings" class="tabpage hidden">
+    <div class="card form">
+      <label>Download directory: <input id="set-download-dir" type="text" /></label>
+      <div class="grid2">
+        <label>Language:
+          <select id="set-language"><option value="en">en</option><option value="ru">ru</option></select>
+        </label>
+        <label>Default video preset: <select id="set-video-preset"></select></label>
+      </div>
+      <div class="grid2">
+        <label>Audio format:
+          <select id="set-audio-format">
+            <option>mp3</option><option>flac</option><option>wav</option><option>m4a</option><option>opus</option>
+          </select>
+        </label>
+        <label>Subtitle languages: <input id="set-sub-langs" type="text" /></label>
+      </div>
+      <div class="grid2">
+        <label>Proxy mode:
+          <select id="set-proxy-mode"><option>system</option><option>custom</option><option>none</option></select>
+        </label>
+        <label>Proxy URL: <input id="set-proxy-url" type="text" /></label>
+      </div>
+      <div class="grid2">
+        <label>Concurrent fragments:
+          <select id="set-fragments"><option>2</option><option>4</option><option>8</option><option>16</option></select>
+        </label>
+        <label>Max background tasks:
+          <select id="set-queue-max"><option>1</option><option>2</option><option>3</option><option>4</option></select>
+        </label>
+      </div>
+      <div class="checks">
+        <label><input id="set-no-mtime" type="checkbox" /> Keep download timestamp (--no-mtime)</label>
+        <label><input id="set-win-names" type="checkbox" /> Safe filenames (--windows-filenames)</label>
+        <label><input id="set-archive" type="checkbox" /> Download archive (deduplication)</label>
+      </div>
+      <div class="row">
+        <button id="btn-settings-save" class="btn primary">Save All Preferences</button>
+      </div>
     </div>
   </section>
 
-  <main id="cards" class="cards"></main>
+  <section id="tab-doctor" class="tabpage hidden">
+    <div class="row bar">
+      <button id="btn-doctor-refresh" class="btn">Re-check</button>
+    </div>
+    <div id="doctor" class="list"></div>
+  </section>
 
   <script src="app.js"></script>
 </body>

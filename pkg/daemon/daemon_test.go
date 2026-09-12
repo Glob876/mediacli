@@ -108,6 +108,20 @@ func TestTasksListEmptyShape(t *testing.T) {
 	}
 }
 
+func TestHistoryEndpoints(t *testing.T) {
+	srv := testServer()
+	if rec := doReq(t, srv, "GET", "/api/history", "", "secret"); rec.Code != http.StatusOK {
+		t.Fatalf("history: want 200, got %d", rec.Code)
+	}
+	del := `{"time":"x","source":"s","target":"t","delete_file":false}`
+	if rec := doReq(t, srv, "POST", "/api/history/delete", del, "secret"); rec.Code != http.StatusOK {
+		t.Fatalf("history delete: want 200, got %d", rec.Code)
+	}
+	if rec := doReq(t, srv, "POST", "/api/history/delete", `bad`, "secret"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("history delete bad json: want 400, got %d", rec.Code)
+	}
+}
+
 func TestCORSPreflight(t *testing.T) {
 	rec := doReq(t, testServer(), "OPTIONS", "/api/tasks", "", "")
 	if rec.Code != http.StatusNoContent {

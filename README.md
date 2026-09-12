@@ -151,7 +151,8 @@ curl -H "Authorization: Bearer secret" http://127.0.0.1:43721/api/status
 Endpoints: `GET /api/status`, `POST /api/downloads`, `GET /api/tasks`,
 `GET /api/tasks/:id`, `POST /api/tasks/:id/cancel`,
 `GET /api/tasks/:id/events` (SSE progress stream), `GET /api/history`,
-`GET /api/presets`, `GET/PUT /api/config`. Without `MEDIACLI_TOKEN` (or
+`DELETE /api/history`, `POST /api/history/delete`, `GET /api/presets`,
+`GET/PUT /api/config`. Without `MEDIACLI_TOKEN` (or
 `--token`) auth is disabled — dev mode only.
 
 ---
