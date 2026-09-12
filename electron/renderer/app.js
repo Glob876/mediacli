@@ -1514,6 +1514,39 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+/* ================= Guard закрытия окна ================= */
+// Считает активные работы: слоты + задачи демона вне слотов (конвертации).
+// main-процесс спрашивает это перед закрытием и показывает «Вы уверены?».
+async function countActiveWork() {
+  const ids = new Set();
+  let n = 0;
+  slots.forEach((s) => {
+    if (s.status === 'active') {
+      n += 1;
+      if (s.taskId) ids.add(s.taskId);
+    }
+  });
+  try {
+    const { tasks } = await backend.tasks();
+    (tasks || []).forEach((t) => {
+      if ((t.status === 'running' || t.status === 'queued') && !ids.has(t.id)) n += 1;
+    });
+  } catch { /* daemon недоступен — считаем только слоты */ }
+  return n;
+}
+
+if (window.mediacliGuard) {
+  window.mediacliGuard.onQueryActive(async () => {
+    let n = -1;
+    try {
+      n = await countActiveWork();
+    } catch {
+      n = -1;
+    }
+    window.mediacliGuard.reportActive({ count: n, lang: state.lang });
+  });
+}
+
 /* ================= Размер слотов: Ctrl + колесо ================= */
 function getSlotMin() {
   try {

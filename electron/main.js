@@ -2,13 +2,65 @@
 // MediaCLI Electron shell: spawns `mediacli daemon --port 0`, reads
 // MEDIACLI_DAEMON_PORT from its stdout and opens the renderer against it.
 // Dev/mock UI without Go: `npm run dev` (=> --mock, no daemon spawned).
-const { app, BrowserWindow, dialog, Menu } = require('electron');
+const { app, BrowserWindow, dialog, Menu, ipcMain } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const path = require('node:path');
 
 const MOCK = process.argv.includes('--mock');
 let daemonProc = null;
+
+// Ответ renderer на вопрос об активных задачах (одноразовый).
+let activeReportResolver = null;
+ipcMain.on('mediacli:active-report', (_ev, payload) => {
+  if (activeReportResolver) {
+    const n = payload && Number.isFinite(payload.count) ? payload.count : -1;
+    const lang = payload && typeof payload.lang === 'string' ? payload.lang : 'ru';
+    activeReportResolver({ count: n, lang });
+    activeReportResolver = null;
+  }
+});
+
+// Спрашивает renderer: сколько активных загрузок/конвертаций.
+// count: 0 — тихо закрываем; >0 — диалог; -1 — renderer молчит, тоже диалог.
+function queryActiveWork(win, timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    activeReportResolver = resolve;
+    try {
+      win.webContents.send('mediacli:query-active');
+    } catch {
+      activeReportResolver = null;
+      resolve({ count: -1, lang: 'ru' });
+      return;
+    }
+    setTimeout(() => {
+      if (activeReportResolver) {
+        activeReportResolver = null;
+        resolve({ count: -1, lang: 'ru' });
+      }
+    }, timeoutMs);
+  });
+}
+
+function confirmCloseText(lang, count) {
+  const en = lang !== 'ru';
+  if (count > 0) {
+    return {
+      message: en ? 'Are you sure?' : 'Вы уверены?',
+      detail: en
+        ? `Active tasks: ${count}. Unfinished downloads and conversions will be interrupted.`
+        : `Активных задач: ${count}. Незавершённые загрузки и конвертации будут прерваны.`,
+      buttons: en ? ['Stay', 'Quit MediaCLI'] : ['Остаться', 'Закрыть программу'],
+    };
+  }
+  return {
+    message: en ? 'Are you sure?' : 'Вы уверены?',
+    detail: en
+      ? 'Could not check active tasks. Unfinished downloads and conversions may be interrupted.'
+      : 'Не удалось проверить активные задачи. Незавершённые загрузки и конвертации могут быть прерваны.',
+    buttons: en ? ['Stay', 'Quit MediaCLI'] : ['Остаться', 'Закрыть программу'],
+  };
+}
 
 function daemonBinary() {
   if (process.env.MEDIACLI_BIN) return process.env.MEDIACLI_BIN;
@@ -57,6 +109,40 @@ async function createWindow() {
     },
   });
   win.setMenuBarVisibility(false);
+
+  // Guard закрытия: пока есть активные загрузки/конвертации — не даём
+  // закрыть окно молча, показываем «Вы уверены?».
+  let quitting = false;
+  win.on('close', async (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    let rep = { count: -1, lang: 'ru' };
+    try {
+      rep = await queryActiveWork(win);
+    } catch {
+      rep = { count: -1, lang: 'ru' };
+    }
+    if (rep.count === 0) {
+      quitting = true;
+      app.quit();
+      return;
+    }
+    const txt = confirmCloseText(rep.lang, rep.count);
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'question',
+      title: 'MediaCLI',
+      message: txt.message,
+      detail: txt.detail,
+      buttons: txt.buttons,
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (response === 1) {
+      quitting = true;
+      app.quit();
+    }
+  });
 
   if (MOCK) {
     await win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { mock: '1' } });
