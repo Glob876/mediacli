@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"mediacli/pkg/core"
+	"mediacli/pkg/ui"
 )
 
 func testServer() *Server {
@@ -189,5 +190,115 @@ func TestDefaultAccentColor(t *testing.T) {
 	cfg := core.GetDefaultConfig()
 	if cfg.AccentColor == "" {
 		t.Fatal("default accent color must not be empty")
+	}
+}
+
+func containsArg(args []string, key, val string) bool {
+	for i := 0; i < len(args); i++ {
+		if args[i] == key && i+1 < len(args) && args[i+1] == val {
+			return true
+		}
+		if args[i] == key && val == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestFfmpegLocationArg(t *testing.T) {
+	preset := core.DownloadPreset{ID: "x", Name: "x", Fields: core.GetInitialPresetFields()}
+	cfg := core.GetDefaultConfig()
+	cfg.FfmpegPath = ""
+	if args := core.BuildYtDlpArgs(preset, cfg, "/tmp", false); containsArg(args, "--ffmpeg-location", "") {
+		t.Fatalf("empty ffmpeg_path must not emit --ffmpeg-location: %v", args)
+	}
+	cfg.FfmpegPath = "/opt/ffmpeg/bin/ffmpeg"
+	args := core.BuildYtDlpArgs(preset, cfg, "/tmp", false)
+	if !containsArg(args, "--ffmpeg-location", "/opt/ffmpeg/bin/ffmpeg") {
+		t.Fatalf("--ffmpeg-location missing: %v", args)
+	}
+	if got := core.FfmpegBin(cfg); got != "/opt/ffmpeg/bin/ffmpeg" {
+		t.Fatalf("FfmpegBin: got %q", got)
+	}
+	cfg.FfmpegPath = ""
+	if got := core.FfmpegBin(cfg); got != "ffmpeg" {
+		t.Fatalf("FfmpegBin default: got %q", got)
+	}
+}
+
+func TestToolsFfmpegEndpoint(t *testing.T) {
+	srv := testServer()
+	// Заведомо битый путь → found=false + текст ошибки.
+	rec := doReq(t, srv, "GET", "/api/tools/ffmpeg?path=/no/such/ffmpeg-xyz", "", "secret")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tools/ffmpeg: want 200, got %d", rec.Code)
+	}
+	var out struct {
+		Configured string `json:"configured"`
+		Resolved   string `json:"resolved"`
+		Found      bool   `json:"found"`
+		Error      string `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Found || out.Error == "" {
+		t.Fatalf("bad path must report found=false + error: %+v", out)
+	}
+	if out.Resolved != "/no/such/ffmpeg-xyz" {
+		t.Fatalf("resolved must echo candidate: %+v", out)
+	}
+	// Форма ответа без кандидата: поля configured/resolved/found обязаны быть.
+	rec = doReq(t, srv, "GET", "/api/tools/ffmpeg", "", "secret")
+	var out2 struct {
+		Resolved string `json:"resolved"`
+		Found    bool   `json:"found"`
+		Version  string `json:"version"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out2); err != nil {
+		t.Fatal(err)
+	}
+	if out2.Resolved == "" {
+		t.Fatal("resolved must not be empty")
+	}
+	if out2.Found && out2.Version == "" {
+		t.Fatal("found ffmpeg must report a version")
+	}
+}
+
+func TestMetaEndpoint(t *testing.T) {
+	rec := doReq(t, testServer(), "GET", "/api/meta", "", "secret")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("meta: want 200, got %d", rec.Code)
+	}
+	var out struct {
+		Themes []struct {
+			ID     string `json:"id"`
+			NameEN string `json:"name_en"`
+			NameRU string `json:"name_ru"`
+		} `json:"themes"`
+		Browsers []string `json:"browsers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Themes) == 0 || len(out.Browsers) == 0 {
+		t.Fatalf("meta must list themes and browsers: %+v", out)
+	}
+}
+
+func TestMetaThemesMatchUI(t *testing.T) {
+	if len(metaThemes) != len(ui.Themes) {
+		t.Fatalf("metaThemes (%d) out of sync with ui.Themes (%d)", len(metaThemes), len(ui.Themes))
+	}
+	for _, m := range metaThemes {
+		th, ok := ui.Themes[m["id"]]
+		if !ok {
+			t.Fatalf("theme %q missing in ui.Themes", m["id"])
+		}
+		if th.NameEN != m["name_en"] || th.NameRU != m["name_ru"] {
+			t.Fatalf("theme %q names differ: ui=%q/%q meta=%q/%q",
+				m["id"], th.NameEN, th.NameRU, m["name_en"], m["name_ru"])
+		}
 	}
 }

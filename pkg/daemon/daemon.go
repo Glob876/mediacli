@@ -64,6 +64,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/library/file", s.handleLibraryFile)
 	s.mux.HandleFunc("GET /api/library/thumb", s.handleLibraryThumb)
 	s.mux.HandleFunc("GET /api/browse", s.handleBrowse)
+	s.mux.HandleFunc("GET /api/tools/ffmpeg", s.handleToolsFfmpeg)
+	s.mux.HandleFunc("GET /api/meta", s.handleMeta)
 }
 
 // Handler wraps the mux with CORS (loopback-only server) and token auth.
@@ -471,7 +473,7 @@ func (s *Server) handleCreateConvert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "input and output are the same file")
 		return
 	}
-	cmdList := []string{"ffmpeg", "-y", "-i", inputAbs}
+	cmdList := []string{core.FfmpegBin(cfg), "-y", "-i", inputAbs}
 	cmdList = append(cmdList, preset.FFmpegFlags...)
 	cmdList = append(cmdList, finalPath)
 
@@ -612,7 +614,7 @@ func (s *Server) handleLibraryThumb(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 	defer cancel()
 	//nolint:gosec // candidate и cached построены из проверенных путей выше.
-	cmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-v", "error",
+	cmd := exec.CommandContext(ctx, core.FfmpegBin(cfg), "-y", "-v", "error",
 		"-ss", "1", "-i", candidate,
 		"-vframes", "1", "-vf", "scale=320:-1", "-q:v", "4", cached)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -716,6 +718,58 @@ func (s *Server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"path": dir, "parent": parent, "dirs": dirs, "files": files,
+	})
+}
+
+// GET /api/tools/ffmpeg[?path=<candidate>] — диагностика ffmpeg:
+// какой бинарник реально используют yt-dlp/конверт/превью (явный путь из
+// настроек или PATH) и его версия. ?path= проверяет кандидата без сохранения.
+func (s *Server) handleToolsFfmpeg(w http.ResponseWriter, r *http.Request) {
+	cfg, err := core.LoadConfig()
+	if err != nil {
+		cfg = core.GetDefaultConfig()
+	}
+	candidate := strings.TrimSpace(r.URL.Query().Get("path"))
+	bin, version, resErr := core.ResolveFfmpeg(cfg, candidate)
+	out := map[string]interface{}{
+		"configured": strings.TrimSpace(cfg.FfmpegPath),
+		"resolved":   bin,
+		"found":      resErr == nil,
+	}
+	if resErr == nil {
+		out["version"] = version
+	} else {
+		out["error"] = resErr.Error()
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// Зеркало pkg/ui Themes для настроек Electron (конфиг общий с TUI).
+// Паритет enforced тестом TestMetaThemesMatchUI.
+var metaThemes = []map[string]string{
+	{"id": "cyan", "name_en": "Arch Cyan (Default)", "name_ru": "Arch Cyan (По умолчанию)"},
+	{"id": "nord", "name_en": "Nord Blue", "name_ru": "Nord Blue"},
+	{"id": "matrix", "name_en": "Matrix Green", "name_ru": "Matrix Green"},
+	{"id": "dracula", "name_en": "Dracula Magenta", "name_ru": "Dracula Magenta"},
+	{"id": "gruvbox", "name_en": "Gruvbox Yellow", "name_ru": "Gruvbox Yellow"},
+	{"id": "fire", "name_en": "Fire Red", "name_ru": "Fire Red"},
+	{"id": "classic", "name_en": "Classic White", "name_ru": "Классический (Белый)"},
+}
+
+// GET /api/meta — справочники для форм настроек (единый источник правды
+// в Go): TUI-темы, браузеры для cookies, ascii-пресеты логотипа,
+// стили прогресса, цели использования.
+func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"themes":           metaThemes,
+		"browsers":         core.SupportedBrowsers,
+		"logo_ascii":       []string{"standard", "coder_mini", "toilet", "rubifont"},
+		"logo_protocols":   []string{"kitty", "iterm2"},
+		"progress_styles":  []string{"blocks", "classic", "dots", "minimal"},
+		"user_goals":       []string{"editing", "downloading", "audio", "transcoding"},
+		"video_presets":    core.OrderedVideoPresetKeys,
+		"thumbnail_format": []string{"png", "jpg", "webp"},
+		"audio_formats":    []string{"mp3", "flac", "wav", "m4a", "opus"},
 	})
 }
 

@@ -2,6 +2,7 @@ package core
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,6 +58,7 @@ type Config struct {
 	PresetDefaults        map[string]interface{} `json:"preset_defaults"`
 	TranscodeMode         string                 `json:"transcode_mode"` // "embedded" (yt-dlp --recode) | "external" (yt-dlp merge + ffmpeg)
 	AccentColor           string                 `json:"accent_color"`   // акцент Electron-оболочки, напр. "#bfff00"
+	FfmpegPath            string                 `json:"ffmpeg_path"`    // явный путь к ffmpeg (для yt-dlp --ffmpeg-location); пусто = PATH
 }
 
 type DownloadPreset struct {
@@ -1526,6 +1528,12 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	cmd = append(cmd, "--retries", retries, "--fragment-retries", retries)
 	cmd = append(cmd, "--buffer-size", "16M")
 
+	// Явный путь к ffmpeg: чинит случай «программа видит ffmpeg, а yt-dlp —
+	// нет» (урезанный PATH у GUI/сервисов). yt-dlp сам найдёт ffprobe рядом.
+	if bin := strings.TrimSpace(cfg.FfmpegPath); bin != "" {
+		cmd = append(cmd, "--ffmpeg-location", ParseUserPath(bin))
+	}
+
 	if cfg.NoMtime || GetBool(f, "no_mtime") {
 		cmd = append(cmd, "--no-mtime")
 	}
@@ -1694,6 +1702,51 @@ type DependencyStatus struct {
 	Available bool
 	Path      string
 	Required  bool
+}
+
+// FfmpegBin возвращает бинарник ffmpeg для дочерних процессов:
+// явный путь из настроек (чинит урезанный PATH у GUI/сервисов) или PATH.
+func FfmpegBin(cfg Config) string {
+	if bin := strings.TrimSpace(cfg.FfmpegPath); bin != "" {
+		return ParseUserPath(bin)
+	}
+	return "ffmpeg"
+}
+
+// ResolveFfmpeg проверяет доступность ffmpeg: возвращает путь, первую строку
+// `ffmpeg -version` и ошибку. candidate перекрывает конфиг (кнопка Проверить).
+func ResolveFfmpeg(cfg Config, candidate string) (bin, version string, err error) {
+	bin = FfmpegBin(cfg)
+	if c := strings.TrimSpace(candidate); c != "" {
+		bin = ParseUserPath(c)
+	}
+	if filepath.IsAbs(bin) || strings.Contains(bin, string(filepath.Separator)) {
+		st, statErr := os.Stat(bin)
+		if statErr != nil || st.IsDir() {
+			return bin, "", fmt.Errorf("file not found: %s", bin)
+		}
+		if statErr == nil && st.Mode().Perm()&0111 == 0 {
+			return bin, "", fmt.Errorf("not executable: %s", bin)
+		}
+	} else if p, lookErr := exec.LookPath(bin); lookErr == nil {
+		bin = p
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	//nolint:gosec // bin — путь из локальных настроек/проверки пользователя.
+	out, runErr := exec.CommandContext(ctx, bin, "-version").CombinedOutput()
+	if runErr != nil {
+		detail := strings.TrimSpace(string(out))
+		if len(detail) > 220 {
+			detail = detail[:220] + "…"
+		}
+		if detail == "" {
+			detail = runErr.Error()
+		}
+		return bin, "", fmt.Errorf("cannot run: %s", detail)
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	return bin, first, nil
 }
 
 func CheckDependencies() []DependencyStatus {
