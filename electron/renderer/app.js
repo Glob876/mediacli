@@ -803,19 +803,72 @@ function syncLogPolls() {
   });
 }
 
-function slotCard(slot, idx) {
-  const div = document.createElement('div');
-  div.className = 'dl-card slot' + (slot.status === 'active' ? ' active' : '') +
-    (slot.status === 'failed' ? ' failed' : '') + (slot.status === 'waiting' ? ' waiting' : '') +
-    (slot.open ? ' open' : '');
-  div.id = `slot-${slot.key}`;
-  div.style.setProperty('--i', idx);
+/* ---------- Логи на весь экран (двойной клик/тап) ---------- */
+let logViewerSlot = null;
+let logViewerTimer = null;
 
-  // Клик по заголовку/статусу разворачивает логи с анимацией.
-  const main = document.createElement('div');
-  main.className = 'slot-main';
-  main.title = slot.url;
-  main.onclick = () => {
+async function refreshLogViewer() {
+  const body = el('logviewer-body');
+  const s = logViewerSlot;
+  if (!s || !slots.includes(s)) return;
+  el('logviewer-title').textContent = s.title || s.url;
+  const live = s.status === 'active';
+  el('logviewer-dot').classList.toggle('hidden', !live);
+  if (s.status === 'waiting' || !s.taskId) {
+    body.textContent = T('logWaiting');
+    return;
+  }
+  try {
+    const snap = await backend.task(s.taskId);
+    if (logViewerSlot !== s) return;
+    const lines = snap.log_tail || [];
+    body.textContent = lines.length ? lines.join('\n') : T('logEmpty');
+    body.scrollTop = body.scrollHeight;
+  } catch (e) {
+    body.textContent = `${T('tErr')}: ${e.message}`;
+  }
+}
+
+function openLogViewer(slot) {
+  closeLogViewer();
+  logViewerSlot = slot;
+  el('logviewer').classList.remove('hidden');
+  void refreshLogViewer();
+  if (slot.status === 'active' && slot.taskId) {
+    logViewerTimer = setInterval(() => {
+      if (!logViewerSlot || !slots.includes(logViewerSlot)) {
+        closeLogViewer();
+        return;
+      }
+      void refreshLogViewer();
+      if (logViewerSlot.status !== 'active') {
+        clearInterval(logViewerTimer);
+        logViewerTimer = null;
+      }
+    }, 1000);
+  }
+}
+
+function closeLogViewer() {
+  if (logViewerTimer) {
+    clearInterval(logViewerTimer);
+    logViewerTimer = null;
+  }
+  logViewerSlot = null;
+  el('logviewer').classList.add('hidden');
+}
+
+// Одинарный клик — инлайн-разворот, двойной (два клика <260мс) — весь экран.
+let slotClickTimer = null;
+function handleSlotMainClick(slot, div) {
+  if (slotClickTimer) {
+    clearTimeout(slotClickTimer);
+    slotClickTimer = null;
+    openLogViewer(slot);
+    return;
+  }
+  slotClickTimer = setTimeout(() => {
+    slotClickTimer = null;
     slot.open = !slot.open;
     div.classList.toggle('open', slot.open);
     if (slot.open) {
@@ -827,7 +880,21 @@ function slotCard(slot, idx) {
       clearInterval(logTimers[slot.key]);
       delete logTimers[slot.key];
     }
-  };
+  }, 260);
+}
+
+function slotCard(slot, idx) {
+  const div = document.createElement('div');
+  div.className = 'dl-card slot' + (slot.status === 'active' ? ' active' : '') +
+    (slot.status === 'failed' ? ' failed' : '') + (slot.status === 'waiting' ? ' waiting' : '') +
+    (slot.open ? ' open' : '');
+  div.id = `slot-${slot.key}`;
+  div.style.setProperty('--i', idx);
+
+  const main = document.createElement('div');
+  main.className = 'slot-main';
+  main.title = slot.url;
+  main.onclick = () => handleSlotMainClick(slot, div);
 
   const title = document.createElement('div');
   title.className = 'dl-title';
@@ -1497,6 +1564,7 @@ document.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
   if (e.key === 'Escape') {
+    if (!el('logviewer').classList.contains('hidden')) { closeLogViewer(); return; }
     if (!el('lightbox').classList.contains('hidden')) { closeLightbox(); return; }
     if (document.querySelector('.cselect.open')) { closeAllSelects(); return; }
     if (!el('history-drawer').classList.contains('hidden')) { closeHistory(); }
@@ -1687,6 +1755,8 @@ async function init() {
 
   // Lightbox.
   el('btn-lightbox-close').onclick = closeLightbox;
+  // Логи на весь экран.
+  el('btn-logviewer-close').onclick = closeLogViewer;
   el('lightbox').addEventListener('click', (e) => {
     if (e.target === el('lightbox')) closeLightbox();
   });

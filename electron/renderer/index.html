@@ -326,6 +326,18 @@
     </div>
   </div>
 
+  <!-- Логи на весь экран (двойной клик по слоту) -->
+  <div id="logviewer" class="logviewer hidden" role="dialog" aria-modal="true">
+    <div class="logviewer-head">
+      <span class="livedot hidden" id="logviewer-dot"></span>
+      <b id="logviewer-title"></b>
+      <span class="muted small">● LIVE</span>
+      <span class="spacer"></span>
+      <button id="btn-logviewer-close" class="btn small"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <pre id="logviewer-body"></pre>
+  </div>
+
   <div id="toasts" aria-live="polite"></div>
 
   <script src="app.js"></script>
