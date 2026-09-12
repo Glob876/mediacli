@@ -152,9 +152,10 @@ Endpoints: `GET /api/status`, `POST /api/downloads`, `GET /api/tasks`,
 `DELETE /api/history`, `POST /api/history/delete`, `GET /api/presets`,
 `GET /api/convert/presets`, `POST /api/convert` (ffmpeg в общей очереди),
 `GET /api/library` (файлы папки загрузок), `GET /api/library/file?name=`
-(Range-стрим для `<video>` предпросмотра, токен через `?token=`),
+(Range-стрим для плеера, токен через `?token=`),
+`GET /api/library/thumb?name=` (JPEG-превью кадра, кеш в `<configDir>/thumbs`),
 `GET /api/browse?path=` (обзор ФС для вкладки конвертации),
-`GET/PUT /api/config`. Without `MEDIACLI_TOKEN` (or
+`GET/PUT /api/config` (включая `accent_color` для темы оболочки). Without `MEDIACLI_TOKEN` (or
 `--token`) auth is disabled — dev mode only.
 
 ## 🖥️ Desktop Shell (Electron, experimental)
@@ -175,6 +176,11 @@ Electron download-if-missing, then launch, no sudo needed):
 ```bash
 ./build.sh --startelectron
 ```
+
+Shell UI: пустая главная с полем ссылки (кнопка `→` скачивает, `⚙` открывает
+пресеты), drag&drop файла в окно открывает Конвертацию; `Shift+H` — история,
+`Shift+I` — настройки, `Esc` — закрыть. Языки `ru` / `en` / `en-US`,
+акцентный цвет настраивается (`accent_color` в конфиге).
 
 > [!NOTE]
 > `yt-dlp` and `ffmpeg` stay external dependencies (checked via the System tab),
