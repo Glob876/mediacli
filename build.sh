@@ -96,6 +96,13 @@ fi
 END_TOTAL=$(date +%s)
 TOTAL_DURATION=$((END_TOTAL - START_TOTAL))
 
+# -----------------------------------------------------------------------------
+# ЭТАП 3: Контрольные суммы (обновляем, чтобы dist/checksums.sha256 не протухал)
+# -----------------------------------------------------------------------------
+if command -v sha256sum >/dev/null 2>&1; then
+    (sha256sum "$TARGET_PATH" | sed "s|$(pwd)/||" > "$DIST_DIR/checksums.sha256")
+fi
+
 echo "================================================================"
 echo "Build and installation completed in ${TOTAL_DURATION}s."
 if [ -n "$PATH_WARNING" ]; then

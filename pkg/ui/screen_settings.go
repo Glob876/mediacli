@@ -305,6 +305,33 @@ func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 				cfg.CookiesMode = "none"
 				_ = core.SaveConfig(*cfg)
 			}
+		case "proxy":
+			pLabels := []string{T(*cfg, "proxy_system"), T(*cfg, "proxy_custom"), T(*cfg, "proxy_none")}
+			pVals := []string{"system", "custom", "none"}
+			pi := RunMenu(s, cfg, T(*cfg, "settings_title"), pLabels, T(*cfg, "settings_proxy", ""), T(*cfg, "footer_nav"))
+			if pi >= 0 {
+				cfg.ProxyMode = pVals[pi]
+				if pVals[pi] == "custom" {
+					if val, ok := TextInput(s, cfg, T(*cfg, "settings_title"), "Proxy URL (e.g. socks5://127.0.0.1:10808):", cfg.ProxyURL, T(*cfg, "footer_input")); ok {
+						cfg.ProxyURL = strings.TrimSpace(val)
+					}
+				}
+				_ = core.SaveConfig(*cfg)
+			}
+		case "sub_langs":
+			if val, ok := TextInput(s, cfg, T(*cfg, "settings_title"), "Subtitle languages (e.g. ru,en):", cfg.SubLangs, T(*cfg, "footer_input")); ok {
+				cfg.SubLangs = strings.TrimSpace(val)
+				_ = core.SaveConfig(*cfg)
+			}
+		case "queue_max":
+			qLabels := []string{"1 task", "2 tasks", "3 tasks (default)", "4 tasks"}
+			qVals := []int{1, 2, 3, 4}
+			qi := RunMenu(s, cfg, T(*cfg, "settings_title"), qLabels, T(*cfg, "settings_bg_queue_max", cfg.BGQueueMax), T(*cfg, "footer_nav"))
+			if qi >= 0 {
+				cfg.BGQueueMax = qVals[qi]
+				core.GlobalQueue.SyncMaxTasksFromConfig(*cfg)
+				_ = core.SaveConfig(*cfg)
+			}
 		case "archive":
 			cfg.UseArchive = !cfg.UseArchive
 			_ = core.SaveConfig(*cfg)

@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"mediacli/pkg/core"
 	"mediacli/pkg/gui"
 	"mediacli/pkg/ui"
 	"os"
@@ -12,19 +13,21 @@ import (
 
 func main() {
 	var isGUI bool
+	flag.BoolVar(&isGUI, "gui", false, "Launch graphical user interface")
+	flag.BoolVar(&isGUI, "g", false, "Launch graphical user interface (shorthand)")
+	flag.Parse()
 
-	for _, arg := range os.Args[1:] {
-		if arg == "--gui" || arg == "-g" || arg == "gui" {
-			isGUI = true
-			break
+	// Совместимость: `mediacli gui` (позиционный аргумент).
+	if !isGUI {
+		for _, arg := range flag.Args() {
+			if arg == "gui" {
+				isGUI = true
+				break
+			}
 		}
 	}
 
-	guiFlag := flag.Bool("gui", false, "Launch graphical user interface")
-	flag.BoolVar(guiFlag, "g", false, "Launch graphical user interface (shorthand)")
-	flag.Parse()
-
-	if isGUI || *guiFlag {
+	if isGUI {
 		fmt.Println("[MediaCLI] Starting graphical desktop interface...")
 		gui.RunGUI()
 		return
@@ -35,12 +38,17 @@ func main() {
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		fmt.Fprintln(os.Stderr, "MediaCLI error: no interactive terminal detected (stdin/stdout is not a TTY).")
 		fmt.Fprintln(os.Stderr, "  • Запусти mediacli напрямую в терминале (не через пайп/редирект IDE).")
-		fmt.Fprintln(os.Stderr, "  • Для GUI режима: go run . -- --gui  или  ./mediacli --gui")
+		fmt.Fprintln(os.Stderr, "  • Для GUI режима: ./mediacli --gui  или  go run . --gui")
 		fmt.Fprintln(os.Stderr, "  • Совет: первая сборка с fyne может занять 30-60с — это нормально (кеш Go).")
 		os.Exit(1)
 	}
 
 	fmt.Fprintln(os.Stderr, "[MediaCLI] Initializing TUI...")
+
+	// Применяем лимит фоновых задач из конфига до старта UI.
+	if cfg, err := core.LoadConfig(); err == nil {
+		core.GlobalQueue.SyncMaxTasksFromConfig(cfg)
+	}
 
 	if err := ui.RunApp(); err != nil {
 		fmt.Fprintf(os.Stderr, "MediaCLI error: %v\n", err)

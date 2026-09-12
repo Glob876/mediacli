@@ -171,12 +171,73 @@ func ParseUserPath(rawPath string) string {
 	if s == "" {
 		return "."
 	}
-	s = strings.Trim(s, `"'`)
+	// Снимаем только одну пару окружающих кавычек, а не все кавычки по краям.
+	if len(s) >= 2 {
+		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
+			s = strings.TrimSpace(s[1 : len(s)-1])
+		}
+	}
 	if strings.HasPrefix(s, "~") {
 		home, _ := os.UserHomeDir()
 		s = filepath.Join(home, s[1:])
 	}
 	return filepath.Clean(s)
+}
+
+// SplitShellFields разбивает строку флагов с учётом одинарных/двойных кавычек
+// (strings.Fields ломал значения с пробелами внутри кавычек).
+func SplitShellFields(raw string) []string {
+	var out []string
+	var cur strings.Builder
+	var quote rune
+	escaped := false
+	flush := func() {
+		if cur.Len() > 0 {
+			out = append(out, cur.String())
+			cur.Reset()
+		}
+	}
+	for _, r := range raw {
+		switch {
+		case escaped:
+			cur.WriteRune(r)
+			escaped = false
+		case r == '\\':
+			escaped = true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				cur.WriteRune(r)
+			}
+		case r == '"' || r == '\'':
+			quote = r
+		case r == ' ' || r == '\t' || r == '\n':
+			flush()
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	flush()
+	return out
+}
+
+// MaskCmdForLog скрывает секреты (--video-password, --proxy) в строке,
+// которая показывается в UI/логах/history. Исполняется реальный cmdList.
+func MaskCmdForLog(cmd []string) []string {
+	masked := append([]string{}, cmd...)
+	for i := 0; i < len(masked); i++ {
+		if masked[i] == "--video-password" && i+1 < len(masked) {
+			masked[i+1] = "***"
+			i++
+		} else if masked[i] == "--proxy" && i+1 < len(masked) {
+			if strings.TrimSpace(masked[i+1]) != "" {
+				masked[i+1] = "***"
+			}
+			i++
+		}
+	}
+	return masked
 }
 
 func LoadConfig() (Config, error) {
@@ -537,7 +598,7 @@ func GetExternalFFmpegPlan(presetID string, fields map[string]interface{}) (ext 
 		if raw == "" {
 			raw = "-c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k"
 		}
-		return ext, strings.Fields(raw), true
+		return ext, SplitShellFields(raw), true
 	}
 	p, exists := VideoPresets[presetID]
 	if !exists {
@@ -571,7 +632,7 @@ func GetExternalFFmpegPlan(presetID string, fields map[string]interface{}) (ext 
 	if ffmpegRaw == "" {
 		return "", nil, false
 	}
-	return recodeExt, strings.Fields(ffmpegRaw), true
+	return recodeExt, SplitShellFields(ffmpegRaw), true
 }
 
 func FindNewestDownloadedFile(outDir string, before time.Time) string {
@@ -675,6 +736,7 @@ func GetHistory() []HistoryEntry {
 
 func DeleteHistoryItem(entry HistoryEntry, deleteFileFromDisk bool, downloadDir string) error {
 	dir := GetConfigDir()
+	_ = os.MkdirAll(dir, 0755)
 	historyPath := filepath.Join(dir, "history.json")
 
 	entries := GetHistory()
@@ -686,6 +748,15 @@ func DeleteHistoryItem(entry HistoryEntry, deleteFileFromDisk bool, downloadDir 
 				targetPath := entry.Target
 				if !filepath.IsAbs(targetPath) {
 					targetPath = filepath.Join(ParseUserPath(downloadDir), targetPath)
+				}
+				targetPath = filepath.Clean(targetPath)
+				// Guard: удаляем файл только внутри downloadDir, чтобы подменённый
+				// history.json не превратился в удаление произвольных путей.
+				base := filepath.Clean(ParseUserPath(downloadDir))
+				rel, err := filepath.Rel(base, targetPath)
+				if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+					// Вне папки загрузок — снимаем только запись истории.
+					continue
 				}
 				if _, err := os.Stat(targetPath); err == nil {
 					_ = os.Remove(targetPath)
@@ -705,6 +776,7 @@ func DeleteHistoryItem(entry HistoryEntry, deleteFileFromDisk bool, downloadDir 
 
 func ClearHistory() error {
 	historyPath := filepath.Join(GetConfigDir(), "history.json")
+	_ = os.MkdirAll(GetConfigDir(), 0755)
 	return os.WriteFile(historyPath, []byte("[]"), 0644)
 }
 
@@ -931,10 +1003,32 @@ func (qm *BackgroundQueueManager) Enqueue(cmd []string, title, source, target st
 	return task
 }
 
-func (qm *BackgroundQueueManager) AdoptRunning(cmdObj *exec.Cmd, cmd []string, title, source, target string, logs []string) *BackgroundTask {
+func (qm *BackgroundQueueManager) SetMaxTasks(n int) {
+	if n < 1 {
+		n = 1
+	}
+	if n > 8 {
+		n = 8
+	}
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
+	qm.maxTasks = n
+}
 
+// SyncMaxTasksFromConfig применяет cfg.BGQueueMax к глобальной очереди.
+func (qm *BackgroundQueueManager) SyncMaxTasksFromConfig(cfg Config) {
+	n := cfg.BGQueueMax
+	if n < 1 {
+		n = 1
+	}
+	if n > 8 {
+		n = 8
+	}
+	qm.SetMaxTasks(n)
+}
+
+func (qm *BackgroundQueueManager) AdoptRunning(cmdObj *exec.Cmd, cmd []string, title, source, target string, logs []string) *BackgroundTask {
+	qm.mu.Lock()
 	task := &BackgroundTask{
 		ID:        qm.nextID,
 		Cmd:       cmd,
@@ -949,7 +1043,134 @@ func (qm *BackgroundQueueManager) AdoptRunning(cmdObj *exec.Cmd, cmd []string, t
 	}
 	qm.nextID++
 	qm.tasks = append(qm.tasks, task)
+	qm.mu.Unlock()
+
+	// Fallback-официант: если вызывающий код не передал живой поток логов,
+	// хотя бы дождёмся завершения процесса и корректно закроем задачу
+	// (статус + history), а не оставим её в "running" навсегда.
+	go func() {
+		if cmdObj != nil {
+			_ = cmdObj.Wait()
+		}
+		qm.mu.Lock()
+		 stillRunning := task.Status == StatusRunning
+		qm.mu.Unlock()
+		if stillRunning {
+			exitCode := 0
+			if cmdObj != nil && cmdObj.ProcessState != nil {
+				exitCode = cmdObj.ProcessState.ExitCode()
+			}
+			qm.finishTask(task, exitCode, "")
+		}
+	}()
 	return task
+}
+
+// AdoptLiveTask принимает уже запущенный процесс ВМЕСТЕ с его живым потоком
+// логов из foreground-runner'а и продолжает тянуть логи в фоне после того,
+// как UI вернулся в меню. Без этого pipe перестаёт дренироваться и задача
+// зависает (буфер logChan переполняется, дочерний процесс блокируется).
+func (qm *BackgroundQueueManager) AdoptLiveTask(cmdObj *exec.Cmd, cmd []string, title, source, target string, logs []string, logChan <-chan string, doneChan <-chan struct{}) *BackgroundTask {
+	qm.mu.Lock()
+	task := &BackgroundTask{
+		ID:        qm.nextID,
+		Cmd:       cmd,
+		Title:     title,
+		Source:    source,
+		Target:    target,
+		Status:    StatusRunning,
+		Stage:     "Running...",
+		LogLines:  append([]string{}, logs...),
+		StartedAt: time.Now(),
+		cmdObj:    cmdObj,
+	}
+	qm.nextID++
+	qm.tasks = append(qm.tasks, task)
+	qm.mu.Unlock()
+
+	go qm.followAdopted(task, cmdObj, logChan, doneChan)
+	return task
+}
+
+func (qm *BackgroundQueueManager) followAdopted(task *BackgroundTask, cmdObj *exec.Cmd, logChan <-chan string, doneChan <-chan struct{}) {
+	if logChan == nil && doneChan == nil {
+		if cmdObj != nil {
+			_ = cmdObj.Wait()
+		}
+		exitCode := 0
+		if cmdObj != nil && cmdObj.ProcessState != nil {
+			exitCode = cmdObj.ProcessState.ExitCode()
+		}
+		qm.finishTask(task, exitCode, "")
+		return
+	}
+	alive := true
+	for alive {
+		select {
+		case text, ok := <-logChan:
+			if !ok {
+				logChan = nil
+				if doneChan == nil {
+					alive = false
+				}
+				continue
+			}
+			qm.mu.Lock()
+			task.LogLines = append(task.LogLines, text)
+			task.Stage = DetectStage(text, task.Stage)
+			if pct, _, ok := ExtractProgress(text); ok {
+				task.Progress = pct
+			}
+			qm.mu.Unlock()
+		case <-doneChan:
+			// Reader завершился — забираем остатки из буфера и ждём процесс.
+			draining := true
+			for draining {
+				select {
+				case text, ok := <-logChan:
+					if !ok {
+						draining = false
+						continue
+					}
+					qm.mu.Lock()
+					task.LogLines = append(task.LogLines, text)
+					task.Stage = DetectStage(text, task.Stage)
+					if pct, _, ok := ExtractProgress(text); ok {
+						task.Progress = pct
+					}
+					qm.mu.Unlock()
+				default:
+					draining = false
+				}
+			}
+			alive = false
+		}
+		if logChan == nil && doneChan == nil {
+			break
+		}
+		if logChan == nil {
+			// logChan закрыт вызывающим кодом — просто ждём done.
+			select {
+			case <-doneChan:
+				alive = false
+			}
+		}
+	}
+
+	exitCode := 0
+	if cmdObj != nil {
+		if err := cmdObj.Wait(); err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = 1
+			}
+		}
+		if cmdObj.ProcessState != nil {
+			exitCode = cmdObj.ProcessState.ExitCode()
+		}
+	}
+	qm.finishTask(task, exitCode, "")
 }
 
 func (qm *BackgroundQueueManager) CancelTask(taskID int) bool {
@@ -1018,7 +1239,11 @@ func (qm *BackgroundQueueManager) workerLoop() {
 			}
 		}
 
-		if runningCount < 1 && nextTask != nil {
+		maxSlots := qm.maxTasks
+		if maxSlots < 1 {
+			maxSlots = 1
+		}
+		if runningCount < maxSlots && nextTask != nil {
 			nextTask.Status = StatusRunning
 			nextTask.cmdObj = exec.Command(nextTask.Cmd[0], nextTask.Cmd[1:]...)
 			go qm.monitorTask(nextTask)
@@ -1325,7 +1550,8 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 	}
 
 	sb := GetString(f, "sponsorblock")
-	if sb == "remove" || sb == "sponsors" {
+	// Совместимость со старым Python-прототипом (sponsors/sponsors_promo).
+	if sb == "remove" || sb == "sponsors" || sb == "sponsors_promo" {
 		cmd = append(cmd, "--sponsorblock-remove", "sponsor,selfpromo,interaction")
 	} else if sb == "mark" {
 		cmd = append(cmd, "--sponsorblock-mark", "all")
@@ -1400,18 +1626,30 @@ type DependencyStatus struct {
 	Name      string
 	Available bool
 	Path      string
+	Required  bool
 }
 
 func CheckDependencies() []DependencyStatus {
-	bins := []string{"yt-dlp", "ffmpeg", "ffprobe", "atomicparsley", "deno"}
+	required := []string{"yt-dlp", "ffmpeg", "ffprobe"}
+	optional := []string{"atomicparsley", "deno"}
 	var statuses []DependencyStatus
 
-	for _, b := range bins {
+	for _, b := range required {
 		path, err := exec.LookPath(b)
 		statuses = append(statuses, DependencyStatus{
 			Name:      b,
 			Available: err == nil,
 			Path:      path,
+			Required:  true,
+		})
+	}
+	for _, b := range optional {
+		path, err := exec.LookPath(b)
+		statuses = append(statuses, DependencyStatus{
+			Name:      b,
+			Available: err == nil,
+			Path:      path,
+			Required:  false,
 		})
 	}
 	return statuses

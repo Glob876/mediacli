@@ -587,6 +587,7 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 	// chunk reader вместо bufio.Scanner — прогресс yt-dlp через \r без \n даёт мега-строку >64KB → token too long + блокировка pipe → hang на [Merger]
 	buf := make([]byte, 4096)
 	leftover := ""
+	logLines := []string{}
 	for {
 		n, err := stdout.Read(buf)
 		if n > 0 {
@@ -599,6 +600,7 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 				if line == "" {
 					continue
 				}
+				logLines = append(logLines, line)
 				currentStage = core.DetectStage(line, currentStage)
 				card.StageLabel.SetText(currentStage)
 				if strings.HasPrefix(line, "[download] Destination:") {
@@ -616,6 +618,7 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 				leftover = strings.TrimSpace(leftover)
 				if leftover != "" {
 					line := leftover
+					logLines = append(logLines, line)
 					currentStage = core.DetectStage(line, currentStage)
 					card.StageLabel.SetText(currentStage)
 					if strings.HasPrefix(line, "[download] Destination:") {
@@ -637,6 +640,7 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 				leftover = strings.TrimSpace(leftover)
 				if leftover != "" {
 					line := leftover
+					logLines = append(logLines, line)
 					currentStage = core.DetectStage(line, currentStage)
 					card.StageLabel.SetText(currentStage)
 					if pct, speed, ok := core.ExtractProgress(line); ok {
@@ -650,6 +654,7 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 				leftover = strings.TrimSpace(leftover)
 				if leftover != "" {
 					line := leftover
+					logLines = append(logLines, line)
 					currentStage = core.DetectStage(line, currentStage)
 					card.StageLabel.SetText(currentStage)
 					if pct, speed, ok := core.ExtractProgress(line); ok {
@@ -671,13 +676,23 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 
 	// Внешний FFmpeg режим: yt-dlp уже скачал merge-файл, теперь транскодируем отдельным ffmpeg с паритетом байтов/логов
 	if exitCode == 0 && core.IsExternalTranscodeEnabled(cfg, preset.Fields) {
-		// пробуем взять путь из TitleLabel или последнего Destination
-		candidate := ""
-		titleText := card.TitleLabel.Text
-		if titleText != "" && titleText != "Downloading..." && titleText != "Completed successfully" {
-			candidate = filepath.Join(outDir, titleText)
+		// Приоритет: точный Destination из логов → TitleLabel → newest-by-mtime.
+		candidate := core.ParseDestinationFromLogs(logLines)
+		if candidate != "" {
+			if !filepath.IsAbs(candidate) {
+				candidate = filepath.Join(outDir, candidate)
+			}
 			if _, err := os.Stat(candidate); err != nil {
 				candidate = ""
+			}
+		}
+		if candidate == "" {
+			titleText := card.TitleLabel.Text
+			if titleText != "" && titleText != "Downloading..." && titleText != "Completed successfully" {
+				candidate = filepath.Join(outDir, titleText)
+				if _, err := os.Stat(candidate); err != nil {
+					candidate = ""
+				}
 			}
 		}
 		if candidate == "" {
@@ -689,7 +704,9 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 		}
 		ext, ffFlags, ok := core.GetExternalFFmpegPlan(presetID, preset.Fields)
 		if ok && candidate != "" {
-			plan := core.PrepareFFmpegOutput(candidate, ext, "", cfg)
+			// Суффикс обязателен: иначе при совпадении расширений ffmpeg
+			// затрёт входной файл во время чтения.
+			plan := core.PrepareFFmpegOutput(candidate, ext, "_recoded", cfg)
 			ffCmdList := []string{"ffmpeg", "-y", "-i", candidate}
 			ffCmdList = append(ffCmdList, ffFlags...)
 			ffCmdList = append(ffCmdList, plan.TempOutputPath)
@@ -795,15 +812,15 @@ func executeGUIDownload(card *DownloadCard, preset core.DownloadPreset, cfg core
 // ============================================================================
 
 func buildFullSettingsView(cfg *core.Config, onSave func()) fyne.CanvasObject {
+	// Все виджеты буферизуются и применяются только по кнопке Save —
+	// раньше часть писала прямо в cfg по onChanged, часть по Save.
 	dirEntry := widget.NewEntry()
 	dirEntry.SetText(cfg.DownloadDir)
 
 	proxyEntry := widget.NewEntry()
 	proxyEntry.SetText(cfg.ProxyURL)
 
-	langSelect := widget.NewSelect([]string{"en", "ru"}, func(s string) {
-		cfg.Language = s
-	})
+	langSelect := widget.NewSelect([]string{"en", "ru"}, func(string) {})
 	langSelect.SetSelected(cfg.Language)
 
 	generalTab := container.NewVBox(
@@ -845,19 +862,13 @@ func buildFullSettingsView(cfg *core.Config, onSave func()) fyne.CanvasObject {
 	fragmentsSelect := widget.NewSelect([]string{"2", "4", "8", "16"}, func(string) {})
 	fragmentsSelect.SetSelected(fmt.Sprintf("%d", cfg.ConcurrentFragments))
 
-	noMtimeCheck := widget.NewCheck("Keep current download timestamp (--no-mtime)", func(b bool) {
-		cfg.NoMtime = b
-	})
+	noMtimeCheck := widget.NewCheck("Keep current download timestamp (--no-mtime)", func(bool) {})
 	noMtimeCheck.SetChecked(cfg.NoMtime)
 
-	winNamesCheck := widget.NewCheck("Safe NTFS/FAT32 filenames (--windows-filenames)", func(b bool) {
-		cfg.WindowsFilenames = b
-	})
+	winNamesCheck := widget.NewCheck("Safe NTFS/FAT32 filenames (--windows-filenames)", func(bool) {})
 	winNamesCheck.SetChecked(cfg.WindowsFilenames)
 
-	archiveCheck := widget.NewCheck("Enable download deduplication archive (--download-archive)", func(b bool) {
-		cfg.UseArchive = b
-	})
+	archiveCheck := widget.NewCheck("Enable download deduplication archive (--download-archive)", func(bool) {})
 	archiveCheck.SetChecked(cfg.UseArchive)
 
 	accelTab := container.NewVBox(
@@ -869,14 +880,10 @@ func buildFullSettingsView(cfg *core.Config, onSave func()) fyne.CanvasObject {
 		archiveCheck,
 	)
 
-	cookieModeSelect := widget.NewSelect([]string{"none", "browser", "file"}, func(s string) {
-		cfg.CookiesMode = s
-	})
+	cookieModeSelect := widget.NewSelect([]string{"none", "browser", "file"}, func(string) {})
 	cookieModeSelect.SetSelected(cfg.CookiesMode)
 
-	cookieBrowserSelect := widget.NewSelect(core.SupportedBrowsers, func(s string) {
-		cfg.CookiesBrowser = s
-	})
+	cookieBrowserSelect := widget.NewSelect(core.SupportedBrowsers, func(string) {})
 	cookieBrowserSelect.SetSelected(cfg.CookiesBrowser)
 
 	cookieFileEntry := widget.NewEntry()
@@ -893,13 +900,21 @@ func buildFullSettingsView(cfg *core.Config, onSave func()) fyne.CanvasObject {
 	btnSave := widget.NewButtonWithIcon("Save All Preferences", theme.ConfirmIcon(), func() {
 		cfg.DownloadDir = strings.TrimSpace(dirEntry.Text)
 		cfg.ProxyURL = strings.TrimSpace(proxyEntry.Text)
+		if langSelect.Selected != "" {
+			cfg.Language = langSelect.Selected
+		}
 		if fragmentsSelect.Selected != "" {
 			fmt.Sscanf(fragmentsSelect.Selected, "%d", &cfg.ConcurrentFragments)
 		}
 		cfg.AudioFormat = audioFmtSelect.Selected
 		cfg.SubLangs = strings.TrimSpace(subLangsEntry.Text)
 		cfg.ThumbnailFormat = thumbFmtSelect.Selected
+		cfg.CookiesMode = cookieModeSelect.Selected
+		cfg.CookiesBrowser = cookieBrowserSelect.Selected
 		cfg.CookiesFile = strings.TrimSpace(cookieFileEntry.Text)
+		cfg.NoMtime = noMtimeCheck.Checked
+		cfg.WindowsFilenames = winNamesCheck.Checked
+		cfg.UseArchive = archiveCheck.Checked
 
 		for _, k := range presetKeys {
 			if core.VideoPresets[k].NameEN == videoPresetSelect.Selected {

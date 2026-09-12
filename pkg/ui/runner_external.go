@@ -36,7 +36,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 
 	startTime := time.Now()
 
-	lines := []string{"[cmd] " + strings.Join(ytdlpCmdList, " "), ""}
+	lines := []string{"[cmd] " + strings.Join(core.MaskCmdForLog(ytdlpCmdList), " "), ""}
 	currentStage := "Initializing download..."
 	var pct float64
 	var speedStr string
@@ -233,7 +233,10 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	}
 
 	// ---------- Подготовка ffmpeg ----------
-	plan := core.PrepareFFmpegOutput(candidate, ext, "", *cfg)
+	// Суффикс обязателен: с пустым суффиксом при совпадении расширений
+	// (mp4→mp4) финальный путь совпал бы с входным и ffmpeg затирал бы
+	// исходник во время чтения.
+	plan := core.PrepareFFmpegOutput(candidate, ext, "_recoded", *cfg)
 	ffCmdList := []string{"ffmpeg", "-y", "-i", candidate}
 	ffCmdList = append(ffCmdList, ffFlags...)
 	ffCmdList = append(ffCmdList, plan.TempOutputPath)
@@ -246,7 +249,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	// сбрасываем прогресс для фазы ffmpeg
 	pct = 0
 	speedStr = ""
-	lines = append(lines, "[cmd] "+strings.Join(ffCmdList, " "))
+	lines = append(lines, "[cmd] "+strings.Join(core.MaskCmdForLog(ffCmdList), " "))
 
 	ffCmd := exec.Command(ffCmdList[0], ffCmdList[1:]...)
 	ffOut, err := ffCmd.StdoutPipe()

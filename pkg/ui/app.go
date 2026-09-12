@@ -113,6 +113,7 @@ func RunApp() error {
 	if err != nil {
 		cfg = core.GetDefaultConfig()
 	}
+	core.GlobalQueue.SyncMaxTasksFromConfig(cfg)
 
 	s, err := tcell.NewScreen()
 	if err != nil {

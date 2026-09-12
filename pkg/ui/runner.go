@@ -80,7 +80,7 @@ func RunWithLogHook(s tcell.Screen, cfg *core.Config, cmdList []string, opType, 
 		}
 	}()
 
-	lines := []string{"[cmd] " + strings.Join(cmdList, " "), ""}
+	lines := []string{"[cmd] " + strings.Join(core.MaskCmdForLog(cmdList), " "), ""}
 	currentStage := "Initializing process..."
 	var pct float64
 	var speedStr string
@@ -110,7 +110,7 @@ func RunWithLogHook(s tcell.Screen, cfg *core.Config, cmdList []string, opType, 
 				if kEv.Key() == tcell.KeyF10 {
 					showRawLogs = !showRawLogs
 				} else if kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
-					core.GlobalQueue.AdoptRunning(cmd, cmdList, opType, source, target, lines)
+					core.GlobalQueue.AdoptLiveTask(cmd, cmdList, opType, source, target, append([]string{}, lines...), logChan, doneChan)
 					ShowMessage(s, cfg, T(*cfg, "log_title"), []string{T(*cfg, "bg_transferred")}, T(*cfg, "footer_message"))
 					return
 				} else if kEv.Key() == tcell.KeyCtrlC {

@@ -139,10 +139,37 @@ func (term *TerminalOverlay) dispatchCommand(line string, cfg *core.Config) {
 			term.HistoryLines = append(term.HistoryLines,
 				fmt.Sprintf("  download_dir = %s", cfg.DownloadDir),
 				fmt.Sprintf("  audio_format = %s", cfg.AudioFormat),
+				fmt.Sprintf("  sub_langs    = %s", cfg.SubLangs),
 				fmt.Sprintf("  language     = %s", cfg.Language),
 				fmt.Sprintf("  theme        = %s", cfg.Theme),
 				fmt.Sprintf("  video_preset = %s", cfg.VideoPreset),
+				fmt.Sprintf("  proxy_mode   = %s", cfg.ProxyMode),
+				fmt.Sprintf("  proxy_url    = %s", cfg.ProxyURL),
+				fmt.Sprintf("  bg_queue_max = %d", cfg.BGQueueMax),
 			)
+		} else if args[0] == "get" && len(args) >= 2 {
+			switch args[1] {
+			case "download_dir":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  download_dir = %s", cfg.DownloadDir))
+			case "audio_format":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  audio_format = %s", cfg.AudioFormat))
+			case "sub_langs":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  sub_langs = %s", cfg.SubLangs))
+			case "language":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  language = %s", cfg.Language))
+			case "theme":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  theme = %s", cfg.Theme))
+			case "video_preset":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  video_preset = %s", cfg.VideoPreset))
+			case "proxy_mode":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  proxy_mode = %s", cfg.ProxyMode))
+			case "proxy_url":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  proxy_url = %s", cfg.ProxyURL))
+			case "bg_queue_max":
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  bg_queue_max = %d", cfg.BGQueueMax))
+			default:
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [!] Unknown key: '%s'.", args[1]))
+			}
 		} else if args[0] == "set" && len(args) >= 3 {
 			key, val := args[1], strings.Join(args[2:], " ")
 			switch key {
@@ -152,11 +179,109 @@ func (term *TerminalOverlay) dispatchCommand(line string, cfg *core.Config) {
 				cfg.Theme = val
 			case "language":
 				cfg.Language = val
+			case "video_preset":
+				cfg.VideoPreset = val
+			case "audio_format":
+				cfg.AudioFormat = val
+			case "sub_langs":
+				cfg.SubLangs = val
+			case "proxy_mode":
+				cfg.ProxyMode = val
+			case "proxy_url":
+				cfg.ProxyURL = val
+			case "bg_queue_max":
+				var n int
+				if _, err := fmt.Sscanf(val, "%d", &n); err != nil || n < 1 {
+					term.HistoryLines = append(term.HistoryLines, "  [!] bg_queue_max must be a number >= 1.")
+					break
+				}
+				cfg.BGQueueMax = n
+				core.GlobalQueue.SyncMaxTasksFromConfig(*cfg)
+			default:
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [!] Unknown key: '%s'.", key))
+				break
 			}
 			_ = core.SaveConfig(*cfg)
 			term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [✓] Set %s = %s", key, val))
+		} else {
+			term.HistoryLines = append(term.HistoryLines, "  Usage: config [list | get <k> | set <k> <v>]")
+		}
+	case "preset":
+		if len(args) == 0 || args[0] == "list" {
+			if len(cfg.DownloadPresets) == 0 {
+				term.HistoryLines = append(term.HistoryLines, "  No saved presets.")
+			}
+			for _, p := range cfg.DownloadPresets {
+				marker := ""
+				if p.ID == cfg.DefaultDownloadPreset {
+					marker = " [default]"
+				}
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [%s] %s%s", p.ID, p.Name, marker))
+			}
+		} else if args[0] == "delete" && len(args) >= 2 {
+			id := args[1]
+			found := false
+			kept := cfg.DownloadPresets[:0]
+			for _, p := range cfg.DownloadPresets {
+				if p.ID == id {
+					found = true
+					continue
+				}
+				kept = append(kept, p)
+			}
+			if found {
+				cfg.DownloadPresets = append([]core.DownloadPreset{}, kept...)
+				if cfg.DefaultDownloadPreset == id {
+					cfg.DefaultDownloadPreset = ""
+				}
+				_ = core.SaveConfig(*cfg)
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [✓] Deleted preset '%s'.", id))
+			} else {
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [!] Preset '%s' not found.", id))
+			}
+		} else {
+			term.HistoryLines = append(term.HistoryLines, "  Usage: preset [list | delete <id>]")
+		}
+	case "cookies":
+		if len(args) == 0 || args[0] == "list" {
+			cookies, err := core.ParseCookiesFile(cfg.CookiesFile)
+			if err != nil || len(cookies) == 0 {
+				term.HistoryLines = append(term.HistoryLines, "  No cookies in "+cfg.CookiesFile)
+			} else {
+				n := 0
+				for _, c := range cookies {
+					if n >= 10 {
+						term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  ... and %d more", len(cookies)-n))
+						break
+					}
+					term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  %s: %s", c.Domain, c.Name))
+					n++
+				}
+			}
+		} else if args[0] == "add" && len(args) >= 4 {
+			domain, name, value := args[1], args[2], strings.Join(args[3:], " ")
+			if err := core.AppendCookie(cfg.CookiesFile, domain, name, value); err != nil {
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [!] Failed: %v", err))
+			} else {
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [✓] Added cookie %s for %s.", name, domain))
+			}
+		} else {
+			term.HistoryLines = append(term.HistoryLines, "  Usage: cookies [list | add <domain> <name> <value>]")
 		}
 	case "queue", "bg":
+		if len(args) >= 2 && (args[0] == "cancel" || args[0] == "kill") {
+			var id int
+			if _, err := fmt.Sscanf(args[1], "%d", &id); err != nil {
+				term.HistoryLines = append(term.HistoryLines, "  [!] Usage: queue cancel <id>")
+				break
+			}
+			if core.GlobalQueue.CancelTask(id) {
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [✓] Cancelled task #%d.", id))
+			} else {
+				term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [!] Task #%d not found.", id))
+			}
+			break
+		}
 		tasks := core.GlobalQueue.GetTasks()
 		if len(tasks) == 0 {
 			term.HistoryLines = append(term.HistoryLines, "  Background queue is empty.")
@@ -197,16 +322,26 @@ func (term *TerminalOverlay) dispatchCommand(line string, cfg *core.Config) {
 			if d.Available {
 				status = "FOUND (" + d.Path + ")"
 			}
-			term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  - %-15s: %s", d.Name, status))
+			tag := "required"
+			if !d.Required {
+				tag = "optional"
+			}
+			term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  - %-15s: %s [%s]", d.Name, status, tag))
 		}
 	case "dl":
 		if len(args) > 0 {
 			url := args[0]
-			p := core.DownloadPreset{ID: "bg_dl", Name: "CLI DL", Fields: cfg.PresetDefaults}
+			fields := cfg.PresetDefaults
+			if fields == nil {
+				fields = core.GetInitialPresetFields()
+			}
+			p := core.DownloadPreset{ID: "bg_dl", Name: "CLI DL", Fields: fields}
 			cmdList := append([]string{"yt-dlp"}, core.BuildYtDlpArgs(p, *cfg, cfg.DownloadDir, false)...)
 			cmdList = append(cmdList, url)
 			task := core.GlobalQueue.Enqueue(cmdList, "Download Video", url, cfg.DownloadDir)
 			term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [✓] Enqueued Task #%d", task.ID))
+		} else {
+			term.HistoryLines = append(term.HistoryLines, "  Usage: dl <url>")
 		}
 	default:
 		term.HistoryLines = append(term.HistoryLines, fmt.Sprintf("  [!] Unknown command: '%s'. Type 'help'.", cmd))
