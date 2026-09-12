@@ -51,13 +51,38 @@ if [ "${1:-}" = "--startelectron" ]; then
         echo "[2/3] electron/node_modules present, skipping npm ci."
     fi
 
-    # Бинарник Electron (postinstall часто блокируется политикой npm —
-    # тогда install.js не отработал и dist/ пуст).
-    if [ ! -x "electron/node_modules/electron/dist/electron" ]; then
-        echo "[3/3] Downloading Electron binary (one-time, ~110MB)..."
-        node electron/node_modules/electron/install.js >> "$LOG_FILE" 2>&1
+    # Бинарник Electron. Штатный install.js зависит от политики npm-scripts
+    # и в этом окружении молча распаковывает архив частично (только locales/),
+    # поэтому проверяем результат и при необходимости распаковываем целый zip
+    # вручную: сначала кеш @electron/get, иначе качаем с GitHub releases.
+    E_VER=$(node -p "require('./electron/node_modules/electron/package.json').version")
+    E_BIN="electron/node_modules/electron/dist/electron"
+    if [ ! -x "$E_BIN" ]; then
+        echo "[3/3] Provisioning Electron v${E_VER} binary (one-time, ~110MB)..."
+        node electron/node_modules/electron/install.js >> "$LOG_FILE" 2>&1 || true
     else
         echo "[3/3] Electron binary present."
+    fi
+    if [ ! -x "$E_BIN" ]; then
+        for tool in curl unzip python3; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+                echo "[FAIL] '$tool' not found in PATH"; exit 1
+            fi
+        done
+        E_ZIP="$DIST_DIR/electron-v${E_VER}-linux-x64.zip"
+        E_SIZE=0
+        [ -f "$E_ZIP" ] && E_SIZE=$(wc -c < "$E_ZIP")
+        if [ "$E_SIZE" -lt 100000000 ] || \
+           [ "$(python3 -c "import zipfile,sys; print(zipfile.ZipFile(sys.argv[1]).testzip() or 'OK')" "$E_ZIP" 2>/dev/null)" != "OK" ]; then
+            echo "[3/3] Downloading Electron v${E_VER} (progress below, do not interrupt)..."
+            curl -L --progress-bar -o "$E_ZIP" \
+                "https://github.com/electron/electron/releases/download/v${E_VER}/electron-v${E_VER}-linux-x64.zip"
+        else
+            echo "[3/3] Reusing verified $E_ZIP"
+        fi
+        rm -rf "electron/node_modules/electron/dist"
+        mkdir -p "electron/node_modules/electron/dist"
+        unzip -q "$E_ZIP" -d "electron/node_modules/electron/dist"
     fi
     # path.txt обязан содержать ровно 'electron' без перевода строки,
     # иначе electron/index.js склеит неверный путь (dist/dist/...).
