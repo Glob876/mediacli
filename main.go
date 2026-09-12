@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"mediacli/pkg/core"
 	"mediacli/pkg/daemon"
-	"mediacli/pkg/gui"
 	"mediacli/pkg/ui"
 	"os"
 
@@ -35,8 +34,10 @@ func main() {
 	}
 
 	if isGUI {
-		fmt.Println("[MediaCLI] Starting graphical desktop interface...")
-		gui.RunGUI()
+		fmt.Println("[MediaCLI] Fyne GUI удалён. Новый интерфейс — Electron:")
+		fmt.Println("  • ./build.sh --startelectron")
+		fmt.Println("  • или: cd electron && npm install && npm start")
+		fmt.Println("  • TUI без изменений: ./mediacli (в терминале)")
 		return
 	}
 
@@ -45,8 +46,8 @@ func main() {
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		fmt.Fprintln(os.Stderr, "MediaCLI error: no interactive terminal detected (stdin/stdout is not a TTY).")
 		fmt.Fprintln(os.Stderr, "  • Запусти mediacli напрямую в терминале (не через пайп/редирект IDE).")
-		fmt.Fprintln(os.Stderr, "  • Для GUI режима: ./mediacli --gui  или  go run . --gui")
-		fmt.Fprintln(os.Stderr, "  • Совет: первая сборка с fyne может занять 30-60с — это нормально (кеш Go).")
+		fmt.Fprintln(os.Stderr, "  • Для Electron-интерфейса: ./build.sh --startelectron")
+		fmt.Fprintln(os.Stderr, "  • Для TUI: запускай в реальном терминале.")
 		os.Exit(1)
 	}
 

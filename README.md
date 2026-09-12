@@ -130,10 +130,8 @@ mediacli> help
 
 > [!NOTE]
 > MediaCLI TUI собирается как обычный динамический бинарник (`CGO_ENABLED=1`,
-> см. `build.sh`). GUI на Fyne требует CGO и системные библиотеки OpenGL/X11:
-> на Debian/Ubuntu — `gcc`, `libgl1-mesa-dev`, `libx11-dev`, `libxcursor-dev`,
-> `libxrandr-dev`, `libxinerama-dev`, `libxi-dev`; на Fedora — `mesa-libGL-devel`,
-> `libX11-devel` и аналоги. Полностью статической сборки (`CGO_ENABLED=0`) нет.
+> см. `build.sh`). Отдельный GUI на Fyne удалён — актуальный графический
+> интерфейс это Electron-оболочка (`electron/`, см. ниже).
 
 ---
 
