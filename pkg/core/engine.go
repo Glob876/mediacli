@@ -1199,6 +1199,71 @@ func (qm *BackgroundQueueManager) GetTasks() []*BackgroundTask {
 	return result
 }
 
+// TaskSnapshot — потокобезопасная копия состояния задачи для внешних
+// потребителей (daemon API, будущий Electron-шелл). Поля BackgroundTask
+// мутируют под мьютексом очереди, поэтому читать их напрямую нельзя.
+type TaskSnapshot struct {
+	ID        int        `json:"id"`
+	Title     string     `json:"title"`
+	Source    string     `json:"source"`
+	Target    string     `json:"target"`
+	Status    TaskStatus `json:"status"`
+	Stage     string     `json:"stage"`
+	Progress  float64    `json:"progress"`
+	ExitCode  int        `json:"exit_code"`
+	StartedAt time.Time  `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at,omitempty"`
+	LogTail   []string   `json:"log_tail,omitempty"`
+}
+
+func snapshotTask(t *BackgroundTask) TaskSnapshot {
+	snap := TaskSnapshot{
+		ID:         t.ID,
+		Title:      t.Title,
+		Source:     t.Source,
+		Target:     t.Target,
+		Status:     t.Status,
+		Stage:      t.Stage,
+		Progress:   t.Progress,
+		ExitCode:   t.ExitCode,
+		StartedAt:  t.StartedAt,
+		FinishedAt: t.FinishedAt,
+	}
+	if n := len(t.LogLines); n > 0 {
+		from := n - 20
+		if from < 0 {
+			from = 0
+		}
+		snap.LogTail = append([]string{}, t.LogLines[from:]...)
+	}
+	return snap
+}
+
+// Snapshots возвращает копии всех задач. Безопасно для конкурентного чтения.
+func (qm *BackgroundQueueManager) Snapshots() []TaskSnapshot {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+
+	out := make([]TaskSnapshot, 0, len(qm.tasks))
+	for _, t := range qm.tasks {
+		out = append(out, snapshotTask(t))
+	}
+	return out
+}
+
+// Snapshot возвращает копию одной задачи по ID.
+func (qm *BackgroundQueueManager) Snapshot(id int) (TaskSnapshot, bool) {
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+
+	for _, t := range qm.tasks {
+		if t.ID == id {
+			return snapshotTask(t), true
+		}
+	}
+	return TaskSnapshot{}, false
+}
+
 func (qm *BackgroundQueueManager) GetSummary() string {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"mediacli/pkg/core"
+	"mediacli/pkg/daemon"
 	"mediacli/pkg/gui"
 	"mediacli/pkg/ui"
 	"os"
@@ -12,6 +13,12 @@ import (
 )
 
 func main() {
+	// Подкоманда для Electron-шелла: `mediacli daemon --port 0`.
+	// Перехватываем до flag.Parse, т.к. у daemon свой FlagSet.
+	if len(os.Args) > 1 && os.Args[1] == "daemon" {
+		os.Exit(daemon.Run(os.Args[2:]))
+	}
+
 	var isGUI bool
 	flag.BoolVar(&isGUI, "gui", false, "Launch graphical user interface")
 	flag.BoolVar(&isGUI, "g", false, "Launch graphical user interface (shorthand)")

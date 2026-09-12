@@ -137,6 +137,25 @@ mediacli> help
 
 ---
 
+## 🔌 Daemon API (for the Electron shell)
+
+`mediacli daemon --port 0` starts a loopback-only (`127.0.0.1`) HTTP API over the
+same core (queue, history, presets, config) that powers the TUI/GUI:
+
+```bash
+MEDIACLI_TOKEN=secret ./mediacli daemon --port 0
+# stdout: MEDIACLI_DAEMON_PORT=43721
+curl -H "Authorization: Bearer secret" http://127.0.0.1:43721/api/status
+```
+
+Endpoints: `GET /api/status`, `POST /api/downloads`, `GET /api/tasks`,
+`GET /api/tasks/:id`, `POST /api/tasks/:id/cancel`,
+`GET /api/tasks/:id/events` (SSE progress stream), `GET /api/history`,
+`GET /api/presets`, `GET/PUT /api/config`. Without `MEDIACLI_TOKEN` (or
+`--token`) auth is disabled — dev mode only.
+
+---
+
 ## 📄 License
 
 Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
