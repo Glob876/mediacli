@@ -103,6 +103,29 @@ if command -v sha256sum >/dev/null 2>&1; then
     (sha256sum "$TARGET_PATH" | sed "s|$(pwd)/||" > "$DIST_DIR/checksums.sha256")
 fi
 
+# -----------------------------------------------------------------------------
+# ЭТАП 4: Десктопный установщик (опционально: ./build.sh --package [--win|--mac])
+# -----------------------------------------------------------------------------
+if [ "${1:-}" = "--package" ]; then
+    PKG_TARGET="${2:---linux}"
+    printf "[4/4] Packaging desktop app (%s)... " "$PKG_TARGET"
+    if ! command -v npm >/dev/null 2>&1; then
+        printf "[FAIL] (npm not found)\n"; exit 1
+    fi
+    # Кладём свежий Go-бинарник туда, откуда electron-builder заберёт его
+    # в resources/bin (см. electron/main.js + package.json extraResources).
+    mkdir -p electron/bin
+    cp "$TARGET_PATH" "electron/bin/$BIN_NAME"
+    if npm ci --prefix electron >> "$LOG_FILE" 2>&1 \
+        && npx --prefix electron electron-builder "$PKG_TARGET" >> "$LOG_FILE" 2>&1; then
+        printf "[OK] (see electron/release/)\n"
+    else
+        printf "[FAIL]\n"
+        tail -n 25 "$LOG_FILE"
+        exit 1
+    fi
+fi
+
 echo "================================================================"
 echo "Build and installation completed in ${TOTAL_DURATION}s."
 if [ -n "$PATH_WARNING" ]; then

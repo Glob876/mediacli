@@ -3,12 +3,47 @@
   "version": "0.1.0",
   "description": "MediaCLI desktop shell (Electron) over the Go daemon API",
   "private": true,
+  "author": "Glob876",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --mock"
+    "dev": "electron . --mock",
+    "package": "electron-builder",
+    "package:linux": "electron-builder --linux",
+    "package:win": "electron-builder --win",
+    "package:mac": "electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.mogdop.mediacli",
+    "productName": "MediaCLI",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "bin",
+        "to": "bin"
+      }
+    ],
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "AudioVideo"
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "mac": {
+      "target": ["dmg"]
+    }
   },
   "devDependencies": {
-    "electron": "^36.0.0"
+    "electron": "^36.0.0",
+    "electron-builder": "^26.0.0"
   }
 }

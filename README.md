@@ -155,6 +155,22 @@ Endpoints: `GET /api/status`, `POST /api/downloads`, `GET /api/tasks`,
 `GET/PUT /api/config`. Without `MEDIACLI_TOKEN` (or
 `--token`) auth is disabled — dev mode only.
 
+## 🖥️ Desktop Shell (Electron, experimental)
+
+`electron/` is a Chromium shell over the daemon API above — no engine logic
+is duplicated there; presets/history/config all come from Go.
+
+```bash
+cd electron && npm install
+npm start            # needs dist/mediacli built via ./build.sh
+npm run dev          # UI-only mock mode, no Go binary needed
+./build.sh --package # AppImage/deb into electron/release/ (--win/--mac on their OS)
+```
+
+> [!NOTE]
+> `yt-dlp` and `ffmpeg` stay external dependencies (checked via the System tab),
+> they are not bundled into the installer.
+
 ---
 
 ## 📄 License

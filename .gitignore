@@ -229,3 +229,5 @@ dist/
 # Electron shell
 electron/node_modules/
 electron/dist/
+electron/release/
+electron/bin/
