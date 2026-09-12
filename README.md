@@ -150,6 +150,10 @@ Endpoints: `GET /api/status`, `POST /api/downloads`, `GET /api/tasks`,
 `GET /api/tasks/:id`, `POST /api/tasks/:id/cancel`,
 `GET /api/tasks/:id/events` (SSE progress stream), `GET /api/history`,
 `DELETE /api/history`, `POST /api/history/delete`, `GET /api/presets`,
+`GET /api/convert/presets`, `POST /api/convert` (ffmpeg в общей очереди),
+`GET /api/library` (файлы папки загрузок), `GET /api/library/file?name=`
+(Range-стрим для `<video>` предпросмотра, токен через `?token=`),
+`GET /api/browse?path=` (обзор ФС для вкладки конвертации),
 `GET/PUT /api/config`. Without `MEDIACLI_TOKEN` (or
 `--token`) auth is disabled — dev mode only.
 
