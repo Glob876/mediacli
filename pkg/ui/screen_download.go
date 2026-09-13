@@ -64,8 +64,10 @@ func ScreenVideo(s tcell.Screen, cfg *core.Config) {
 	}
 
 	if core.IsExternalTranscodeEnabled(*cfg, preset.Fields) {
+		core.CleanZeroByteFiles(outDir, core.GetString(preset.Fields, "output_template"))
 		RunDownloadExternal(s, cfg, preset, outDir, url)
 	} else {
+		core.CleanZeroByteFiles(outDir, core.GetString(preset.Fields, "output_template"))
 		cmdList := append([]string{"yt-dlp"}, core.BuildYtDlpArgs(preset, *cfg, outDir, false)...)
 		cmdList = append(cmdList, url)
 		RunWithLog(s, cfg, cmdList, "Download Video", url, outDir)
@@ -162,6 +164,10 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 			if core.GetBool(fields, "use_archive") {
 				archVal = yesStr
 			}
+			forceVal := noStr
+			if core.GetBool(fields, "force_overwrite") {
+				forceVal = yesStr
+			}
 
 			rightItems = []settingItem{
 				{Label: fmt.Sprintf("Max Quality: %s", qVal), CLI: "-f bestvideo[height<=?]", Key: "quality"},
@@ -171,6 +177,7 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 				{Label: fmt.Sprintf("Restrict Filenames (ASCII): %s", restVal), CLI: "--restrict-filenames", Key: "restrict_filenames"},
 				{Label: fmt.Sprintf("Keep Download Timestamp: %s", noMtimeVal), CLI: "--no-mtime", Key: "no_mtime"},
 				{Label: fmt.Sprintf("Download Archive: %s", archVal), CLI: "--download-archive", Key: "use_archive"},
+				{Label: fmt.Sprintf("Force Overwrite: %s", forceVal), CLI: "--force-overwrites", Key: "force_overwrite"},
 			}
 
 		case 1: // Video & Audio Codecs
@@ -448,6 +455,8 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 		fields["no_mtime"] = !core.GetBool(fields, "no_mtime")
 	case "use_archive":
 		fields["use_archive"] = !core.GetBool(fields, "use_archive")
+	case "force_overwrite":
+		fields["force_overwrite"] = !core.GetBool(fields, "force_overwrite")
 
 	case "video_preset":
 		keys := core.OrderedVideoPresetKeys

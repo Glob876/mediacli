@@ -168,6 +168,7 @@ func GetInitialPresetFields() map[string]interface{} {
 		"proxy_mode":           "default",
 		"proxy_url":            "",
 		"output_template":      "",
+		"force_overwrite":      false,
 	}
 }
 
@@ -688,6 +689,34 @@ func ParseDestinationFromLogs(lines []string) string {
 		}
 	}
 	return ""
+}
+
+// CleanZeroByteFiles удаляет 0-байтные файлы в папке загрузок,
+// соответствующие шаблону имени (из output_template или дефолтного).
+// Это защита от бага yt-dlp: если предыдущий запуск упал и оставил 0-байтный файл,
+// yt-dlp сочтет его "уже скачанным" и пропустит скачивание, но упадет на постобработке.
+func CleanZeroByteFiles(outDir, template string) {
+	if template == "" {
+		template = "%(title)s.%(ext)s"
+	}
+	// Грубая эвристика: ищем все файлы в outDir с размером 0 и удаляем.
+	// yt-dlp создает файл с точным именем из шаблона, поэтому это безопасно.
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.Size() == 0 {
+			_ = os.Remove(filepath.Join(outDir, e.Name()))
+		}
+	}
 }
 
 // 3. История операций и функции удаления
@@ -1315,6 +1344,9 @@ func (qm *BackgroundQueueManager) workerLoop() {
 		}
 		if runningCount < maxSlots && nextTask != nil {
 			nextTask.Status = StatusRunning
+			// Cleanup 0-byte artifacts before starting download to prevent yt-dlp
+			// from skipping download because a 0-byte file from a previous failed run exists.
+			CleanZeroByteFiles(nextTask.Target, "")
 			nextTask.cmdObj = exec.Command(nextTask.Cmd[0], nextTask.Cmd[1:]...)
 			go qm.monitorTask(nextTask)
 		}
@@ -1547,6 +1579,10 @@ func BuildYtDlpArgs(preset DownloadPreset, cfg Config, outDir string, isPlaylist
 
 	if (cfg.UseArchive || GetBool(f, "use_archive")) && cfg.ArchiveFile != "" {
 		cmd = append(cmd, "--download-archive", ParseUserPath(cfg.ArchiveFile))
+	}
+
+	if GetBool(f, "force_overwrite") {
+		cmd = append(cmd, "--force-overwrites")
 	}
 
 	if pass := GetString(f, "video_password"); pass != "" {

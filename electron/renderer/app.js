@@ -79,7 +79,7 @@ const I18N = {
     presetDeleteConfirm: 'Удалить пресет?', presetNamePrompt: 'Имя пресета:', presetCreated: 'Пресет сохранён', presetDeleted: 'Пресет удалён', tPresetFail: 'Не удалось сохранить пресет:',
     presetEditorTitle: 'Редактор пресета', presetName: 'Имя пресета:', presetTabGen: 'Основные', presetTabCodecs: 'Видео и аудио', presetTabSubs: 'Субтитры', presetTabNet: 'Сеть', presetTabAuth: 'Авторизация',
     presetQuality: 'Макс. качество:', presetSection: 'Вырезка по времени:', presetTemplate: 'Шаблон имени файла:', presetRestrict: 'ASCII имена', presetVcodec: 'Видео-кодек:', presetFps: 'Лимит FPS:',
-    presetAudioOnly: 'Только аудио', presetAudioQuality: 'Качество аудио:', presetSubsEnabled: 'Скачивать субтитры', presetAutoSubs: 'Авто-субтитры', presetEmbedSubs: 'Встраивать субтитры', presetEmbedMeta: 'Метаданные', presetEmbedThumb: 'Обложка', presetEmbedChapters: 'Главы', presetSplitChapters: 'Разделить по главам', presetWriteExtra: 'Описание и миниатюра', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Ретраи:', presetRatelimit: 'Лимит скорости:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Пароль видео:', presetCookiesMode: 'Cookies режим:', presetProxyMode: 'Proxy режим:',
+    presetAudioOnly: 'Только аудио', presetAudioQuality: 'Качество аудио:', presetSubsEnabled: 'Скачивать субтитры', presetAutoSubs: 'Авто-субтитры', presetEmbedSubs: 'Встраивать субтитры', presetEmbedMeta: 'Метаданные', presetEmbedThumb: 'Обложка', presetEmbedChapters: 'Главы', presetSplitChapters: 'Разделить по главам', presetWriteExtra: 'Описание и миниатюра', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Ретраи:', presetRatelimit: 'Лимит скорости:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Пароль видео:', presetCookiesMode: 'Cookies режим:', presetProxyMode: 'Proxy режим:', presetForceOverwrite: 'Принудительная перезапись (--force-overwrites)',
     presetEdit: 'Редактировать',
   },
   en: {
@@ -151,7 +151,7 @@ const I18N = {
     presetDeleteConfirm: 'Delete preset?', presetNamePrompt: 'Preset name:', presetCreated: 'Preset saved', presetDeleted: 'Preset deleted', tPresetFail: 'Could not save preset:',
     presetEditorTitle: 'Preset Editor', presetName: 'Preset name:', presetTabGen: 'General', presetTabCodecs: 'Video & Codecs', presetTabSubs: 'Subtitles', presetTabNet: 'Network', presetTabAuth: 'Auth',
     presetQuality: 'Max quality:', presetSection: 'Time range:', presetTemplate: 'File name template:', presetRestrict: 'ASCII names', presetVcodec: 'Video codec:', presetFps: 'FPS limit:',
-    presetAudioOnly: 'Audio only', presetAudioQuality: 'Audio quality:', presetSubsEnabled: 'Download subtitles', presetAutoSubs: 'Auto-subs', presetEmbedSubs: 'Embed subs', presetEmbedMeta: 'Metadata', presetEmbedThumb: 'Thumbnail', presetEmbedChapters: 'Chapters', presetSplitChapters: 'Split by chapters', presetWriteExtra: 'Description & thumbnail', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Retries:', presetRatelimit: 'Rate limit:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Video password:', presetCookiesMode: 'Cookies mode:', presetProxyMode: 'Proxy mode:',
+    presetAudioOnly: 'Audio only', presetAudioQuality: 'Audio quality:', presetSubsEnabled: 'Download subtitles', presetAutoSubs: 'Auto-subs', presetEmbedSubs: 'Embed subs', presetEmbedMeta: 'Metadata', presetEmbedThumb: 'Thumbnail', presetEmbedChapters: 'Chapters', presetSplitChapters: 'Split by chapters', presetWriteExtra: 'Description & thumbnail', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Retries:', presetRatelimit: 'Rate limit:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Video password:', presetCookiesMode: 'Cookies mode:', presetProxyMode: 'Proxy mode:', presetForceOverwrite: 'Force overwrite (--force-overwrites)',
     presetEdit: 'Edit',
   },
   'en-US': {
@@ -223,7 +223,7 @@ const I18N = {
     presetDeleteConfirm: 'Delete preset?', presetNamePrompt: 'Preset name:', presetCreated: 'Preset saved', presetDeleted: 'Preset deleted', tPresetFail: 'Could not save preset:',
     presetEditorTitle: 'Preset Editor', presetName: 'Preset name:', presetTabGen: 'General', presetTabCodecs: 'Video & Codecs', presetTabSubs: 'Subtitles', presetTabNet: 'Network', presetTabAuth: 'Auth',
     presetQuality: 'Max quality:', presetSection: 'Time range:', presetTemplate: 'File name template:', presetRestrict: 'ASCII names', presetVcodec: 'Video codec:', presetFps: 'FPS limit:',
-    presetAudioOnly: 'Audio only', presetAudioQuality: 'Audio quality:', presetSubsEnabled: 'Download subtitles', presetAutoSubs: 'Auto-subs', presetEmbedSubs: 'Embed subs', presetEmbedMeta: 'Metadata', presetEmbedThumb: 'Thumbnail', presetEmbedChapters: 'Chapters', presetSplitChapters: 'Split by chapters', presetWriteExtra: 'Description & thumbnail', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Retries:', presetRatelimit: 'Rate limit:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Video password:', presetCookiesMode: 'Cookies mode:', presetProxyMode: 'Proxy mode:',
+    presetAudioOnly: 'Audio only', presetAudioQuality: 'Audio quality:', presetSubsEnabled: 'Download subtitles', presetAutoSubs: 'Auto-subs', presetEmbedSubs: 'Embed subs', presetEmbedMeta: 'Metadata', presetEmbedThumb: 'Thumbnail', presetEmbedChapters: 'Chapters', presetSplitChapters: 'Split by chapters', presetWriteExtra: 'Description & thumbnail', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Retries:', presetRatelimit: 'Rate limit:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Video password:', presetCookiesMode: 'Cookies mode:', presetProxyMode: 'Proxy mode:', presetForceOverwrite: 'Force overwrite (--force-overwrites)',
     presetEdit: 'Edit',
   },
 };
@@ -741,7 +741,7 @@ function populatePresetEditor(preset) {
   const f = (preset && preset.fields) ? preset.fields : {};
   const defaults = {
     quality: '', video_preset: 'default', vcodec: 'auto', fps_limit: '', audio_only: false, audio_format: 'mp3', audio_quality: '0',
-    download_section: '', output_template: '', windows_filenames: true, restrict_filenames: false, no_mtime: true, use_archive: false,
+    download_section: '', output_template: '', windows_filenames: true, restrict_filenames: false, no_mtime: true, use_archive: false, force_overwrite: false,
     subs_enabled: false, sub_langs: 'ru,en', auto_subs: false, embed_subs: false, embed_metadata: true, embed_thumbnail: true, embed_chapters: true, split_chapters: false, write_extra: false, sponsorblock: 'off',
     concurrent_fragments: '4', retries: '10', ratelimit: '', geobypass: false, live_start: false, video_password: '',
     cookies_mode: 'default', cookies_browser: '', cookies_file: '', proxy_mode: 'default', proxy_url: '',
@@ -755,6 +755,7 @@ function populatePresetEditor(preset) {
   el('preset-restrict').checked = !!get('restrict_filenames');
   el('preset-no-mtime').checked = !!get('no_mtime');
   el('preset-use-archive').checked = !!get('use_archive');
+  el('preset-force-overwrite').checked = !!get('force_overwrite');
   // video & codecs
   const vpOpts = videoPresetsCache.length ? videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) })) : [{ value: 'default', label: 'default' }];
   cselectSet('preset-video-preset', vpOpts, get('video_preset') || 'default');
@@ -800,6 +801,7 @@ function collectPresetEditorFields() {
   f.restrict_filenames = el('preset-restrict').checked;
   f.no_mtime = el('preset-no-mtime').checked;
   f.use_archive = el('preset-use-archive').checked;
+  f.force_overwrite = el('preset-force-overwrite').checked;
   f.video_preset = cselectGet('preset-video-preset') || 'default';
   f.vcodec = cselectGet('preset-vcodec') || 'auto';
   f.fps_limit = cselectGet('preset-fps') || '';

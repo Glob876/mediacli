@@ -53,6 +53,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	defer ticker.Stop()
 
 	// ---------- Фаза 1: yt-dlp ----------
+	core.CleanZeroByteFiles(outDir, core.GetString(preset.Fields, "output_template"))
 	ytdlpCmd := exec.Command(ytdlpCmdList[0], ytdlpCmdList[1:]...)
 	ytdlpOut, err := ytdlpCmd.StdoutPipe()
 	if err != nil {
