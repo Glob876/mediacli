@@ -132,6 +132,9 @@ body {
   opacity: 0.55;
   animation: pageIn 0.5s ease;
   transition: opacity 0.25s ease;
+  /* Пиксель-арт: масштабировать чёткими пикселями, без сглаживания. */
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
 }
 .brand-logo:hover { opacity: 0.85; }
 .hint {
