@@ -356,12 +356,14 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // PUT /api/config — replace full config, persist, resync queue limit.
+// Делаем merge с существующим конфигом: отсутствующие в JSON поля не затираются нулями.
 func (s *Server) handlePutConfig(w http.ResponseWriter, r *http.Request) {
-	var cfg core.Config
-	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+	existing, _ := core.LoadConfig()
+	if err := json.NewDecoder(r.Body).Decode(&existing); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return
 	}
+	cfg := existing
 	if cfg.BGQueueMax < 1 {
 		cfg.BGQueueMax = 1
 	}

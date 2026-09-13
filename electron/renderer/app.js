@@ -239,6 +239,31 @@ const I18N = {
 
 const T = (key) => (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || key;
 
+// Загрузка локалей из файлов locales/*.json (с фолбэком на встроенный I18N)
+async function loadLocales() {
+  const files = [
+    { lang: 'ru', file: 'ru_ru.json' },
+    { lang: 'en', file: 'en_gb.json' },
+    { lang: 'en-US', file: 'en_us.json' },
+  ];
+  for (const { lang, file } of files) {
+    try {
+      // Сначала пробуем статику (работает в Electron file:// и в dev)
+      let res = await fetch(`locales/${file}`);
+      // Если не получилось и есть daemon — пробуем через API (на будущее)
+      if (!res.ok && BASE) {
+        try { res = await fetch(`${BASE}/api/locales/${file}`, { headers: { Authorization: `Bearer ${TOKEN}` } }); } catch { /* ignore */ }
+      }
+      if (res && res.ok) {
+        const data = await res.json();
+        I18N[lang] = { ...(I18N[lang] || {}), ...data };
+      }
+    } catch { /* оставляем встроенный */ }
+  }
+}
+
+const t2 = (key) => T(key); // алиас для совместимости
+
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((n) => { n.textContent = T(n.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach((n) => { n.placeholder = T(n.dataset.i18nPh); });
@@ -2607,6 +2632,7 @@ async function init() {
     if (cfg.language && I18N[cfg.language]) state.lang = cfg.language;
     if (cfg.accent_color && hexToRgb(cfg.accent_color)) state.accent = cfg.accent_color.toLowerCase();
   } catch { /* defaults */ }
+  try { await loadLocales(); } catch { /* fallback to built-in */ }
   applyI18n();
   applyAccent(state.accent);
 

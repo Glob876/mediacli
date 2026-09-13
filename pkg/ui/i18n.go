@@ -1,305 +1,158 @@
 package ui
 
 import (
+	"embed"
+	"encoding/json"
 	"fmt"
 	"mediacli/pkg/core"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 )
 
-var stringsTable = map[string]map[string]string{
-	"en": {
-		"app_title":                "MogDop's MediaCLI",
-		"tab_online":               "Downloads",
-		"tab_local":                "Local Tools",
-		"tab_system":               "System & Config",
-		"tab_set_gen":              "General & Output",
-		"tab_set_conv":             "Video & Audio (Codecs)",
-		"tab_set_subs_meta":        "Subtitles & Metadata",
-		"tab_set_accel":            "Network & Acceleration",
-		"tab_set_cookies_auth":     "Cookies & Auth",
-		"tab_set_action":           "[ Run / Save Preset ]",
-		"tab_set_ui":               "Interface & System",
-		"menu_video":               "Download video (YouTube/VK/etc.)",
-		"menu_audio":               "Download audio track",
-		"menu_thumbnail":           "Download video thumbnail / poster",
-		"menu_playlist":            "Download playlist",
-		"menu_aspect_ratio":        "Aspect ratio & crop (16:9 / 9:16 / 1:1 / etc.)",
-		"menu_convert":             "Convert local file (FFmpeg)",
-		"menu_batch_convert":       "Batch convert folder",
-		"menu_trim":                "Trim video / audio",
-		"menu_probe":               "Inspect local file (FFprobe)",
-		"menu_info":                "Video URL info",
-		"menu_subs":                "Download subtitles",
-		"menu_history":             "Operation history",
-		"menu_cookies":             "Cookies",
-		"menu_settings":            "Settings",
-		"menu_update":              "Update yt-dlp",
-		"menu_exit":                "Exit",
-		"footer_nav":               "↑/↓ or j/k - navigate   Enter - select   Esc/q - back   [Alt+Shift+P / F12] - Terminal",
-		"footer_input":             "Enter - confirm   Esc - cancel",
-		"footer_message":           "Enter/Esc - continue",
-		"footer_vertical_tabs":     "↑/↓ - Switch category   Enter/→ - Edit options   Esc - Back / Cancel",
-		"footer_vertical_items":    "↑/↓ - Select option   Enter - Change/Toggle   Esc/← - Back to categories",
-		"video_title":              "Download video",
-		"video_prompt_url":         "Paste the video URL:",
-		"thumb_title":              "Download Thumbnail",
-		"thumb_format_subtitle":    "Choose image format for thumbnail",
-		"download_mode_quick":      "Quick Download (use default preset)",
-		"download_mode_preset":     "Choose a saved preset",
-		"download_mode_manual":     "Configure parameters manually",
-		"download_mode_subtitle":   "How would you like to configure this download?",
-		"manual_config_title":      "Preset Configuration (Stacher 7 Engine)",
-		"convert_title":            "Convert local file",
-		"convert_prompt_file":      "Enter full path to input video/audio file:",
-		"convert_err_notfound":     "Error: File or folder '%s' does not exist!",
-		"batch_title":              "Batch Convert Folder",
-		"batch_prompt_folder":      "Enter path to folder containing media files:",
-		"batch_no_files":           "No media files found in folder.",
-		"trim_title":               "Trim Media File",
-		"trim_prompt_file":         "Enter path to video/audio file:",
-		"trim_prompt_start":        "Start time (HH:MM:SS, e.g. 00:01:30):",
-		"trim_prompt_end":          "End time (HH:MM:SS, e.g. 00:02:45):",
-		"trim_mode_copy":           "Fast Stream Copy (-c copy, instant)",
-		"trim_mode_reencode":       "Re-encode using target preset",
-		"aspect_title":             "Aspect Ratio & Crop Engine",
-		"aspect_prompt_file":       "Enter path to video file:",
-		"aspect_ratio_opt":         "Target Aspect Ratio",
-		"aspect_mode_opt":          "Framing / Framing Mode",
-		"aspect_res_opt":           "Target Resolution",
-		"aspect_codec_opt":         "Video Codec",
-		"aspect_mode_crop":         "Crop to Fill (Center Cut / No black bars)",
-		"aspect_mode_letterbox":    "Letterbox (Black bars / Lossless content)",
-		"aspect_mode_blur":         "Blurred Background (Padded / Lossless content)",
-		"aspect_mode_stretch":      "Stretch to Format (Distort / No black bars)",
-		"aspect_btn_run":           "► Start Processing Video",
-		"aspect_btn_cancel":        "► Cancel",
-		"aspect_preview_title":     "VISUAL RATIO & FRAMING PREVIEW",
-		"aspect_footer_nav":        "↑/↓ or j/k - select   Enter - modify / toggle   Esc/q - cancel",
-		"probe_title":              "Inspect Local File (FFprobe)",
-		"probe_prompt_file":        "Enter path to media file:",
-		"history_title":            "Operation History",
-		"history_empty":            "No operations recorded yet.",
-		"log_title":                "Process Execution",
-		"log_footer_running":       "q/Esc - Move to Background   F10 - Toggle Raw Logs   Ctrl+C - Terminate",
-		"log_footer_done":          "Enter/Esc - Return to menu",
-		"log_finished_ok":          "Done (exit code 0).",
-		"log_finished_err":         "Finished with exit code %d.",
-		"bg_transferred":           "Task transferred to background queue!",
-		"settings_title":           "Settings & Configuration",
-		"settings_download_dir":    "Download folder: %s",
-		"settings_goal":            "Primary Use-Case: %s",
-		"settings_proxy":           "Network Proxy: %s",
-		"settings_language":        "Language: %s",
-		"settings_cookies":         "Authentication Cookies: %s",
-		"cookies_mode_none":        "Disabled (None)",
-		"cookies_mode_file":        "cookies.txt File",
-		"cookies_mode_browser":     "Import from Browser",
-		"cookies_prompt_file":      "Enter full path to cookies.txt:",
-		"cookies_prompt_browser":   "Choose browser to extract cookies from:",
-		"settings_preset":          "Default Video Codec: %s",
-		"settings_transcode_mode":  "Transcode Engine: %s",
-		"transcode_embedded":       "Embedded (yt-dlp --recode)",
-		"transcode_external":       "External FFmpeg (separate, same output)",
-		"settings_audio_format":    "Default Audio Format: %s",
-		"settings_sub_langs":       "Default Subtitle Languages: %s",
-		"settings_thumb_fmt":       "Thumbnail Format: %s",
-		"settings_ffmpeg_suffix":   "FFmpeg Filename Suffixes: %s",
-		"settings_overwrite_orig":  "Replace / Overwrite Original File: %s",
-		"settings_accel_frags":     "Concurrent Download Fragments: %d",
-		"settings_no_mtime":        "Keep Current Download Timestamp: %s",
-		"settings_win_names":       "Cross-platform Safe Filenames: %s",
-		"settings_archive":         "Download Archive (Deduplication): %s",
-		"settings_theme":           "Color Theme: %s",
-		"settings_bg":              "Terminal Background: %s",
-		"settings_style":           "Progress Bar Style: %s",
-		"settings_bg_queue_max":    "Max Background Tasks: %d",
-		"settings_notify_bell":     "Terminal Bell on Finish: %s",
-		"settings_auto_check_deps": "Auto-check Dependencies: %s",
-		"settings_logo_mode":       "Logo Display Mode: %s",
-		"settings_logo_protocol":   "Image Rendering Protocol: %s",
-		"logo_proto_kitty":         "Kitty (Fastest)",
-		"logo_proto_iterm2":        "iTerm2 / WezTerm",
-		"settings_logo_ascii":      "ASCII Art Preset: %s",
-		"settings_logo_image":      "Custom Image (PNG/JPG): %s",
-		"logo_mode_img":            "Image",
-		"logo_warning":             "Note: Rendering images requires a terminal with Image Protocol support.",
-		"logo_no_images":           "No images found. Please add PNG/JPG files to:\n%s",
-		"settings_reset":           "Reset all settings to factory defaults...",
-		"info_title":               "Video Info",
-		"subs_title":               "Download Subtitles",
-		"audio_title":              "Download Audio",
-		"playlist_title":           "Download Playlist",
-		"playlist_prompt_url":      "Paste the playlist URL:",
-		"update_title":             "Update yt-dlp",
-		"update_via_pkg":           "System Package Manager",
-		"update_via_pip":           "Python Pip",
-		"update_via_ytdlp":         "yt-dlp Self-Update (-U)",
-		"proxy_system":             "System Proxy (Auto)",
-		"proxy_custom":             "Custom Proxy",
-		"proxy_none":               "Direct Connection (No proxy)",
-		"goal_editing":             "Video Editing (DaVinci / Premiere)",
-		"goal_downloading":         "General Media Downloading",
-		"goal_audio":               "Audio Extraction & Archiving",
-		"goal_transcoding":         "FFmpeg Transcoding & Encoding",
-		"bg_option_keep":           "Transparent / Native Background",
-		"bg_option_solid":          "Solid Theme Background",
-		"val_yes":                  "YES",
-		"val_no":                   "NO",
-	},
-	"ru": {
-		"app_title":                "MogDop's MediaCLI",
-		"tab_online":               "Загрузка",
-		"tab_local":                "Инструменты",
-		"tab_system":               "Система",
-		"tab_set_gen":              "Основные и Вывод",
-		"tab_set_conv":             "Видео и Аудио (Кодеки)",
-		"tab_set_subs_meta":        "Субтитры и Метаданные",
-		"tab_set_accel":            "Сеть и Ускорение",
-		"tab_set_cookies_auth":     "Cookies и Авторизация",
-		"tab_set_action":           "[ Запуск / Сохранение ]",
-		"tab_set_ui":               "Интерфейс и Система",
-		"menu_video":               "Скачать видео (YouTube/VK/др.)",
-		"menu_audio":               "Скачать аудиодорожку",
-		"menu_thumbnail":           "Скачать обложку / постер видео",
-		"menu_playlist":            "Скачать плейлист",
-		"menu_aspect_ratio":        "Соотношение сторон и обрезка (16:9 / 9:16 / 1:1 / др.)",
-		"menu_convert":             "Конвертировать локальный файл (FFmpeg)",
-		"menu_batch_convert":       "Пакетная конвертация папки",
-		"menu_trim":                "Обрезать видео / аудио",
-		"menu_probe":               "Анализ медиафайла (FFprobe)",
-		"menu_info":                "Информация о ссылке",
-		"menu_subs":                "Скачать субтитры",
-		"menu_history":             "История операций",
-		"menu_cookies":             "Cookies",
-		"menu_settings":            "Настройки",
-		"menu_update":              "Обновить yt-dlp",
-		"menu_exit":                "Выход",
-		"footer_nav":               "↑/↓ или j/k — выбор   Enter — подтвердить   Esc/q — назад   [Alt+Shift+P / F12] — Терминал",
-		"footer_input":             "Enter — подтвердить   Esc — отмена",
-		"footer_message":           "Enter/Esc — продолжить",
-		"footer_vertical_tabs":     "↑/↓ — Категория   Enter/→ — К параметрам   Esc — Назад / Отмена",
-		"footer_vertical_items":    "↑/↓ — Параметр   Enter — Изменить/Вкл   Esc/← — К категориям",
-		"video_title":              "Скачать видео",
-		"video_prompt_url":         "Введите ссылку на видео:",
-		"thumb_title":              "Скачать обложку видео",
-		"thumb_format_subtitle":    "Выберите формат изображения для сохранения",
-		"download_mode_quick":      "Быстрая загрузка (пресет по умолчанию)",
-		"download_mode_preset":     "Выбрать сохранённый пресет",
-		"download_mode_manual":     "Настроить параметры вручную",
-		"download_mode_subtitle":   "Как Вы хотите настроить параметры скачивания?",
-		"manual_config_title":      "Конфигурация пресета (Движок Stacher 7)",
-		"convert_title":            "Конвертировать локальный файл",
-		"convert_prompt_file":      "Введите полный путь к исходному файлу:",
-		"convert_err_notfound":     "Ошибка: Файл или папка '%s' не существует!",
-		"batch_title":              "Пакетная конвертация папки",
-		"batch_prompt_folder":      "Введите путь к папке с файлами:",
-		"batch_no_files":           "В выбранной папке не найдено подходящих медиафайлов.",
-		"trim_title":               "Обрезать медиафайл",
-		"trim_prompt_file":         "Введите путь к файлу:",
-		"trim_prompt_start":        "Время начала (ЧЧ:ММ:СС, например 00:01:30):",
-		"trim_prompt_end":          "Время окончания (ЧЧ:ММ:СС):",
-		"trim_mode_copy":           "Быстрое копирование (-c copy, без потерь)",
-		"trim_mode_reencode":       "Перекодировать с выбранным пресетом",
-		"aspect_title":             "Соотношение сторон и обрезка",
-		"aspect_prompt_file":       "Введите путь к видеофайлу:",
-		"aspect_ratio_opt":         "Целевое соотношение сторон",
-		"aspect_mode_opt":          "Режим кадрирования",
-		"aspect_res_opt":           "Целевое разрешение",
-		"aspect_codec_opt":         "Видеокодек",
-		"aspect_mode_crop":         "Обрезка под формат (Без черных полос)",
-		"aspect_mode_letterbox":    "Черные полосы (Без потерь в кадре / Letterbox)",
-		"aspect_mode_blur":         "Размытый фон (Без потерь в кадре / Blur BG)",
-		"aspect_mode_stretch":      "Растянуть под формат (Без полос / Искажение)",
-		"aspect_btn_run":           "► Запустить обработку видео",
-		"aspect_btn_cancel":        "► Отмена",
-		"aspect_preview_title":     "ВИЗУАЛИЗАЦИЯ СООТНОШЕНИЯ И КАДРА",
-		"aspect_footer_nav":        "↑/↓ или j/k — выбор   Enter — изменить / переключить   Esc/q — отмена",
-		"probe_title":              "Анализ медиафайла (FFprobe)",
-		"probe_prompt_file":        "Введите путь к медиафайлу:",
-		"history_title":            "История операций",
-		"history_empty":            "Записей об операциях пока нет.",
-		"log_title":                "Выполнение операции",
-		"log_footer_running":       "q/Esc — В фоновую очередь   F10 — Полный лог   Ctrl+C — Отмена",
-		"log_footer_done":          "Enter/Esc — Назад в меню",
-		"log_finished_ok":          "Успешно завершено (код 0).",
-		"log_finished_err":         "Завершено с ошибкой (код %d).",
-		"bg_transferred":           "Задача переведена в фоновую очередь!",
-		"settings_title":           "Настройки программы",
-		"settings_download_dir":    "Папка загрузок: %s",
-		"settings_goal":            "Основная цель: %s",
-		"settings_proxy":           "Сетевой прокси: %s",
-		"settings_language":        "Язык интерфейса: %s",
-		"settings_cookies":         "Авторизация (Cookies): %s",
-		"cookies_mode_none":        "Отключено (Без cookies)",
-		"cookies_mode_file":        "Файл cookies.txt",
-		"cookies_mode_browser":     "Из браузера",
-		"cookies_prompt_file":      "Введите полный путь к cookies.txt:",
-		"cookies_prompt_browser":   "Выберите браузер для чтения cookies:",
-		"settings_preset":          "Пресет видео по умолчанию: %s",
-		"settings_transcode_mode":  "Движок транскодинга: %s",
-		"transcode_embedded":       "Встроенный (yt-dlp --recode)",
-		"transcode_external":       "Внешний FFmpeg (отдельно, тот же результат)",
-		"settings_audio_format":    "Формат аудио по умолчанию: %s",
-		"settings_sub_langs":       "Языки субтитров по умолчанию: %s",
-		"settings_thumb_fmt":       "Формат обложек по умолчанию: %s",
-		"settings_ffmpeg_suffix":   "Суффиксы в именах FFmpeg: %s",
-		"settings_overwrite_orig":  "Заменять исходный файл: %s",
-		"settings_accel_frags":     "Параллельных потоков фрагментов: %d",
-		"settings_no_mtime":        "Сохранять текущую дату загрузки: %s",
-		"settings_win_names":       "Безопасные имена файлов (NTFS/FAT32): %s",
-		"settings_archive":         "Архив загрузок (защита от повторов): %s",
-		"settings_theme":           "Цветовая тема: %s",
-		"settings_bg":              "Фон терминала: %s",
-		"settings_style":           "Стиль индикатора прогресса: %s",
-		"settings_bg_queue_max":    "Макс. фоновых задач: %d",
-		"settings_notify_bell":     "Звуковой сигнал по завершении: %s",
-		"settings_auto_check_deps": "Проверять зависимости при старте: %s",
-		"settings_logo_mode":       "Режим логотипа: %s",
-		"settings_logo_protocol":   "Протокол отрисовки картинок: %s",
-		"logo_proto_kitty":         "Kitty (Самый быстрый)",
-		"logo_proto_iterm2":        "iTerm2 / WezTerm",
-		"settings_logo_ascii":      "Стиль ASCII: %s",
-		"settings_logo_image":      "Своя картинка (PNG/JPG): %s",
-		"logo_mode_img":            "Картинка",
-		"logo_warning":             "Внимание: Отрисовка картинок работает только в терминалах с поддержкой протоколов изображений (Kitty, iTerm2).",
-		"logo_no_images":           "Картинки не найдены. Пожалуйста, добавьте PNG/JPG файлы в:\n%s",
-		"settings_reset":           "Сбросить все настройки к заводским...",
-		"info_title":               "Информация о видео",
-		"subs_title":               "Скачать субтитры",
-		"audio_title":              "Скачать аудио",
-		"playlist_title":           "Скачать плейлист",
-		"playlist_prompt_url":      "Введите ссылку на плейлист:",
-		"update_title":             "Обновить yt-dlp",
-		"update_via_pkg":           "Через системный пакетный менеджер",
-		"update_via_pip":           "Через Python Pip",
-		"update_via_ytdlp":         "Через встроенный yt-dlp -U",
-		"proxy_system":             "Системный прокси (Авто)",
-		"proxy_custom":             "Свой прокси",
-		"proxy_none":               "Прямое подключение (Без прокси)",
-		"goal_editing":             "Видеомонтаж (DaVinci / Premiere)",
-		"goal_downloading":         "Обычная загрузка видео из сети",
-		"goal_audio":               "Извлечение и архивация аудио",
-		"goal_transcoding":         "Локальная конвертация FFmpeg",
-		"bg_option_keep":           "Прозрачный / Системный фон",
-		"bg_option_solid":          "Сплошной темный фон темы",
-		"val_yes":                  "ДА",
-		"val_no":                   "НЕТ",
-	},
+//go:embed locales/*.json
+var localesFS embed.FS
+
+var (
+	stringsTable     map[string]map[string]string
+	stringsTableOnce sync.Once
+)
+
+func normalizeLang(lang string) string {
+	l := strings.ToLower(strings.TrimSpace(lang))
+	l = strings.ReplaceAll(l, "-", "_")
+	switch l {
+	case "ru", "ru_ru":
+		return "ru_ru"
+	case "en", "en_gb", "en_gb_english":
+		return "en_gb"
+	case "en_us", "en-us", "en_us_english":
+		return "en_us"
+	default:
+		// fallback: try exact, then prefix
+		if _, ok := stringsTable[l]; ok {
+			return l
+		}
+		if strings.HasPrefix(l, "ru") {
+			return "ru_ru"
+		}
+		if strings.HasPrefix(l, "en") {
+			// en without region -> en_gb (British) as before
+			return "en_gb"
+		}
+		return "en_gb"
+	}
+}
+
+func loadStringsTable() {
+	stringsTable = make(map[string]map[string]string)
+	// 1. Встроенные локали
+	entries, err := localesFS.ReadDir("locales")
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+				continue
+			}
+			data, err := localesFS.ReadFile(filepath.Join("locales", e.Name()))
+			if err != nil {
+				continue
+			}
+			var m map[string]string
+			if err := json.Unmarshal(data, &m); err != nil {
+				continue
+			}
+			key := strings.TrimSuffix(strings.ToLower(e.Name()), ".json")
+			stringsTable[key] = m
+		}
+	}
+	// 2. Внешние переопределения: ~/.config/mediacli/locales/*.json и ./locales/*.json (для разработки)
+	// Позволяет пользователю править переводы без пересборки.
+	candidates := []string{
+		filepath.Join(core.GetConfigDir(), "locales"),
+		"locales",
+		filepath.Join("pkg", "ui", "locales"),
+	}
+	for _, dir := range candidates {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				continue
+			}
+			var m map[string]string
+			if err := json.Unmarshal(data, &m); err != nil {
+				continue
+			}
+			key := strings.TrimSuffix(strings.ToLower(e.Name()), ".json")
+			if existing, ok := stringsTable[key]; ok {
+				for k, v := range m {
+					existing[k] = v
+				}
+			} else {
+				stringsTable[key] = m
+			}
+		}
+	}
+	// 3. Алиасы для обратной совместимости: en -> en_gb, ru -> ru_ru
+	if _, ok := stringsTable["en"]; !ok {
+		if m, ok := stringsTable["en_gb"]; ok {
+			stringsTable["en"] = m
+		}
+	}
+	if _, ok := stringsTable["ru"]; !ok {
+		if m, ok := stringsTable["ru_ru"]; ok {
+			stringsTable["ru"] = m
+		}
+	}
+}
+
+func getTable(lang string) map[string]string {
+	stringsTableOnce.Do(loadStringsTable)
+	norm := normalizeLang(lang)
+	if tbl, ok := stringsTable[norm]; ok {
+		return tbl
+	}
+	// fallback
+	if tbl, ok := stringsTable["en_gb"]; ok {
+		return tbl
+	}
+	if tbl, ok := stringsTable["en"]; ok {
+		return tbl
+	}
+	for _, tbl := range stringsTable {
+		return tbl
+	}
+	return map[string]string{}
 }
 
 func T(cfg core.Config, key string, args ...interface{}) string {
 	lang := cfg.Language
-	if lang != "ru" {
-		lang = "en"
-	}
-	table, ok := stringsTable[lang]
-	if !ok {
-		table = stringsTable["en"]
-	}
+	table := getTable(lang)
 	msg, ok := table[key]
 	if !ok {
-		if fallback, fOk := stringsTable["en"][key]; fOk {
-			msg = fallback
-		} else {
+		// fallback to en_gb
+		if fb, ok := stringsTable["en_gb"]; ok {
+			if v, ok := fb[key]; ok {
+				msg = v
+				ok = true
+			}
+		}
+		if !ok {
+			if fb, ok := stringsTable["en"]; ok {
+				if v, ok := fb[key]; ok {
+					msg = v
+					ok = true
+				}
+			}
+		}
+		if !ok {
 			msg = key
 		}
 	}
@@ -310,7 +163,7 @@ func T(cfg core.Config, key string, args ...interface{}) string {
 }
 
 func PresetDisplayName(cfg core.Config, p core.VideoPreset) string {
-	if cfg.Language == "ru" {
+	if normalizeLang(cfg.Language) == "ru_ru" {
 		return p.NameRU
 	}
 	return p.NameEN
