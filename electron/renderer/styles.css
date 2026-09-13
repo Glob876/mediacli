@@ -127,7 +127,7 @@ body {
 }
 /* Логотип вместо текстового заголовка — тоже полупрозрачный. */
 .brand-logo {
-  height: clamp(64px, 12vh, 110px);
+  height: clamp(144px, 26vh, 240px);
   width: auto;
   opacity: 0.55;
   animation: pageIn 0.5s ease;
