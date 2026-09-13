@@ -348,6 +348,92 @@
     <pre id="logviewer-body"></pre>
   </div>
 
+  <!-- Полноценный редактор пресета (Ctrl+Shift+I → создать/редактировать) -->
+  <div id="preset-editor" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box" style="width:min(920px,96vw); max-height:90vh; display:flex; flex-direction:column;">
+      <div class="modal-head">
+        <b id="preset-editor-title" data-i18n="presetEditorTitle">Редактор пресета</b>
+        <button id="btn-preset-editor-close" class="btn small"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div style="padding:10px; overflow:auto; flex:1;">
+        <label style="margin-bottom:10px"><span data-i18n="presetName">Имя пресета:</span> <input id="preset-editor-name" type="text" spellcheck="false" placeholder="My Preset" /></label>
+        <div class="setlayout">
+          <nav class="settabs" id="preset-tabs">
+            <button class="settab active" data-preset-pane="gen" data-i18n="presetTabGen">Основные</button>
+            <button class="settab" data-preset-pane="codecs" data-i18n="presetTabCodecs">Видео и кодеки</button>
+            <button class="settab" data-preset-pane="subs" data-i18n="presetTabSubs">Субтитры</button>
+            <button class="settab" data-preset-pane="net" data-i18n="presetTabNet">Сеть</button>
+            <button class="settab" data-preset-pane="auth" data-i18n="presetTabAuth">Авторизация</button>
+          </nav>
+          <div class="setpanes">
+            <div class="setpane card form" id="preset-pane-gen">
+              <label><span data-i18n="presetQuality">Макс. качество:</span> <div class="cselect" id="preset-quality"></div></label>
+              <label><span data-i18n="presetSection">Вырезка по времени:</span> <input id="preset-section" type="text" placeholder="00:01:00-00:03:30" spellcheck="false" /></label>
+              <label><span data-i18n="presetTemplate">Шаблон имени файла:</span> <input id="preset-template" type="text" placeholder="%(title)s.%(ext)s" spellcheck="false" /></label>
+              <div class="checks">
+                <label><input id="preset-win-names" type="checkbox" /> <span data-i18n="winNames">Безопасные имена</span></label>
+                <label><input id="preset-restrict" type="checkbox" /> <span data-i18n="presetRestrict">ASCII имена</span></label>
+                <label><input id="preset-no-mtime" type="checkbox" /> <span data-i18n="noMtime">Не изменять время файла</span></label>
+                <label><input id="preset-use-archive" type="checkbox" /> <span data-i18n="archive">Архив без повторов</span></label>
+              </div>
+            </div>
+            <div class="setpane card form hidden" id="preset-pane-codecs">
+              <label><span data-i18n="videoPreset">Видео-пресет:</span> <div class="cselect" id="preset-video-preset"></div></label>
+              <div class="grid2">
+                <label><span data-i18n="presetVcodec">Видео-кодек:</span> <div class="cselect" id="preset-vcodec"></div></label>
+                <label><span data-i18n="presetFps">Лимит FPS:</span> <div class="cselect" id="preset-fps"></div></label>
+              </div>
+              <div class="checks">
+                <label><input id="preset-audio-only" type="checkbox" /> <span data-i18n="presetAudioOnly">Только аудио</span></label>
+              </div>
+              <div class="grid2">
+                <label><span data-i18n="audioFmt">Аудио-формат:</span> <div class="cselect" id="preset-audio-format"></div></label>
+                <label><span data-i18n="presetAudioQuality">Качество аудио:</span> <div class="cselect" id="preset-audio-quality"></div></label>
+              </div>
+            </div>
+            <div class="setpane card form hidden" id="preset-pane-subs">
+              <div class="checks">
+                <label><input id="preset-subs-enabled" type="checkbox" /> <span data-i18n="presetSubsEnabled">Скачивать субтитры</span></label>
+                <label><input id="preset-auto-subs" type="checkbox" /> <span data-i18n="presetAutoSubs">Авто-субтитры</span></label>
+                <label><input id="preset-embed-subs" type="checkbox" /> <span data-i18n="presetEmbedSubs">Встраивать субтитры</span></label>
+                <label><input id="preset-embed-metadata" type="checkbox" /> <span data-i18n="presetEmbedMeta">Метаданные</span></label>
+                <label><input id="preset-embed-thumb" type="checkbox" /> <span data-i18n="presetEmbedThumb">Обложка</span></label>
+                <label><input id="preset-embed-chapters" type="checkbox" /> <span data-i18n="presetEmbedChapters">Главы</span></label>
+                <label><input id="preset-split-chapters" type="checkbox" /> <span data-i18n="presetSplitChapters">Разделить по главам</span></label>
+                <label><input id="preset-write-extra" type="checkbox" /> <span data-i18n="presetWriteExtra">Описание и миниатюра</span></label>
+              </div>
+              <label><span data-i18n="subLangs">Языки субтитров:</span> <input id="preset-sub-langs" type="text" placeholder="ru,en" spellcheck="false" /></label>
+              <label><span data-i18n="presetSponsorBlock">SponsorBlock:</span> <div class="cselect" id="preset-sponsorblock"></div></label>
+            </div>
+            <div class="setpane card form hidden" id="preset-pane-net">
+              <div class="grid2">
+                <label><span data-i18n="frags">Параллельных фрагментов:</span> <div class="cselect" id="preset-frags"></div></label>
+                <label><span data-i18n="presetRetries">Ретраи:</span> <div class="cselect" id="preset-retries"></div></label>
+              </div>
+              <label><span data-i18n="presetRatelimit">Лимит скорости:</span> <input id="preset-ratelimit" type="text" placeholder="2M, 500K или пусто" spellcheck="false" /></label>
+              <div class="checks">
+                <label><input id="preset-geobypass" type="checkbox" /> <span data-i18n="presetGeobypass">Geo-bypass</span></label>
+                <label><input id="preset-live-start" type="checkbox" /> <span data-i18n="presetLiveStart">Live from start</span></label>
+              </div>
+              <label><span data-i18n="presetVideoPassword">Пароль видео:</span> <input id="preset-video-password" type="text" spellcheck="false" /></label>
+            </div>
+            <div class="setpane card form hidden" id="preset-pane-auth">
+              <label><span data-i18n="presetCookiesMode">Cookies режим:</span> <div class="cselect" id="preset-cookies-mode"></div></label>
+              <label id="row-preset-cookies-browser"><span data-i18n="cookiesBrowser">Браузер:</span> <div class="cselect" id="preset-cookies-browser"></div></label>
+              <label id="row-preset-cookies-file"><span data-i18n="cookiesFile">Путь к cookies.txt:</span> <input id="preset-cookies-file" type="text" spellcheck="false" /></label>
+              <label><span data-i18n="presetProxyMode">Proxy режим:</span> <div class="cselect" id="preset-proxy-mode"></div></label>
+              <label id="row-preset-proxy-url"><span data-i18n="proxyUrl">Proxy URL:</span> <input id="preset-proxy-url" type="text" spellcheck="false" /></label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="row" style="padding:8px 10px; border-top:1px solid var(--border); justify-content:flex-end; gap:8px;">
+        <button id="btn-preset-editor-cancel" class="btn small" data-i18n="cancel">Отмена</button>
+        <button id="btn-preset-editor-save" class="btn small primary" data-i18n="save">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toasts" aria-live="polite"></div>
 
   <script src="app.js"></script>

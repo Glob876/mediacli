@@ -77,6 +77,10 @@ const I18N = {
     presetsTitle: 'Пресеты загрузок', presetsHint: 'Ctrl+Shift+I — быстрый доступ', presetHint: 'Сохранённые наборы настроек для быстрой загрузки. Выберите пресет на шестерёнке при скачивании.',
     presetCreate: 'Сохранить текущие…', presetEmpty: 'Нет сохранённых пресетов. Сохраните текущие настройки на шестерёнке.', presetDelete: 'Удалить', presetUse: 'Использовать',
     presetDeleteConfirm: 'Удалить пресет?', presetNamePrompt: 'Имя пресета:', presetCreated: 'Пресет сохранён', presetDeleted: 'Пресет удалён', tPresetFail: 'Не удалось сохранить пресет:',
+    presetEditorTitle: 'Редактор пресета', presetName: 'Имя пресета:', presetTabGen: 'Основные', presetTabCodecs: 'Видео и аудио', presetTabSubs: 'Субтитры', presetTabNet: 'Сеть', presetTabAuth: 'Авторизация',
+    presetQuality: 'Макс. качество:', presetSection: 'Вырезка по времени:', presetTemplate: 'Шаблон имени файла:', presetRestrict: 'ASCII имена', presetVcodec: 'Видео-кодек:', presetFps: 'Лимит FPS:',
+    presetAudioOnly: 'Только аудио', presetAudioQuality: 'Качество аудио:', presetSubsEnabled: 'Скачивать субтитры', presetAutoSubs: 'Авто-субтитры', presetEmbedSubs: 'Встраивать субтитры', presetEmbedMeta: 'Метаданные', presetEmbedThumb: 'Обложка', presetEmbedChapters: 'Главы', presetSplitChapters: 'Разделить по главам', presetWriteExtra: 'Описание и миниатюра', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Ретраи:', presetRatelimit: 'Лимит скорости:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Пароль видео:', presetCookiesMode: 'Cookies режим:', presetProxyMode: 'Proxy режим:',
+    presetEdit: 'Редактировать',
   },
   en: {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
@@ -145,6 +149,10 @@ const I18N = {
     presetsTitle: 'Download Presets', presetsHint: 'Ctrl+Shift+I — quick access', presetHint: 'Saved settings bundles for quick downloads. Pick a preset from the gear menu when downloading.',
     presetCreate: 'Save current…', presetEmpty: 'No saved presets yet. Save current gear settings as a preset.', presetDelete: 'Delete', presetUse: 'Use',
     presetDeleteConfirm: 'Delete preset?', presetNamePrompt: 'Preset name:', presetCreated: 'Preset saved', presetDeleted: 'Preset deleted', tPresetFail: 'Could not save preset:',
+    presetEditorTitle: 'Preset Editor', presetName: 'Preset name:', presetTabGen: 'General', presetTabCodecs: 'Video & Codecs', presetTabSubs: 'Subtitles', presetTabNet: 'Network', presetTabAuth: 'Auth',
+    presetQuality: 'Max quality:', presetSection: 'Time range:', presetTemplate: 'File name template:', presetRestrict: 'ASCII names', presetVcodec: 'Video codec:', presetFps: 'FPS limit:',
+    presetAudioOnly: 'Audio only', presetAudioQuality: 'Audio quality:', presetSubsEnabled: 'Download subtitles', presetAutoSubs: 'Auto-subs', presetEmbedSubs: 'Embed subs', presetEmbedMeta: 'Metadata', presetEmbedThumb: 'Thumbnail', presetEmbedChapters: 'Chapters', presetSplitChapters: 'Split by chapters', presetWriteExtra: 'Description & thumbnail', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Retries:', presetRatelimit: 'Rate limit:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Video password:', presetCookiesMode: 'Cookies mode:', presetProxyMode: 'Proxy mode:',
+    presetEdit: 'Edit',
   },
   'en-US': {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
@@ -213,6 +221,10 @@ const I18N = {
     presetsTitle: 'Download Presets', presetsHint: 'Ctrl+Shift+I — quick access', presetHint: 'Saved settings bundles for quick downloads. Pick a preset from the gear menu when downloading.',
     presetCreate: 'Save current…', presetEmpty: 'No saved presets yet. Save current gear settings as a preset.', presetDelete: 'Delete', presetUse: 'Use',
     presetDeleteConfirm: 'Delete preset?', presetNamePrompt: 'Preset name:', presetCreated: 'Preset saved', presetDeleted: 'Preset deleted', tPresetFail: 'Could not save preset:',
+    presetEditorTitle: 'Preset Editor', presetName: 'Preset name:', presetTabGen: 'General', presetTabCodecs: 'Video & Codecs', presetTabSubs: 'Subtitles', presetTabNet: 'Network', presetTabAuth: 'Auth',
+    presetQuality: 'Max quality:', presetSection: 'Time range:', presetTemplate: 'File name template:', presetRestrict: 'ASCII names', presetVcodec: 'Video codec:', presetFps: 'FPS limit:',
+    presetAudioOnly: 'Audio only', presetAudioQuality: 'Audio quality:', presetSubsEnabled: 'Download subtitles', presetAutoSubs: 'Auto-subs', presetEmbedSubs: 'Embed subs', presetEmbedMeta: 'Metadata', presetEmbedThumb: 'Thumbnail', presetEmbedChapters: 'Chapters', presetSplitChapters: 'Split by chapters', presetWriteExtra: 'Description & thumbnail', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Retries:', presetRatelimit: 'Rate limit:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Video password:', presetCookiesMode: 'Cookies mode:', presetProxyMode: 'Proxy mode:',
+    presetEdit: 'Edit',
   },
 };
 
@@ -646,34 +658,225 @@ function collectDlFields() {
   return fields;
 }
 
-async function saveCurrentDlAsPreset() {
-  // window.prompt в Electron не реализован — пробуем, при неудаче даём автоимя.
-  let name = '';
-  try {
-    if (typeof prompt === 'function') name = prompt(T('presetNamePrompt'), `Preset ${savedPresetsCache.length + 1}`) || '';
-  } catch { name = ''; }
-  // prompt вернул null при отмене — выходим; пустая строка из-за неподдержки — автоимя.
-  if (name === null) return;
-  if (!name.trim()) name = `Preset ${savedPresetsCache.length + 1}`;
+// Полноценный редактор пресета — повторяет консольный ScreenManualPresetConfig
+let editingPresetId = null;
+
+function showPresetPane(name) {
+  document.querySelectorAll('#preset-tabs .settab').forEach((b) => b.classList.toggle('active', b.dataset.presetPane === name));
+  document.querySelectorAll('#preset-editor .setpane').forEach((p) => {
+    const show = p.id === `preset-pane-${name}`;
+    p.classList.toggle('hidden', !show);
+    if (show) { p.classList.remove('page-enter'); void p.offsetWidth; p.classList.add('page-enter'); }
+  });
+}
+
+function syncPresetEditorConditionalRows() {
+  const cm = cselectGet('preset-cookies-mode');
+  const prow = el('row-preset-cookies-browser');
+  const frow = el('row-preset-cookies-file');
+  if (prow) prow.classList.toggle('hidden', cm !== 'browser');
+  if (frow) frow.classList.toggle('hidden', cm !== 'file');
+  const pm = cselectGet('preset-proxy-mode');
+  const prow2 = el('row-preset-proxy-url');
+  if (prow2) prow2.classList.toggle('hidden', pm !== 'custom');
+}
+
+function presetQualityOptions() {
+  return [
+    { value: '', label: T('qBest') },
+    { value: '2160', label: '4K Ultra HD (2160p)' },
+    { value: '1440', label: '2K Quad HD (1440p)' },
+    { value: '1080', label: 'Full HD (1080p)' },
+    { value: '720', label: 'HD (720p)' },
+    { value: '480', label: 'SD (480p)' },
+  ];
+}
+function presetVcodecOptions() {
+  return [
+    { value: 'auto', label: 'Auto' },
+    { value: 'av1', label: 'AV1 (av01)' },
+    { value: 'vp9', label: 'VP9' },
+    { value: 'h264', label: 'H.264 (avc1)' },
+  ];
+}
+function presetFpsOptions() {
+  return [
+    { value: '', label: 'Max' },
+    { value: '60', label: '60 FPS' },
+    { value: '30', label: '30 FPS' },
+  ];
+}
+function presetAudioQualityOptions() {
+  return [
+    { value: '0', label: 'Best (0)' },
+    { value: '2', label: 'High (2)' },
+    { value: '5', label: 'Medium (5)' },
+    { value: '9', label: 'Small (9)' },
+  ];
+}
+function presetSponsorOptions() {
+  return [
+    { value: 'off', label: 'Off' },
+    { value: 'remove', label: 'Remove' },
+    { value: 'mark', label: 'Mark' },
+  ];
+}
+function presetCookiesModeOptions() {
+  return [
+    { value: 'default', label: 'Default (global)' },
+    { value: 'none', label: T('ckNone') },
+    { value: 'browser', label: T('ckBrowser') },
+    { value: 'file', label: T('ckFile') },
+  ];
+}
+function presetProxyModeOptions() {
+  return [
+    { value: 'default', label: 'Default (global)' },
+    { value: 'none', label: 'Direct' },
+    { value: 'custom', label: 'Custom' },
+  ];
+}
+
+function populatePresetEditor(preset) {
+  const f = (preset && preset.fields) ? preset.fields : {};
+  const defaults = {
+    quality: '', video_preset: 'default', vcodec: 'auto', fps_limit: '', audio_only: false, audio_format: 'mp3', audio_quality: '0',
+    download_section: '', output_template: '', windows_filenames: true, restrict_filenames: false, no_mtime: true, use_archive: false,
+    subs_enabled: false, sub_langs: 'ru,en', auto_subs: false, embed_subs: false, embed_metadata: true, embed_thumbnail: true, embed_chapters: true, split_chapters: false, write_extra: false, sponsorblock: 'off',
+    concurrent_fragments: '4', retries: '10', ratelimit: '', geobypass: false, live_start: false, video_password: '',
+    cookies_mode: 'default', cookies_browser: '', cookies_file: '', proxy_mode: 'default', proxy_url: '',
+  };
+  const get = (k) => (f[k] !== undefined ? f[k] : defaults[k]);
+  el('preset-editor-name').value = preset ? (preset.name || '') : `Preset ${savedPresetsCache.length + 1}`;
+  cselectSet('preset-quality', presetQualityOptions(), String(get('quality') || ''));
+  el('preset-section').value = get('download_section') || '';
+  el('preset-template').value = get('output_template') || '';
+  el('preset-win-names').checked = !!get('windows_filenames');
+  el('preset-restrict').checked = !!get('restrict_filenames');
+  el('preset-no-mtime').checked = !!get('no_mtime');
+  el('preset-use-archive').checked = !!get('use_archive');
+  // video & codecs
+  const vpOpts = videoPresetsCache.length ? videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) })) : [{ value: 'default', label: 'default' }];
+  cselectSet('preset-video-preset', vpOpts, get('video_preset') || 'default');
+  cselectSet('preset-vcodec', presetVcodecOptions(), get('vcodec') || 'auto');
+  cselectSet('preset-fps', presetFpsOptions(), String(get('fps_limit') || ''));
+  el('preset-audio-only').checked = !!get('audio_only');
+  cselectSet('preset-audio-format', (metaCache.audio_formats || ['mp3','flac','wav','m4a','opus']).map((v) => ({ value: v, label: v })), get('audio_format') || 'mp3');
+  cselectSet('preset-audio-quality', presetAudioQualityOptions(), String(get('audio_quality') || '0'));
+  // subs
+  el('preset-subs-enabled').checked = !!get('subs_enabled');
+  el('preset-sub-langs').value = get('sub_langs') || 'ru,en';
+  el('preset-auto-subs').checked = !!get('auto_subs');
+  el('preset-embed-subs').checked = !!get('embed_subs');
+  el('preset-embed-metadata').checked = get('embed_metadata') !== false;
+  el('preset-embed-thumb').checked = get('embed_thumbnail') !== false;
+  el('preset-embed-chapters').checked = get('embed_chapters') !== false;
+  el('preset-split-chapters').checked = !!get('split_chapters');
+  el('preset-write-extra').checked = !!get('write_extra');
+  cselectSet('preset-sponsorblock', presetSponsorOptions(), get('sponsorblock') || 'off');
+  // net
+  cselectSet('preset-frags', ['2','4','8','16'].map((v) => ({ value: v, label: v })), String(get('concurrent_fragments') || '4'));
+  cselectSet('preset-retries', ['5','10','20','infinite'].map((v) => ({ value: v, label: v })), String(get('retries') || '10'));
+  el('preset-ratelimit').value = get('ratelimit') || '';
+  el('preset-geobypass').checked = !!get('geobypass');
+  el('preset-live-start').checked = !!get('live_start');
+  el('preset-video-password').value = get('video_password') || '';
+  // auth
+  cselectSet('preset-cookies-mode', presetCookiesModeOptions(), get('cookies_mode') || 'default');
+  cselectSet('preset-cookies-browser', (metaCache.browsers || ['chrome']).map((v) => ({ value: v, label: v })), get('cookies_browser') || 'chrome');
+  el('preset-cookies-file').value = get('cookies_file') || '';
+  cselectSet('preset-proxy-mode', presetProxyModeOptions(), get('proxy_mode') || 'default');
+  el('preset-proxy-url').value = get('proxy_url') || '';
+  syncPresetEditorConditionalRows();
+  showPresetPane('gen');
+}
+
+function collectPresetEditorFields() {
+  const f = {};
+  const q = cselectGet('preset-quality'); if (q !== '') f.quality = q; else f.quality = '';
+  f.download_section = el('preset-section').value.trim();
+  f.output_template = el('preset-template').value.trim();
+  f.windows_filenames = el('preset-win-names').checked;
+  f.restrict_filenames = el('preset-restrict').checked;
+  f.no_mtime = el('preset-no-mtime').checked;
+  f.use_archive = el('preset-use-archive').checked;
+  f.video_preset = cselectGet('preset-video-preset') || 'default';
+  f.vcodec = cselectGet('preset-vcodec') || 'auto';
+  f.fps_limit = cselectGet('preset-fps') || '';
+  f.audio_only = el('preset-audio-only').checked;
+  f.audio_format = cselectGet('preset-audio-format') || 'mp3';
+  f.audio_quality = cselectGet('preset-audio-quality') || '0';
+  f.subs_enabled = el('preset-subs-enabled').checked;
+  f.sub_langs = el('preset-sub-langs').value.trim() || 'ru,en';
+  f.auto_subs = el('preset-auto-subs').checked;
+  f.embed_subs = el('preset-embed-subs').checked;
+  f.embed_metadata = el('preset-embed-metadata').checked;
+  f.embed_thumbnail = el('preset-embed-thumb').checked;
+  f.embed_chapters = el('preset-embed-chapters').checked;
+  f.split_chapters = el('preset-split-chapters').checked;
+  f.write_extra = el('preset-write-extra').checked;
+  f.sponsorblock = cselectGet('preset-sponsorblock') || 'off';
+  f.concurrent_fragments = cselectGet('preset-frags') || '4';
+  f.retries = cselectGet('preset-retries') || '10';
+  f.ratelimit = el('preset-ratelimit').value.trim();
+  f.geobypass = el('preset-geobypass').checked;
+  f.live_start = el('preset-live-start').checked;
+  f.video_password = el('preset-video-password').value.trim();
+  f.cookies_mode = cselectGet('preset-cookies-mode') || 'default';
+  f.cookies_browser = cselectGet('preset-cookies-browser') || '';
+  f.cookies_file = el('preset-cookies-file').value.trim();
+  f.proxy_mode = cselectGet('preset-proxy-mode') || 'default';
+  f.proxy_url = el('preset-proxy-url').value.trim();
+  return f;
+}
+
+function openPresetEditor(preset) {
+  editingPresetId = preset ? preset.id : null;
+  if (!videoPresetsCache.length) { void loadVideoPresets().then(() => populatePresetEditor(preset || { fields: collectDlFields(), name: '' })); }
+  else populatePresetEditor(preset || { fields: collectDlFields(), name: '' });
+  el('preset-editor-title').textContent = preset ? preset.name : T('presetEditorTitle');
+  el('preset-editor').classList.remove('hidden');
+}
+
+function closePresetEditor() {
+  el('preset-editor').classList.add('hidden');
+  editingPresetId = null;
+}
+
+async function savePresetEditor() {
+  const name = el('preset-editor-name').value.trim();
+  if (!name) { toast(T('presetNamePrompt'), true); return; }
+  const fields = collectPresetEditorFields();
   try {
     const cfg = await backend.config();
-    const fields = collectDlFields();
-    const preset = { id: `preset_${Date.now()}`, name: name.trim(), fields };
     cfg.download_presets = cfg.download_presets || [];
-    cfg.download_presets.push(preset);
+    if (editingPresetId) {
+      const idx = cfg.download_presets.findIndex((p) => p.id === editingPresetId);
+      if (idx >= 0) cfg.download_presets[idx] = { id: editingPresetId, name, fields };
+      else cfg.download_presets.push({ id: editingPresetId, name, fields });
+    } else {
+      const preset = { id: `preset_${Date.now()}`, name, fields };
+      cfg.download_presets.push(preset);
+      editingPresetId = preset.id;
+    }
     await backend.saveConfig(cfg);
     savedPresetsCache = cfg.download_presets;
     refreshSavedPresetSelect();
-    // Выбираем только что созданный пресет.
-    if (cselects['dl-saved-preset']) cselectSet('dl-saved-preset',
-      [{ value: '', label: T('dlManual') }].concat(savedPresetsCache.map((p) => ({ value: p.id, label: p.name }))),
-      preset.id);
-    updateDlPresetDesc();
+    if (editingPresetId) {
+      if (cselects['dl-saved-preset']) cselectSet('dl-saved-preset',
+        [{ value: '', label: T('dlManual') }].concat(savedPresetsCache.map((p) => ({ value: p.id, label: p.name }))),
+        editingPresetId);
+      updateDlPresetDesc();
+    }
     renderPresetsList();
+    closePresetEditor();
     toast(T('presetCreated'));
-  } catch (e) {
-    toast(`${T('tPresetFail')} ${e.message}`, true);
-  }
+  } catch (e) { toast(`${T('tPresetFail')} ${e.message}`, true); }
+}
+
+async function saveCurrentDlAsPreset() {
+  // Открываем полноценный редактор с текущими настройками шестерёнки как начальными
+  openPresetEditor({ id: null, name: `Preset ${savedPresetsCache.length + 1}`, fields: collectDlFields() });
 }
 
 function renderPresetsList() {
@@ -699,11 +902,18 @@ function renderPresetsList() {
     if (f.video_preset) parts.push(f.video_preset);
     if (f.quality) parts.push(f.quality + 'p');
     if (f.download_section) parts.push(f.download_section);
+    if (f.vcodec && f.vcodec !== 'auto') parts.push(f.vcodec);
+    if (f.audio_only) parts.push('audio:' + (f.audio_format || 'mp3'));
+    if (f.sponsorblock && f.sponsorblock !== 'off') parts.push('sponsor:' + f.sponsorblock);
     sub.textContent = parts.join(' • ') || p.id;
     info.appendChild(b);
     info.appendChild(sub);
     const btns = document.createElement('div');
     btns.className = 'row';
+    const btnEdit = document.createElement('button');
+    btnEdit.className = 'btn small';
+    btnEdit.textContent = T('presetEdit');
+    btnEdit.onclick = () => openPresetEditor(p);
     const btnUse = document.createElement('button');
     btnUse.className = 'btn small';
     btnUse.textContent = T('presetUse');
@@ -729,6 +939,7 @@ function renderPresetsList() {
         toast(T('presetDeleted'));
       } catch (e) { toast(`${T('tErr')}: ${e.message}`, true); }
     };
+    btns.appendChild(btnEdit);
     btns.appendChild(btnUse);
     btns.appendChild(btnDel);
     row.appendChild(info);
@@ -1407,6 +1618,10 @@ async function loadVideoPresets() {
     const plain = videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) }));
     cselectSet('preset', opts, cselectGet('preset') || 'default');
     cselectSet('set-video-preset', plain, settingsCache ? (settingsCache.video_preset || 'default') : 'default');
+    if (cselects['preset-video-preset']) {
+      const cur = cselectGet('preset-video-preset');
+      cselectSet('preset-video-preset', plain.length ? plain : [{ value: 'default', label: 'default' }], cur || 'default');
+    }
     refreshSavedPresetSelect();
     renderPresetsList();
   } catch {
@@ -1806,6 +2021,7 @@ document.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
   if (e.key === 'Escape') {
+    if (!el('preset-editor').classList.contains('hidden')) { closePresetEditor(); return; }
     if (!el('logviewer').classList.contains('hidden')) { closeLogViewer(); return; }
     if (!el('lightbox').classList.contains('hidden')) { closeLightbox(); return; }
     if (document.querySelector('.cselect.open')) { closeAllSelects(); return; }
@@ -1908,9 +2124,36 @@ async function init() {
   cselectInit('set-logo-mode', () => syncConditionalRows());
   cselectInit('set-logo-ascii');
   cselectInit('set-logo-protocol');
+  // Пресет-редактор: все поля скачивания как в консоли
+  cselectInit('preset-quality');
+  cselectInit('preset-video-preset');
+  cselectInit('preset-vcodec');
+  cselectInit('preset-fps');
+  cselectInit('preset-audio-format');
+  cselectInit('preset-audio-quality');
+  cselectInit('preset-sponsorblock');
+  cselectInit('preset-frags');
+  cselectInit('preset-retries');
+  cselectInit('preset-cookies-mode', () => syncPresetEditorConditionalRows());
+  cselectInit('preset-cookies-browser');
+  cselectInit('preset-proxy-mode', () => syncPresetEditorConditionalRows());
   cselectSet('quality', qualityOptions(), '');
+  cselectSet('preset-quality', presetQualityOptions(), '');
+  cselectSet('preset-vcodec', presetVcodecOptions(), 'auto');
+  cselectSet('preset-fps', presetFpsOptions(), '');
+  cselectSet('preset-audio-format', (metaCache.audio_formats || ['mp3','flac','wav','m4a','opus']).map((v) => ({ value: v, label: v })), 'mp3');
+  cselectSet('preset-audio-quality', presetAudioQualityOptions(), '0');
+  cselectSet('preset-sponsorblock', presetSponsorOptions(), 'off');
+  cselectSet('preset-frags', ['2','4','8','16'].map((v) => ({ value: v, label: v })), '4');
+  cselectSet('preset-retries', ['5','10','20','infinite'].map((v) => ({ value: v, label: v })), '10');
+  cselectSet('preset-cookies-mode', presetCookiesModeOptions(), 'default');
+  cselectSet('preset-cookies-browser', (metaCache.browsers || ['chrome']).map((v) => ({ value: v, label: v })), 'chrome');
+  cselectSet('preset-proxy-mode', presetProxyModeOptions(), 'default');
   document.querySelectorAll('.settab').forEach((b) => {
     b.onclick = () => showSetPane(b.dataset.spane);
+  });
+  document.querySelectorAll('#preset-tabs .settab').forEach((b) => {
+    b.onclick = () => showPresetPane(b.dataset.presetPane);
   });
 
   try {
@@ -2036,6 +2279,14 @@ async function init() {
   // Пресеты (Ctrl+Shift+I).
   el('btn-presets-refresh').onclick = () => { void loadVideoPresets(); };
   el('btn-presets-create').onclick = () => { void saveCurrentDlAsPreset(); };
+
+  // Пресет-редактор (полноценный как в консоли)
+  el('btn-preset-editor-close').onclick = closePresetEditor;
+  el('btn-preset-editor-cancel').onclick = closePresetEditor;
+  el('btn-preset-editor-save').onclick = () => { void savePresetEditor(); };
+  el('preset-editor').addEventListener('click', (e) => {
+    if (e.target === el('preset-editor')) closePresetEditor();
+  });
 
   // Настройки.
   el('set-accent').addEventListener('input', (e) => {
