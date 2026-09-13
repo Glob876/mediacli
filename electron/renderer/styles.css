@@ -137,6 +137,16 @@ body {
   image-rendering: pixelated;
 }
 .brand-logo:hover { opacity: 0.85; }
+/* Без логотипа: прячем его, подсказки уезжают в низ экрана. */
+#home-empty.no-logo {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-bottom: 24px;
+}
+#home-empty.no-logo .brand-logo,
+#home-empty.no-logo .brand { display: none; }
 .hint {
   margin-top: 10px;
   font-size: 12px;

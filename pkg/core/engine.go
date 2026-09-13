@@ -59,6 +59,7 @@ type Config struct {
 	TranscodeMode         string                 `json:"transcode_mode"` // "embedded" (yt-dlp --recode) | "external" (yt-dlp merge + ffmpeg)
 	AccentColor           string                 `json:"accent_color"`   // акцент Electron-оболочки, напр. "#bfff00"
 	FfmpegPath            string                 `json:"ffmpeg_path"`    // явный путь к ffmpeg (для yt-dlp --ffmpeg-location); пусто = PATH
+	ShowHomeLogo          bool                   `json:"show_home_logo"` // показывать логотип на главном экране Electron
 }
 
 type DownloadPreset struct {
@@ -129,6 +130,7 @@ func GetDefaultConfig() Config {
 		PresetDefaults:        GetInitialPresetFields(),
 		TranscodeMode:         "embedded",
 		AccentColor:           "#bfff00",
+		ShowHomeLogo:          true,
 	}
 }
 

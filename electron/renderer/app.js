@@ -65,7 +65,7 @@ const I18N = {
     ffmpegHint: 'Укажите полный путь, если yt-dlp не находит ffmpeg из PATH.', ffmpegCheck: 'Проверить',
     tuiTheme: 'Тема консоли (TUI):', progressStyle: 'Стиль прогресса (консоль):',
     termBg: 'Прозрачный фон терминала', notifyBell: 'Звуковой сигнал по завершении',
-    autoCheck: 'Проверять зависимости при старте', logoMode: 'Режим логотипа (консоль):',
+    autoCheck: 'Проверять зависимости при старте', showLogo: 'Показывать логотип на главном экране', logoMode: 'Режим логотипа (консоль):',
     logoAscii: 'ASCII-пресет:', logoProto: 'Протокол картинок:', logoImage: 'Картинка логотипа (путь):',
     logoNote: 'Картинки работают только в Kitty / iTerm2 / WezTerm.',
     defaultEditor: 'Редактор по умолчанию:', resetBtn: 'Сбросить к заводским',
@@ -137,7 +137,7 @@ const I18N = {
     ffmpegHint: 'Set a full path if yt-dlp cannot find ffmpeg from PATH.', ffmpegCheck: 'Check',
     tuiTheme: 'Console theme (TUI):', progressStyle: 'Progress style (console):',
     termBg: 'Transparent terminal background', notifyBell: 'Bell on finish',
-    autoCheck: 'Check dependencies at startup', logoMode: 'Logo mode (console):',
+    autoCheck: 'Check dependencies at startup', showLogo: 'Show logo on the home screen', logoMode: 'Logo mode (console):',
     logoAscii: 'ASCII preset:', logoProto: 'Image protocol:', logoImage: 'Logo image (path):',
     logoNote: 'Images work only in Kitty / iTerm2 / WezTerm.',
     defaultEditor: 'Default editor:', resetBtn: 'Reset to defaults',
@@ -209,7 +209,7 @@ const I18N = {
     ffmpegHint: 'Set a full path if yt-dlp cannot find ffmpeg from PATH.', ffmpegCheck: 'Check',
     tuiTheme: 'Console theme (TUI):', progressStyle: 'Progress style (console):',
     termBg: 'Transparent terminal background', notifyBell: 'Bell on finish',
-    autoCheck: 'Check dependencies at startup', logoMode: 'Logo mode (console):',
+    autoCheck: 'Check dependencies at startup', showLogo: 'Show logo on the home screen', logoMode: 'Logo mode (console):',
     logoAscii: 'ASCII preset:', logoProto: 'Image protocol:', logoImage: 'Logo image (path):',
     logoNote: 'Images work only in Kitty / iTerm2 / WezTerm.',
     defaultEditor: 'Default editor:', resetBtn: 'Reset to defaults',
@@ -467,7 +467,7 @@ const mockApi = {
     download_dir: '/tmp/MediaGUI', language: 'ru', video_preset: 'default',
     audio_format: 'mp3', sub_langs: 'ru,en', proxy_mode: 'system', proxy_url: '',
     concurrent_fragments: 4, bg_queue_max: 3, no_mtime: true, windows_filenames: true, use_archive: false,
-    accent_color: '#bfff00', download_presets: [],
+    accent_color: '#bfff00', download_presets: [], show_home_logo: true,
   },
   _library: [
     { name: 'demo-video.mp4', size: 12345678, mtime: '2026-09-01 12:00:00', is_media: true },
@@ -580,7 +580,7 @@ const mockApi = {
     download_dir: '/tmp/MediaGUI', language: 'ru', video_preset: 'default',
       audio_format: 'mp3', sub_langs: 'ru,en', proxy_mode: 'system', proxy_url: '',
       concurrent_fragments: 4, bg_queue_max: 3, no_mtime: true, windows_filenames: true, use_archive: false,
-      accent_color: '#bfff00', ffmpeg_path: '', download_presets: [],
+      accent_color: '#bfff00', ffmpeg_path: '', download_presets: [], show_home_logo: true,
     };
     try { localStorage.setItem('mc_mock_cfg_v1', JSON.stringify(this._config)); } catch { /* ignore */ }
     return { ...this._config };
@@ -1401,12 +1401,18 @@ function paintSlot(slot) {
   if (div) paintSlotInto(slot, div);
 }
 
+function updateHomeLogo() {
+  const show = !settingsCache || settingsCache.show_home_logo !== false;
+  el('home-empty').classList.toggle('no-logo', !show);
+}
+
 function renderSlots() {
   const empty = el('home-empty');
   const wrap = el('slots-wrap');
   const box = el('slots');
   const gbox = el('groups');
   stopAllLogPolls();
+  updateHomeLogo();
   if (!slots.length) {
     empty.classList.remove('hidden');
     wrap.classList.add('hidden');
@@ -1984,6 +1990,7 @@ async function loadSettings() {
     el('set-terminal-bg').checked = cfg.use_terminal_bg !== false;
     el('set-notify-bell').checked = cfg.notify_bell !== false;
     el('set-auto-check-deps').checked = cfg.auto_check_deps !== false;
+    el('set-show-logo').checked = cfg.show_home_logo !== false;
     rebuildSettingsSelects(cfg);
     void checkFfmpeg();
   } catch (e) { toast(`${T('tLoadFail')} ${e.message}`, true); }
@@ -2349,6 +2356,7 @@ async function init() {
       use_terminal_bg: el('set-terminal-bg').checked,
       notify_bell: el('set-notify-bell').checked,
       auto_check_deps: el('set-auto-check-deps').checked,
+      show_home_logo: el('set-show-logo').checked,
       logo_mode: logoMode || 'ascii',
       logo_ascii_preset: cselectGet('set-logo-ascii') || 'standard',
       logo_protocol: cselectGet('set-logo-protocol') || 'kitty',
