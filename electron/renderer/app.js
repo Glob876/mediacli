@@ -52,7 +52,7 @@ const I18N = {
     tSaveFail: 'Не удалось сохранить:', tLoadFail: 'Не удалось загрузить настройки:',
     tBadAccent: 'Укажите цвет в формате hex, например #bfff00.',
     tDropNoPath: 'Не удалось получить путь к файлу. Укажите его вручную в «Конвертации».',
-    tErr: 'Ошибка', loading: 'Загрузка…',
+    tErr: 'Ошибка', taskLost: 'Связь с задачей потеряна', loading: 'Загрузка…',
     setTabGen: 'Основные', setTabCodecs: 'Видео и кодеки', setTabNet: 'Ускорение и сеть', setTabTools: 'Инструменты', setTabIface: 'Интерфейс',
     userGoal: 'Основная цель:', cookiesMode: 'Авторизация (Cookies):',
     cookiesFile: 'Путь к cookies.txt:', cookiesBrowser: 'Браузер для чтения cookies:',
@@ -116,7 +116,7 @@ const I18N = {
     tSaveFail: 'Could not save:', tLoadFail: 'Could not load settings:',
     tBadAccent: 'Please enter a hex colour, e.g. #bfff00.',
     tDropNoPath: 'Could not read the file path. Please enter it manually in Convert.',
-    tErr: 'Error', loading: 'Loading…',
+    tErr: 'Error', taskLost: 'Lost contact with the task', loading: 'Loading…',
     setTabGen: 'General', setTabCodecs: 'Video & Codecs', setTabNet: 'Speed & Network', setTabTools: 'Tools', setTabIface: 'Interface',
     userGoal: 'Primary use-case:', cookiesMode: 'Authentication (Cookies):',
     cookiesFile: 'Path to cookies.txt:', cookiesBrowser: 'Browser to read cookies from:',
@@ -180,7 +180,7 @@ const I18N = {
     tSaveFail: 'Could not save:', tLoadFail: 'Could not load settings:',
     tBadAccent: 'Please enter a hex color, e.g. #bfff00.',
     tDropNoPath: 'Could not read the file path. Please enter it manually in Convert.',
-    tErr: 'Error', loading: 'Loading…',
+    tErr: 'Error', taskLost: 'Lost contact with the task', loading: 'Loading…',
     setTabGen: 'General', setTabCodecs: 'Video & Codecs', setTabNet: 'Speed & Network', setTabTools: 'Tools', setTabIface: 'Interface',
     userGoal: 'Primary use-case:', cookiesMode: 'Authentication (Cookies):',
     cookiesFile: 'Path to cookies.txt:', cookiesBrowser: 'Browser to read cookies from:',
@@ -402,7 +402,9 @@ const api = {
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
-      throw new Error(`${method} ${path}: ${res.status} ${txt}`);
+      const err = new Error(`${method} ${path}: ${res.status} ${txt}`);
+      err.status = res.status;
+      throw err;
     }
     return res.json();
   },
@@ -676,14 +678,53 @@ async function startSlot(slot) {
   }
 }
 
+/* Опрос задачи до терминального статуса. Переживает transient-сбои сети
+   (бюджет последовательных ошибок), а пропавшую задачу (404) и молчание
+   демона фиксирует честно — вместо вечного зависания слота. */
+function pollTaskUntilTerminal(taskId, onSnap) {
+  let fails = 0;
+  const timer = setInterval(async () => {
+    let snap;
+    try {
+      snap = await backend.req('GET', `/api/tasks/${taskId}`);
+    } catch (e) {
+      if (e && e.status === 404) {
+        clearInterval(timer);
+        onSnap({ status: 'failed', stage: T('taskLost'), progress: 0 });
+        return;
+      }
+      fails += 1;
+      if (fails >= 30) {
+        clearInterval(timer);
+        onSnap({ status: 'failed', stage: T('taskLost'), progress: 0 });
+      }
+      return;
+    }
+    fails = 0;
+    onSnap(snap);
+    if (TERMINAL.includes(snap.status)) clearInterval(timer);
+  }, 1000);
+  return () => clearInterval(timer);
+}
+
+function stopSlotLive(slot) {
+  if (slot._stopLive) {
+    try { slot._stopLive(); } catch { /* ignore */ }
+    slot._stopLive = null;
+  }
+}
+
 function subscribeSlot(slot) {
+  slot._lastSnapAt = Date.now();
   const onSnap = (snap) => {
-    if (!slots.includes(slot)) return;
+    if (!slots.includes(slot)) { stopSlotLive(slot); return; }
+    slot._lastSnapAt = Date.now();
     slot.title = snap.title || snap.source || slot.title;
     slot.stage = snap.stage || snap.status;
     slot.progress = snap.progress || 0;
     if (TERMINAL.includes(snap.status)) {
       slot.status = snap.status;
+      stopSlotLive(slot);
       trimTerminal();
       renderSlots();
       persistUI();
@@ -697,6 +738,8 @@ function subscribeSlot(slot) {
     mockApi.subscribe(slot.taskId, onSnap);
     return;
   }
+  stopSlotLive(slot);
+  const stops = [];
   const es = new EventSource(backend.eventsUrl(slot.taskId));
   es.onmessage = (ev) => {
     try {
@@ -705,16 +748,28 @@ function subscribeSlot(slot) {
       if (TERMINAL.includes(snap.status)) es.close();
     } catch { /* keep-alive */ }
   };
-  es.onerror = async () => {
+  es.onerror = () => {
     es.close();
-    const timer = setInterval(async () => {
-      try {
-        const snap = await backend.req('GET', `/api/tasks/${slot.taskId}`);
-        onSnap(snap);
-        if (TERMINAL.includes(snap.status)) clearInterval(timer);
-      } catch { clearInterval(timer); }
-    }, 1000);
+    // SSE оборвался до терминального статуса — добираем опросом.
+    stops.push(pollTaskUntilTerminal(slot.taskId, onSnap));
   };
+  stops.push(() => { try { es.close(); } catch { /* ignore */ } });
+  // Сторож тишины: соединение может молча зависнуть без error —
+  // тогда дёргаем API сами, слот не бросаем.
+  const watch = setInterval(async () => {
+    if (!slots.includes(slot) || isTerminalSlot(slot)) { stopSlotLive(slot); return; }
+    if (Date.now() - (slot._lastSnapAt || 0) < 20000) return;
+    try {
+      onSnap(await backend.req('GET', `/api/tasks/${slot.taskId}`));
+    } catch (e) {
+      if (e && e.status === 404) {
+        onSnap({ status: 'failed', stage: T('taskLost'), progress: 0 });
+      }
+      // transient — ждём следующий тик, слот не бросаем
+    }
+  }, 5000);
+  stops.push(() => clearInterval(watch));
+  slot._stopLive = () => { stops.forEach((fn) => { try { fn(); } catch { /* ignore */ } }); };
 }
 
 function trimTerminal() {
@@ -924,6 +979,7 @@ function slotCard(slot, idx) {
   } else {
     act.textContent = T('removeSlot');
     act.onclick = () => {
+      stopSlotLive(slot);
       slots = slots.filter((s) => s !== slot);
       selected.delete(slot.key);
       renderSlots();
@@ -1856,15 +1912,9 @@ function subscribeConvert(id) {
       if (TERMINAL.includes(snap.status)) es.close();
     } catch { /* keep-alive */ }
   };
-  es.onerror = async () => {
+  es.onerror = () => {
     es.close();
-    const timer = setInterval(async () => {
-      try {
-        const snap = await backend.req('GET', `/api/tasks/${id}`);
-        onSnap(snap);
-        if (TERMINAL.includes(snap.status)) clearInterval(timer);
-      } catch { clearInterval(timer); }
-    }, 1000);
+    pollTaskUntilTerminal(id, onSnap);
   };
 }
 
