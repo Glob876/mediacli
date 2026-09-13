@@ -647,8 +647,14 @@ function collectDlFields() {
 }
 
 async function saveCurrentDlAsPreset() {
-  const name = prompt(T('presetNamePrompt'), 'My Preset');
-  if (!name || !name.trim()) return;
+  // window.prompt в Electron не реализован — пробуем, при неудаче даём автоимя.
+  let name = '';
+  try {
+    if (typeof prompt === 'function') name = prompt(T('presetNamePrompt'), `Preset ${savedPresetsCache.length + 1}`) || '';
+  } catch { name = ''; }
+  // prompt вернул null при отмене — выходим; пустая строка из-за неподдержки — автоимя.
+  if (name === null) return;
+  if (!name.trim()) name = `Preset ${savedPresetsCache.length + 1}`;
   try {
     const cfg = await backend.config();
     const fields = collectDlFields();
@@ -658,7 +664,10 @@ async function saveCurrentDlAsPreset() {
     await backend.saveConfig(cfg);
     savedPresetsCache = cfg.download_presets;
     refreshSavedPresetSelect();
-    cselectSet('dl-saved-preset', savedPresetsCache.map((p) => ({ value: p.id, label: p.name })).length ? [{ value: '', label: T('dlManual') }].concat(savedPresetsCache.map((p) => ({ value: p.id, label: p.name }))) : [{ value: '', label: T('dlNoPresets') }], preset.id);
+    // Выбираем только что созданный пресет.
+    if (cselects['dl-saved-preset']) cselectSet('dl-saved-preset',
+      [{ value: '', label: T('dlManual') }].concat(savedPresetsCache.map((p) => ({ value: p.id, label: p.name }))),
+      preset.id);
     updateDlPresetDesc();
     renderPresetsList();
     toast(T('presetCreated'));

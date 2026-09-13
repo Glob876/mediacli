@@ -112,7 +112,8 @@ async function createWindow() {
 
   // Перехватываем Ctrl+Shift+I (обычно DevTools) — открываем настройки пресета.
   win.webContents.on('before-input-event', (event, input) => {
-    if (input.control && input.shift && input.key.toLowerCase() === 'i' && !input.alt && !input.meta) {
+    const isI = (input.code === 'KeyI') || (typeof input.key === 'string' && input.key.toLowerCase() === 'i');
+    if (input.control && input.shift && isI && !input.alt && !input.meta) {
       event.preventDefault();
       try { win.webContents.send('mediacli:open-preset-settings'); } catch { /* ignore */ }
     }
