@@ -441,7 +441,7 @@ const mockApi = {
     download_dir: '/tmp/MediaCLI', language: 'ru', video_preset: 'default',
     audio_format: 'mp3', sub_langs: 'ru,en', proxy_mode: 'system', proxy_url: '',
     concurrent_fragments: 4, bg_queue_max: 3, no_mtime: true, windows_filenames: true, use_archive: false,
-    accent_color: '#bfff00',
+    accent_color: '#bfff00', download_presets: [],
   },
   _library: [
     { name: 'demo-video.mp4', size: 12345678, mtime: '2026-09-01 12:00:00', is_media: true },
@@ -454,12 +454,23 @@ const mockApi = {
   ],
   _browsePath: '/tmp/MediaCLI',
   async presets() {
+    // also expose saved download_presets in mock (persisted via localStorage config)
+    let dlPresets = [];
+    try {
+      const raw = localStorage.getItem('mc_mock_cfg_v1');
+      if (raw) {
+        const c = JSON.parse(raw);
+        if (Array.isArray(c.download_presets)) dlPresets = c.download_presets;
+      }
+    } catch { /* ignore */ }
+    if (!dlPresets.length && this._config.download_presets) dlPresets = this._config.download_presets;
     return {
       video_presets: [
         { id: 'default', name_en: 'Original / Lossless Merge — Best Quality', name_ru: 'Оригинал без пережатия — лучшее качество' },
         { id: 'standard_mp4', name_en: 'Standard MP4 (H.264 + AAC)', name_ru: 'Стандартный MP4 (H.264 + AAC)' },
         { id: 'mkv_av1', name_en: 'Modern MKV (AV1 + Opus/AAC)', name_ru: 'Современный MKV (AV1 + Opus/AAC)' },
       ],
+      download_presets: dlPresets,
     };
   },
   async convertPresets() { return { convert_presets: this._convertPresets }; },
@@ -523,15 +534,29 @@ const mockApi = {
     return { ok: true };
   },
   async historyClear() { this._history = []; return { ok: true }; },
-  async config() { return { ...this._config }; },
-  async saveConfig(cfg) { this._config = { ...cfg }; return { ...this._config }; },
+  async config() {
+    try {
+      const raw = localStorage.getItem('mc_mock_cfg_v1');
+      if (raw) {
+        const saved = JSON.parse(raw);
+        this._config = { ...this._config, ...saved };
+      }
+    } catch { /* ignore */ }
+    return { ...this._config };
+  },
+  async saveConfig(cfg) {
+    this._config = { ...cfg };
+    try { localStorage.setItem('mc_mock_cfg_v1', JSON.stringify(this._config)); } catch { /* ignore */ }
+    return { ...this._config };
+  },
   async resetConfig() {
     this._config = {
       download_dir: '/tmp/MediaCLI', language: 'ru', video_preset: 'default',
       audio_format: 'mp3', sub_langs: 'ru,en', proxy_mode: 'system', proxy_url: '',
       concurrent_fragments: 4, bg_queue_max: 3, no_mtime: true, windows_filenames: true, use_archive: false,
-      accent_color: '#bfff00', ffmpeg_path: '',
+      accent_color: '#bfff00', ffmpeg_path: '', download_presets: [],
     };
+    try { localStorage.setItem('mc_mock_cfg_v1', JSON.stringify(this._config)); } catch { /* ignore */ }
     return { ...this._config };
   },
   async meta() {
@@ -1850,6 +1875,9 @@ async function init() {
     applyAccent(accent);
     const cookiesMode = cselectGet('set-cookies-mode');
     const logoMode = cselectGet('set-logo-mode');
+    const proxyModeRaw = cselectGet('set-proxy-mode');
+    const proxyMode = (proxyModeRaw === 'system' || proxyModeRaw === 'custom' || proxyModeRaw === 'none')
+      ? proxyModeRaw : (settingsCache.proxy_mode || 'system');
     const cfg = {
       ...settingsCache,
       download_dir: el('set-download-dir').value.trim(),
@@ -1858,7 +1886,7 @@ async function init() {
       cookies_mode: cookiesMode || 'none',
       cookies_file: cookiesMode === 'file' ? el('set-cookies-file').value.trim() : (settingsCache.cookies_file || ''),
       cookies_browser: cookiesMode === 'browser' ? (cselectGet('set-cookies-browser') || 'chrome') : (settingsCache.cookies_browser || 'chrome'),
-      proxy_mode: cselectGet('set-proxy-mode'),
+      proxy_mode: proxyMode,
       proxy_url: el('set-proxy-url').value.trim(),
       use_archive: el('set-archive').checked,
       archive_file: el('set-archive-file').value.trim(),
