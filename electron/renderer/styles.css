@@ -592,6 +592,58 @@ progress::-moz-progress-bar { background: var(--lime); }
   animation: pageIn 0.3s ease;
 }
 
+/* ================= Палитра команд (Shift+P) ================= */
+.modal.top { align-items: flex-start; }
+.modal.bottom { align-items: flex-end; }
+.palette-box { width: min(560px, 94vw); }
+#palette-search { width: 100%; }
+#palette-list { gap: 2px; }
+.cmd-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.cmd-item:hover { border-color: var(--border); }
+.cmd-item.sel { border-color: var(--lime); background: color-mix(in srgb, var(--lime) 10%, #000000); }
+.cmd-item .cid { margin-left: auto; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.cmd-item .go { color: var(--lime); font-size: 11px; }
+
+/* ================= Консоль (Shift+T) ================= */
+.console-box { width: min(860px, 94vw); margin-bottom: 4vh; }
+#console-out {
+  height: 300px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+#console-out .cout-dim { color: var(--muted); }
+#console-out .cout-ok { color: var(--lime); }
+#console-out .cout-err { color: var(--danger); }
+#console-out .cout-cmd { color: var(--fg); font-weight: 700; }
+.console-in-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+.console-prompt { color: var(--lime); font-weight: 700; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+#console-in {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--fg);
+  font-size: 13px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  padding: 0;
+}
+
 /* ================= Тосты ================= */
 #toasts { position: fixed; right: 12px; bottom: 12px; z-index: 200; display: flex; flex-direction: column; gap: 6px; max-width: min(340px, 90vw); }
 .toast {

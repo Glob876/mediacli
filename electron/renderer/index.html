@@ -407,6 +407,36 @@
     </div>
   </div>
 
+  <!-- Палитра команд (Shift+P): все команды + поиск -->
+  <div id="palette" class="modal top hidden" role="dialog" aria-modal="true">
+    <div class="modal-box palette-box">
+      <div class="modal-head">
+        <b data-i18n="paletteTitle">Команды</b>
+        <button id="btn-palette-close" class="btn small"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div style="padding:8px 10px 0;">
+        <input id="palette-search" type="text" data-i18n-ph="palettePh" placeholder="Поиск команды…" spellcheck="false" autocomplete="off" />
+      </div>
+      <div id="palette-list" class="list" style="padding:8px 10px;max-height:320px;overflow-y:auto;"></div>
+      <div class="muted small" style="padding:0 10px 8px;" data-i18n="paletteHint">↑↓ — выбор, Enter — выполнить, Esc — закрыть</div>
+    </div>
+  </div>
+
+  <!-- Консоль (Shift+T): команды управления программой -->
+  <div id="console" class="modal bottom hidden" role="dialog" aria-modal="true">
+    <div class="modal-box console-box">
+      <div class="modal-head">
+        <b data-i18n="consoleTitle">Консоль</b>
+        <button id="btn-console-close" class="btn small"><svg class="ic"><use href="#i-x"/></svg></button>
+      </div>
+      <div id="console-out"></div>
+      <div class="console-in-row">
+        <span class="console-prompt">mediagui&gt;</span>
+        <input id="console-in" type="text" data-i18n-ph="consolePh" placeholder="help — список команд" spellcheck="false" autocomplete="off" />
+      </div>
+    </div>
+  </div>
+
   <div id="toasts" aria-live="polite"></div>
 
   <script src="app.js"></script>

@@ -81,6 +81,9 @@ const I18N = {
     presetQuality: 'Макс. качество:', presetSection: 'Вырезка по времени:', presetTemplate: 'Шаблон имени файла:', presetRestrict: 'ASCII имена', presetVcodec: 'Видео-кодек:', presetFps: 'Лимит FPS:',
     presetAudioOnly: 'Только аудио', presetAudioQuality: 'Качество аудио:', presetSubsEnabled: 'Скачивать субтитры', presetAutoSubs: 'Авто-субтитры', presetEmbedSubs: 'Встраивать субтитры', presetEmbedMeta: 'Метаданные', presetEmbedThumb: 'Обложка', presetEmbedChapters: 'Главы', presetSplitChapters: 'Разделить по главам', presetWriteExtra: 'Описание и миниатюра', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Ретраи:', presetRatelimit: 'Лимит скорости:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Пароль видео:', presetCookiesMode: 'Cookies режим:', presetProxyMode: 'Proxy режим:', presetForceOverwrite: 'Принудительная перезапись (--force-overwrites)',
     presetEdit: 'Редактировать',
+    paletteTitle: 'Команды', palettePh: 'Поиск команды…', paletteEmpty: 'Ничего не найдено',
+    paletteHint: '↑↓ — выбор, Enter — выполнить, Esc — закрыть',
+    consoleTitle: 'Консоль', consolePh: 'help — список команд',
   },
   en: {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
@@ -153,6 +156,9 @@ const I18N = {
     presetQuality: 'Max quality:', presetSection: 'Time range:', presetTemplate: 'File name template:', presetRestrict: 'ASCII names', presetVcodec: 'Video codec:', presetFps: 'FPS limit:',
     presetAudioOnly: 'Audio only', presetAudioQuality: 'Audio quality:', presetSubsEnabled: 'Download subtitles', presetAutoSubs: 'Auto-subs', presetEmbedSubs: 'Embed subs', presetEmbedMeta: 'Metadata', presetEmbedThumb: 'Thumbnail', presetEmbedChapters: 'Chapters', presetSplitChapters: 'Split by chapters', presetWriteExtra: 'Description & thumbnail', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Retries:', presetRatelimit: 'Rate limit:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Video password:', presetCookiesMode: 'Cookies mode:', presetProxyMode: 'Proxy mode:', presetForceOverwrite: 'Force overwrite (--force-overwrites)',
     presetEdit: 'Edit',
+    paletteTitle: 'Commands', palettePh: 'Search commands…', paletteEmpty: 'No matches',
+    paletteHint: '↑↓ — navigate, Enter — run, Esc — close',
+    consoleTitle: 'Console', consolePh: 'help — list commands',
   },
   'en-US': {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
@@ -225,6 +231,9 @@ const I18N = {
     presetQuality: 'Max quality:', presetSection: 'Time range:', presetTemplate: 'File name template:', presetRestrict: 'ASCII names', presetVcodec: 'Video codec:', presetFps: 'FPS limit:',
     presetAudioOnly: 'Audio only', presetAudioQuality: 'Audio quality:', presetSubsEnabled: 'Download subtitles', presetAutoSubs: 'Auto-subs', presetEmbedSubs: 'Embed subs', presetEmbedMeta: 'Metadata', presetEmbedThumb: 'Thumbnail', presetEmbedChapters: 'Chapters', presetSplitChapters: 'Split by chapters', presetWriteExtra: 'Description & thumbnail', presetSponsorBlock: 'SponsorBlock:', presetRetries: 'Retries:', presetRatelimit: 'Rate limit:', presetGeobypass: 'Geo-bypass', presetLiveStart: 'Live from start', presetVideoPassword: 'Video password:', presetCookiesMode: 'Cookies mode:', presetProxyMode: 'Proxy mode:', presetForceOverwrite: 'Force overwrite (--force-overwrites)',
     presetEdit: 'Edit',
+    paletteTitle: 'Commands', palettePh: 'Search commands…', paletteEmpty: 'No matches',
+    paletteHint: '↑↓ — navigate, Enter — run, Esc — close',
+    consoleTitle: 'Console', consolePh: 'help — list commands',
   },
 };
 
@@ -2003,6 +2012,8 @@ document.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
   if (e.key === 'Escape') {
+    if (!el('palette').classList.contains('hidden')) { closePalette(); return; }
+    if (!el('console').classList.contains('hidden')) { closeConsole(); return; }
     if (!el('preset-editor').classList.contains('hidden')) { closePresetEditor(); return; }
     if (!el('logviewer').classList.contains('hidden')) { closeLogViewer(); return; }
     if (!el('lightbox').classList.contains('hidden')) { closeLightbox(); return; }
@@ -2029,12 +2040,461 @@ document.addEventListener('keydown', (e) => {
        e.preventDefault();
        if (el('history-drawer').classList.contains('hidden')) openHistory();
        else closeHistory();
-     } else if (e.code === 'KeyI') {
-       e.preventDefault();
-       showView('settings');
-     }
+      } else if (e.code === 'KeyI') {
+        e.preventDefault();
+        showView('settings');
+      } else if (e.code === 'KeyT') {
+        e.preventDefault();
+        if (el('console').classList.contains('hidden')) openConsole();
+        else closeConsole();
+      } else if (e.code === 'KeyP') {
+        e.preventDefault();
+        if (el('palette').classList.contains('hidden')) openPalette();
+        else closePalette();
+      }
    }
  });
+
+/* ================= Консоль (Shift+T) и палитра команд (Shift+P) ================= */
+const L2 = (ru, en) => (state.lang === 'ru' ? ru : en);
+const cmdTitle = (c) => L2(c.ru, c.en);
+
+/* ---------- общие помощники ---------- */
+async function persistConfigPatch(patch) {
+  const cfg = await backend.config();
+  Object.assign(cfg, patch);
+  settingsCache = await backend.saveConfig(cfg);
+  return settingsCache;
+}
+
+async function refreshConfigUI() {
+  if (settingsCache.language && I18N[settingsCache.language]) state.lang = settingsCache.language;
+  if (settingsCache.accent_color && hexToRgb(settingsCache.accent_color)) applyAccent(settingsCache.accent_color);
+  applyI18n();
+  if (!el('view-settings').classList.contains('hidden')) await loadSettings();
+}
+
+function parseConsoleBool(v) {
+  const s = String(v).toLowerCase();
+  if (['on', 'true', '1', 'yes', 'y', 'да', 'вкл'].includes(s)) return true;
+  if (['off', 'false', '0', 'no', 'n', 'нет', 'выкл'].includes(s)) return false;
+  return null;
+}
+
+/* config set <k> <v>: типы и допустимые значения */
+const CONFIG_SCHEMA = {
+  download_dir: { type: 'str' },
+  language: { type: 'enum', values: ['ru', 'en', 'en-US'] },
+  user_goal: { type: 'str' },
+  cookies_mode: { type: 'enum', values: ['none', 'file', 'browser'] },
+  cookies_file: { type: 'str' },
+  cookies_browser: { type: 'str' },
+  proxy_mode: { type: 'enum', values: ['system', 'custom', 'none'] },
+  proxy_url: { type: 'str' },
+  use_archive: { type: 'bool' },
+  archive_file: { type: 'str' },
+  video_preset: { type: 'str' },
+  transcode_mode: { type: 'enum', values: ['embedded', 'external'] },
+  audio_format: { type: 'str' },
+  sub_langs: { type: 'str' },
+  thumbnail_format: { type: 'str' },
+  use_ffmpeg_suffix: { type: 'bool' },
+  overwrite_original: { type: 'bool' },
+  concurrent_fragments: { type: 'int', min: 1 },
+  bg_queue_max: { type: 'int', min: 1, max: 8 },
+  no_mtime: { type: 'bool' },
+  windows_filenames: { type: 'bool' },
+  ffmpeg_path: { type: 'str' },
+  accent_color: { type: 'str' },
+  show_home_logo: { type: 'bool' },
+};
+
+function coerceConfigValue(key, raw) {
+  const spec = CONFIG_SCHEMA[key];
+  if (!spec) return { ok: false, err: L2(`Неизвестный ключ: ${key}`, `Unknown key: ${key}`) };
+  if (spec.type === 'bool') {
+    const b = parseConsoleBool(raw);
+    if (b === null) return { ok: false, err: L2('Нужно on/off', 'Expected on/off') };
+    return { ok: true, value: b };
+  }
+  if (spec.type === 'int') {
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || (spec.min && n < spec.min) || (spec.max && n > spec.max)) {
+      return { ok: false, err: L2(`Нужно число${spec.min ? ' >= ' + spec.min : ''}${spec.max ? ' <= ' + spec.max : ''}`, `Expected a number${spec.min ? ' >= ' + spec.min : ''}${spec.max ? ' <= ' + spec.max : ''}`) };
+    }
+    return { ok: true, value: n };
+  }
+  if (spec.type === 'enum') {
+    if (!spec.values.includes(raw)) return { ok: false, err: L2(`Нужно одно из: ${spec.values.join(', ')}`, `Expected one of: ${spec.values.join(', ')}`) };
+    return { ok: true, value: raw };
+  }
+  if (key === 'accent_color' && !hexToRgb(raw)) {
+    return { ok: false, err: L2('Нужен hex-цвет, например #bfff00', 'Expected a hex color, e.g. #bfff00') };
+  }
+  return { ok: true, value: raw };
+}
+
+/* ---------- консоль ---------- */
+const consoleHist = [];
+let consoleHistIdx = 0;
+let consoleBooted = false;
+
+function consolePrint(text, cls) {
+  const box = el('console-out');
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  div.textContent = text;
+  box.appendChild(div);
+  while (box.children.length > 400) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+function openConsole(prefill, autorun) {
+  closePalette();
+  if (!consoleBooted) {
+    consoleBooted = true;
+    consolePrint(L2('Консоль MediaGUI. Введите help для списка команд.', 'MediaGUI console. Type help for the command list.'), 'cout-dim');
+  }
+  el('console').classList.remove('hidden');
+  const inp = el('console-in');
+  if (typeof prefill === 'string') inp.value = prefill;
+  setTimeout(() => { inp.focus(); try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch { /* ignore */ } }, 0);
+  if (autorun && typeof prefill === 'string' && prefill.trim()) {
+    inp.value = '';
+    void runConsoleCommand(prefill);
+  }
+}
+
+function closeConsole() {
+  el('console').classList.add('hidden');
+  if (document.activeElement === el('console-in')) el('console-in').blur();
+}
+
+function consoleEnsureSettings() {
+  return settingsCache ? Promise.resolve(settingsCache) : backend.config().then((c) => { settingsCache = c; return c; });
+}
+
+async function runConsoleCommand(raw) {
+  const line = raw.trim();
+  if (!line) return;
+  consolePrint('mediagui> ' + line, 'cout-cmd');
+  const parts = line.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const args = parts.slice(1);
+  try {
+    switch (cmd) {
+      case 'help':
+      case '?': {
+        consolePrint(L2('Команды:', 'Commands:'));
+        [
+          'help — ' + L2('этот список', 'this list'),
+          'dl <url> — ' + L2('скачать', 'download'),
+          'open <home|library|convert|settings|doctor|presets>',
+          'config [list|get <k>|set <k> <v>]',
+          'preset [list|use <id>|delete <id>|new <name>]',
+          'queue [list|cancel <id>|cancel-all]',
+          'slots [list|clear]',
+          'history [list|clear]',
+          'accent <#hex> — ' + L2('цвет интерфейса', 'UI accent color'),
+          'lang <ru|en|en-US>',
+          'logo <on|off>',
+          'doctor — ' + L2('проверка системы', 'system check'),
+          'ffmpeg [path] — ' + L2('проверка ffmpeg', 'ffmpeg check'),
+          'version, clear, exit',
+        ].forEach((s) => consolePrint('  ' + s, 'cout-dim'));
+        break;
+      }
+      case 'dl': {
+        if (!args.length) { consolePrint('Usage: dl <url>', 'cout-err'); break; }
+        el('url').value = args[0];
+        await startDownload();
+        consolePrint(L2('Задача поставлена в очередь.', 'Download queued.'), 'cout-ok');
+        break;
+      }
+      case 'open':
+      case 'go': {
+        const views = {
+          home: ['home', 'главная'], library: ['library', 'video', 'видео'],
+          convert: ['convert', 'конвертация'], settings: ['settings', 'настройки'],
+          doctor: ['doctor', 'system', 'система'], presets: ['presets', 'пресеты'],
+        };
+        const want = (args[0] || '').toLowerCase();
+        const found = Object.keys(views).find((v) => views[v].includes(want));
+        if (!found) { consolePrint('Usage: open <home|library|convert|settings|doctor|presets>', 'cout-err'); break; }
+        showView(found);
+        consolePrint(L2('Открыто: ', 'Opened: ') + found, 'cout-ok');
+        break;
+      }
+      case 'config': {
+        await consoleEnsureSettings();
+        const sub = (args[0] || 'list').toLowerCase();
+        if (sub === 'list') {
+          Object.keys(CONFIG_SCHEMA).forEach((k) => consolePrint(`  ${k} = ${settingsCache[k]}`));
+        } else if (sub === 'get') {
+          if (!CONFIG_SCHEMA[args[1]]) { consolePrint(L2('Неизвестный ключ. config list — все ключи.', 'Unknown key. config list shows all keys.'), 'cout-err'); break; }
+          consolePrint(`  ${args[1]} = ${settingsCache[args[1]]}`);
+        } else if (sub === 'set') {
+          if (args.length < 3) { consolePrint('Usage: config set <k> <v>', 'cout-err'); break; }
+          const r = coerceConfigValue(args[1], args.slice(2).join(' '));
+          if (!r.ok) { consolePrint(r.err, 'cout-err'); break; }
+          await persistConfigPatch({ [args[1]]: r.value });
+          await refreshConfigUI();
+          consolePrint(`[ok] ${args[1]} = ${r.value}`, 'cout-ok');
+        } else {
+          consolePrint('Usage: config [list|get <k>|set <k> <v>]', 'cout-err');
+        }
+        break;
+      }
+      case 'preset': {
+        await loadVideoPresets();
+        const sub = (args[0] || 'list').toLowerCase();
+        if (sub === 'list') {
+          if (!savedPresetsCache.length) consolePrint(L2('Нет сохранённых пресетов.', 'No saved presets.'), 'cout-dim');
+          savedPresetsCache.forEach((p) => consolePrint(`  ${p.id} — ${p.name}`));
+        } else if (sub === 'use') {
+          const p = savedPresetsCache.find((x) => x.id === args[1]);
+          if (!p) { consolePrint(L2('Пресет не найден.', 'Preset not found.'), 'cout-err'); break; }
+          cselectSet('dl-saved-preset', [{ value: '', label: T('dlManual') }].concat(savedPresetsCache.map((x) => ({ value: x.id, label: x.name }))), p.id);
+          updateDlPresetDesc();
+          showView('home');
+          el('dlpanel').classList.remove('hidden');
+          consolePrint(`[ok] ${p.name}`, 'cout-ok');
+        } else if (sub === 'delete') {
+          if (!savedPresetsCache.some((x) => x.id === args[1])) { consolePrint(L2('Пресет не найден.', 'Preset not found.'), 'cout-err'); break; }
+          const cfg = await backend.config();
+          cfg.download_presets = (cfg.download_presets || []).filter((x) => x.id !== args[1]);
+          await backend.saveConfig(cfg);
+          savedPresetsCache = cfg.download_presets || [];
+          refreshSavedPresetSelect();
+          renderPresetsList();
+          consolePrint(L2('Пресет удалён.', 'Preset deleted.'), 'cout-ok');
+        } else if (sub === 'new') {
+          const name = args.slice(1).join(' ').trim() || `Preset ${savedPresetsCache.length + 1}`;
+          const cfg = await backend.config();
+          cfg.download_presets = cfg.download_presets || [];
+          const preset = { id: `preset_${Date.now()}`, name, fields: collectDlFields() };
+          cfg.download_presets.push(preset);
+          await backend.saveConfig(cfg);
+          savedPresetsCache = cfg.download_presets;
+          refreshSavedPresetSelect();
+          renderPresetsList();
+          consolePrint(`[ok] ${name}`, 'cout-ok');
+        } else {
+          consolePrint('Usage: preset [list|use <id>|delete <id>|new <name>]', 'cout-err');
+        }
+        break;
+      }
+      case 'queue':
+      case 'bg': {
+        const sub = (args[0] || 'list').toLowerCase();
+        if (sub === 'cancel' || sub === 'kill') {
+          const id = parseInt(args[1], 10);
+          if (!Number.isFinite(id)) { consolePrint('Usage: queue cancel <id>', 'cout-err'); break; }
+          try { await backend.cancel(id); consolePrint(L2(`Задача #${id} отменена.`, `Task #${id} cancelled.`), 'cout-ok'); }
+          catch (e) { consolePrint(L2(`Задача #${id} не найдена.`, `Task #${id} not found.`), 'cout-err'); }
+        } else if (sub === 'cancel-all') {
+          const { tasks } = await backend.tasks();
+          const live = (tasks || []).filter((t) => t.status === 'running' || t.status === 'queued');
+          for (const t of live) { try { await backend.cancel(t.id); } catch { /* ignore */ } }
+          consolePrint(L2(`Отменено: ${live.length}.`, `Cancelled: ${live.length}.`), 'cout-ok');
+        } else if (sub === 'list') {
+          const { tasks } = await backend.tasks();
+          if (!(tasks || []).length) consolePrint(L2('Очередь пуста.', 'Queue is empty.'), 'cout-dim');
+          (tasks || []).forEach((t) => consolePrint(`  #${t.id} | ${t.title || t.source} | ${t.status} | ${(t.progress || 0).toFixed(1)}%`));
+        } else {
+          consolePrint('Usage: queue [list|cancel <id>|cancel-all]', 'cout-err');
+        }
+        break;
+      }
+      case 'slots': {
+        const sub = (args[0] || 'list').toLowerCase();
+        if (sub === 'clear') {
+          el('btn-clear-done').click();
+          consolePrint(L2('Завершённые слоты убраны.', 'Finished slots cleared.'), 'cout-ok');
+        } else if (sub === 'list') {
+          if (!slots.length) consolePrint(L2('Слотов нет.', 'No slots.'), 'cout-dim');
+          slots.forEach((s) => consolePrint(`  ${s.key} | ${s.title || s.url} | ${s.status} | ${(s.progress || 0).toFixed(1)}%`));
+        } else {
+          consolePrint('Usage: slots [list|clear]', 'cout-err');
+        }
+        break;
+      }
+      case 'history': {
+        const sub = (args[0] || 'list').toLowerCase();
+        if (sub === 'clear') {
+          await backend.historyClear();
+          consolePrint(L2('История очищена.', 'History cleared.'), 'cout-ok');
+        } else if (sub === 'list') {
+          const { history } = await backend.history();
+          if (!(history || []).length) consolePrint(T('histEmpty'), 'cout-dim');
+          (history || []).slice(0, 10).forEach((h) => consolePrint(`  ${h.time} | ${h.type} | ${h.target || h.source} | ${h.status}`));
+        } else {
+          consolePrint('Usage: history [list|clear]', 'cout-err');
+        }
+        break;
+      }
+      case 'accent': {
+        if (!args.length) {
+          consolePrint('  ' + ACCENT_SWATCHES.join('  '), 'cout-dim');
+          break;
+        }
+        if (!hexToRgb(args[0])) { consolePrint(T('tBadAccent'), 'cout-err'); break; }
+        applyAccent(args[0]);
+        await persistConfigPatch({ accent_color: state.accent });
+        consolePrint(`[ok] ${state.accent}`, 'cout-ok');
+        break;
+      }
+      case 'lang':
+      case 'language': {
+        if (!I18N[args[0]]) { consolePrint('Usage: lang <ru|en|en-US>', 'cout-err'); break; }
+        await persistConfigPatch({ language: args[0] });
+        await refreshConfigUI();
+        consolePrint('[ok] ' + args[0], 'cout-ok');
+        break;
+      }
+      case 'logo': {
+        const b = parseConsoleBool(args[0] || '');
+        if (b === null) { consolePrint('Usage: logo <on|off>', 'cout-err'); break; }
+        await persistConfigPatch({ show_home_logo: b });
+        await refreshConfigUI();
+        consolePrint('[ok] logo ' + (b ? 'on' : 'off'), 'cout-ok');
+        break;
+      }
+      case 'doctor': {
+        showView('doctor');
+        await loadDoctor();
+        consolePrint(L2('Проверка выполнена, см. вкладку Система.', 'Check done, see the System view.'), 'cout-ok');
+        break;
+      }
+      case 'ffmpeg': {
+        const r = await backend.ffmpegCheck((args[0] || '').trim());
+        consolePrint(r.found ? `[ok] ${r.version || 'ffmpeg'} (${r.resolved})` : `[err] ${r.error || '?'} (${r.resolved})`, r.found ? 'cout-ok' : 'cout-err');
+        break;
+      }
+      case 'version': {
+        const shell = (window.mediacliShell && window.mediacliShell.version) || '?';
+        let daemon = '?';
+        try { daemon = (await backend.status()).version || '?'; } catch { /* ignore */ }
+        consolePrint(`shell ${shell} / daemon ${daemon}`);
+        break;
+      }
+      case 'clear':
+      case 'cls': {
+        el('console-out').innerHTML = '';
+        break;
+      }
+      case 'exit':
+      case 'quit': {
+        closeConsole();
+        break;
+      }
+      default: {
+        consolePrint(L2(`Неизвестная команда: '${cmd}'. Введите help.`, `Unknown command: '${cmd}'. Type help.`), 'cout-err');
+      }
+    }
+  } catch (e) {
+    consolePrint(`${T('tErr')}: ${e.message}`, 'cout-err');
+  }
+}
+
+/* ---------- палитра команд ---------- */
+const PALETTE = [
+  { id: 'go-home', ru: 'Главная', en: 'Home', keys: 'home главная view', run: () => showView('home') },
+  { id: 'go-library', ru: 'Видео', en: 'Library', keys: 'library video видео файлы', run: () => showView('library') },
+  { id: 'go-convert', ru: 'Конвертация', en: 'Convert', keys: 'convert конвертация ffmpeg', run: () => showView('convert') },
+  { id: 'go-settings', ru: 'Настройки', en: 'Settings', keys: 'settings настройки config', run: () => showView('settings') },
+  { id: 'go-doctor', ru: 'Система', en: 'System', keys: 'doctor system система зависимости', run: () => showView('doctor') },
+  { id: 'go-presets', ru: 'Пресеты загрузок', en: 'Download presets', keys: 'presets пресеты ctrl shift i', run: () => showView('presets') },
+  { id: 'history', ru: 'История операций', en: 'Operation history', keys: 'history история shift h', run: () => { if (el('history-drawer').classList.contains('hidden')) openHistory(); else closeHistory(); } },
+  { id: 'new-download', ru: 'Новая загрузка (фокус на ссылку)', en: 'New download (focus URL)', keys: 'download скачать url ссылка new', run: () => { showView('home'); el('url').focus(); } },
+  { id: 'dl-settings', ru: 'Настройки загрузки (шестерёнка)', en: 'Download settings (gear)', keys: 'gear шестерёнка пресет panel', run: () => { showView('home'); if (el('dlpanel').classList.contains('hidden')) el('btn-dl-settings').click(); } },
+  { id: 'preset-new', ru: 'Новый пресет…', en: 'New preset…', keys: 'preset пресет create новый editor', run: () => { void saveCurrentDlAsPreset(); } },
+  { id: 'preset-refresh', ru: 'Обновить пресеты', en: 'Refresh presets', keys: 'preset пресеты refresh обновить', run: () => { void loadVideoPresets(); } },
+  { id: 'settings-save', ru: 'Сохранить настройки', en: 'Save settings', keys: 'save сохранить settings настройки', run: () => { el('btn-settings-save').click(); } },
+  { id: 'settings-reset', ru: 'Сбросить настройки к заводским', en: 'Reset settings to defaults', keys: 'reset сбросить заводские defaults', run: () => { el('btn-settings-reset').click(); } },
+  { id: 'slots-clear', ru: 'Очистить завершённые слоты', en: 'Clear finished slots', keys: 'slots clear слоты очистить завершённые', run: () => { el('btn-clear-done').click(); } },
+  { id: 'doctor-recheck', ru: 'Проверить систему заново', en: 'Re-check system', keys: 'doctor recheck система проверить зависимости', run: () => { showView('doctor'); loadDoctor(); } },
+  { id: 'accent', ru: 'Акцентный цвет…', en: 'Accent color…', keys: 'accent цвет color оформление appearance', run: () => { showView('settings'); showSetPane('iface'); } },
+  { id: 'lang-ru', ru: 'Язык: Русский', en: 'Language: Russian', keys: 'lang language русский russian', run: async () => { await persistConfigPatch({ language: 'ru' }); await refreshConfigUI(); toast(T('tSaved')); } },
+  { id: 'lang-en', ru: 'Язык: English', en: 'Language: English', keys: 'lang language english английский', run: async () => { await persistConfigPatch({ language: 'en' }); await refreshConfigUI(); toast(T('tSaved')); } },
+  { id: 'logo-toggle', ru: 'Логотип на главной: вкл/выкл', en: 'Home logo: on/off', keys: 'logo логотип home главный', run: async () => { await consoleEnsureSettings(); await persistConfigPatch({ show_home_logo: settingsCache.show_home_logo === false }); await refreshConfigUI(); } },
+  { id: 'queue-cancel-all', ru: 'Отменить все активные задачи', en: 'Cancel all active tasks', keys: 'queue cancel задачи отменить все queue', run: () => openConsole('queue cancel-all', true) },
+  { id: 'cmd-dl', ru: 'Скачать по ссылке… (консоль)', en: 'Download URL… (console)', keys: 'dl download скачать url console консоль', run: () => openConsole('dl ') },
+  { id: 'cmd-config', ru: 'Настройка config… (консоль)', en: 'Edit config… (console)', keys: 'config конфиг console консоль set get', run: () => openConsole('config ') },
+  { id: 'cmd-preset', ru: 'Пресеты… (консоль)', en: 'Presets… (console)', keys: 'preset пресет console консоль', run: () => openConsole('preset ') },
+  { id: 'cmd-queue', ru: 'Очередь задач (консоль)', en: 'Task queue (console)', keys: 'queue bg очередь задачи console консоль', run: () => openConsole('queue list', true) },
+  { id: 'cmd-history', ru: 'История (консоль)', en: 'History (console)', keys: 'history история console консоль', run: () => openConsole('history list', true) },
+  { id: 'cmd-ffmpeg', ru: 'Проверить ffmpeg (консоль)', en: 'Check ffmpeg (console)', keys: 'ffmpeg console консоль проверить', run: () => openConsole('ffmpeg', true) },
+];
+
+let paletteSel = 0;
+let paletteItems = [];
+
+function paletteFiltered(q) {
+  const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+  return PALETTE.filter((c) => {
+    const hay = `${c.id} ${c.ru} ${c.en} ${c.keys}`.toLowerCase();
+    return tokens.every((t) => hay.includes(t));
+  });
+}
+
+function renderPalette() {
+  const q = el('palette-search').value;
+  paletteItems = paletteFiltered(q);
+  if (paletteSel >= paletteItems.length) paletteSel = Math.max(0, paletteItems.length - 1);
+  const box = el('palette-list');
+  box.innerHTML = '';
+  if (!paletteItems.length) {
+    box.innerHTML = `<div class="muted small">${T('paletteEmpty')}</div>`;
+    return;
+  }
+  paletteItems.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'cmd-item' + (i === paletteSel ? ' sel' : '');
+    const b = document.createElement('b');
+    b.textContent = cmdTitle(c);
+    const tag = document.createElement('span');
+    tag.className = 'cid';
+    tag.textContent = c.id;
+    const go = document.createElement('span');
+    go.className = 'go';
+    go.textContent = '↵';
+    row.appendChild(b);
+    row.appendChild(tag);
+    row.appendChild(go);
+    row.onmouseenter = () => { paletteSel = i; paintPaletteSel(); };
+    row.onclick = () => { void runPaletteItem(i); };
+    box.appendChild(row);
+  });
+}
+
+function paintPaletteSel() {
+  el('palette-list').querySelectorAll('.cmd-item').forEach((n, i) => {
+    n.classList.toggle('sel', i === paletteSel);
+    if (i === paletteSel) n.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+async function runPaletteItem(i) {
+  const c = paletteItems[i];
+  if (!c) return;
+  closePalette();
+  try { await c.run(); } catch (e) { toast(`${T('tErr')}: ${e.message}`, true); }
+}
+
+function openPalette() {
+  closeConsole();
+  el('palette').classList.remove('hidden');
+  el('palette-search').value = '';
+  paletteSel = 0;
+  renderPalette();
+  setTimeout(() => el('palette-search').focus(), 0);
+}
+
+function closePalette() {
+  el('palette').classList.add('hidden');
+  if (document.activeElement === el('palette-search')) el('palette-search').blur();
+}
 
 /* ================= Guard закрытия окна ================= */
 // Считает активные работы: слоты + задачи демона вне слотов (конвертации).
@@ -2263,6 +2723,43 @@ async function init() {
   el('btn-preset-editor-save').onclick = () => { void savePresetEditor(); };
   el('preset-editor').addEventListener('click', (e) => {
     if (e.target === el('preset-editor')) closePresetEditor();
+  });
+
+  // Палитра команд (Shift+P).
+  el('btn-palette-close').onclick = closePalette;
+  el('palette').addEventListener('click', (e) => {
+    if (e.target === el('palette')) closePalette();
+  });
+  el('palette-search').addEventListener('input', () => { paletteSel = 0; renderPalette(); });
+  el('palette-search').addEventListener('keydown', (e) => {
+    if (e.code === 'ArrowDown') { e.preventDefault(); if (paletteSel < paletteItems.length - 1) { paletteSel++; paintPaletteSel(); } }
+    else if (e.code === 'ArrowUp') { e.preventDefault(); if (paletteSel > 0) { paletteSel--; paintPaletteSel(); } }
+    else if (e.code === 'Enter') { e.preventDefault(); void runPaletteItem(paletteSel); }
+  });
+
+  // Консоль (Shift+T).
+  el('btn-console-close').onclick = closeConsole;
+  el('console').addEventListener('click', (e) => {
+    if (e.target === el('console')) closeConsole();
+  });
+  el('console-in').addEventListener('keydown', (e) => {
+    if (e.code === 'Enter') {
+      e.preventDefault();
+      const v = el('console-in').value;
+      el('console-in').value = '';
+      consoleHist.push(v);
+      consoleHistIdx = consoleHist.length;
+      void runConsoleCommand(v);
+    } else if (e.code === 'ArrowUp') {
+      e.preventDefault();
+      if (consoleHistIdx > 0) { consoleHistIdx--; el('console-in').value = consoleHist[consoleHistIdx] || ''; }
+    } else if (e.code === 'ArrowDown') {
+      e.preventDefault();
+      if (consoleHistIdx < consoleHist.length) {
+        consoleHistIdx++;
+        el('console-in').value = consoleHistIdx < consoleHist.length ? consoleHist[consoleHistIdx] : '';
+      }
+    }
   });
 
   // Настройки.
