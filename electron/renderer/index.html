@@ -56,6 +56,10 @@
       </header>
 
       <section id="dlpanel" class="card hidden">
+        <label><span data-i18n="dlSavedPreset">Сохранённый пресет:</span>
+          <div class="cselect" id="dl-saved-preset"></div>
+        </label>
+        <div class="muted small" id="dl-saved-desc" style="margin-bottom:8px"></div>
         <div class="grid2">
           <label><span data-i18n="dlPreset">Пресет кодека:</span>
             <div class="cselect" id="preset"></div>
@@ -73,6 +77,9 @@
         <label><input id="emb-meta" type="checkbox" checked /> <span data-i18n="dlMeta">Встраивать метаданные</span></label>
         <label><input id="emb-thumb" type="checkbox" checked /> <span data-i18n="dlThumb">Встраивать обложку (поиск миниатюр + перезапись файла)</span></label>
       </div>
+        <div class="row" style="justify-content:flex-start;margin-top:6px">
+          <button id="btn-dl-save-preset" class="btn small" data-i18n="dlSavePreset">Сохранить как пресет…</button>
+        </div>
       </section>
 
       <!-- Пустое состояние: только бренд и пара подсказок -->
@@ -289,6 +296,19 @@
         <button id="btn-doctor-refresh" class="btn small" data-i18n="recheck">Проверить снова</button>
       </div>
       <div id="doctor" class="list"></div>
+    </section>
+
+    <!-- ПРЕСЕТЫ (Ctrl+Shift+I) -->
+    <section id="view-presets" class="view hidden">
+      <div class="row bar">
+        <b data-i18n="presetsTitle">Пресеты загрузок</b>
+        <span class="muted small" data-i18n="presetsHint" style="margin-left:8px">Ctrl+Shift+I — быстрый доступ</span>
+        <span class="spacer"></span>
+        <button id="btn-presets-refresh" class="btn small" data-i18n="refresh">Обновить</button>
+        <button id="btn-presets-create" class="btn small primary" data-i18n="presetCreate">Сохранить текущие…</button>
+      </div>
+      <div class="muted small" data-i18n="presetHint">Сохранённые наборы настроек для быстрой загрузки. Выберите пресет на шестерёнке при скачивании.</div>
+      <div id="presets-list" class="list" style="margin-top:8px"></div>
     </section>
   </main>
 

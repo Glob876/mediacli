@@ -110,6 +110,14 @@ async function createWindow() {
   });
   win.setMenuBarVisibility(false);
 
+  // Перехватываем Ctrl+Shift+I (обычно DevTools) — открываем настройки пресета.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.control && input.shift && input.key.toLowerCase() === 'i' && !input.alt && !input.meta) {
+      event.preventDefault();
+      try { win.webContents.send('mediacli:open-preset-settings'); } catch { /* ignore */ }
+    }
+  });
+
   // Guard закрытия: пока есть активные загрузки/конвертации — не даём
   // закрыть окно молча, показываем «Вы уверены?».
   let quitting = false;

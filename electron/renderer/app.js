@@ -73,6 +73,10 @@ const I18N = {
     logWaiting: 'Логов пока нет — слот ожидает очереди.', logEmpty: 'Логов пока нет.',
     ckNone: 'Отключено', ckFile: 'Файл cookies.txt', ckBrowser: 'Из браузера',
     logoAsciiMode: 'ASCII', logoImgMode: 'Картинка',
+    dlSavedPreset: 'Сохранённый пресет:', dlSavePreset: 'Сохранить как пресет…', dlNoPresets: 'Нет сохранённых пресетов', dlManual: 'Не использовать (ручные настройки)',
+    presetsTitle: 'Пресеты загрузок', presetsHint: 'Ctrl+Shift+I — быстрый доступ', presetHint: 'Сохранённые наборы настроек для быстрой загрузки. Выберите пресет на шестерёнке при скачивании.',
+    presetCreate: 'Сохранить текущие…', presetEmpty: 'Нет сохранённых пресетов. Сохраните текущие настройки на шестерёнке.', presetDelete: 'Удалить', presetUse: 'Использовать',
+    presetDeleteConfirm: 'Удалить пресет?', presetNamePrompt: 'Имя пресета:', presetCreated: 'Пресет сохранён', presetDeleted: 'Пресет удалён', tPresetFail: 'Не удалось сохранить пресет:',
   },
   en: {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
@@ -137,6 +141,10 @@ const I18N = {
     logWaiting: 'No logs yet — the slot is queued.', logEmpty: 'No logs yet.',
     ckNone: 'Disabled', ckFile: 'cookies.txt file', ckBrowser: 'From browser',
     logoAsciiMode: 'ASCII', logoImgMode: 'Image',
+    dlSavedPreset: 'Saved preset:', dlSavePreset: 'Save as preset…', dlNoPresets: 'No saved presets', dlManual: 'Manual settings (no preset)',
+    presetsTitle: 'Download Presets', presetsHint: 'Ctrl+Shift+I — quick access', presetHint: 'Saved settings bundles for quick downloads. Pick a preset from the gear menu when downloading.',
+    presetCreate: 'Save current…', presetEmpty: 'No saved presets yet. Save current gear settings as a preset.', presetDelete: 'Delete', presetUse: 'Use',
+    presetDeleteConfirm: 'Delete preset?', presetNamePrompt: 'Preset name:', presetCreated: 'Preset saved', presetDeleted: 'Preset deleted', tPresetFail: 'Could not save preset:',
   },
   'en-US': {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
@@ -201,6 +209,10 @@ const I18N = {
     logWaiting: 'No logs yet — the slot is queued.', logEmpty: 'No logs yet.',
     ckNone: 'Disabled', ckFile: 'cookies.txt file', ckBrowser: 'From browser',
     logoAsciiMode: 'ASCII', logoImgMode: 'Image',
+    dlSavedPreset: 'Saved preset:', dlSavePreset: 'Save as preset…', dlNoPresets: 'No saved presets', dlManual: 'Manual settings (no preset)',
+    presetsTitle: 'Download Presets', presetsHint: 'Ctrl+Shift+I — quick access', presetHint: 'Saved settings bundles for quick downloads. Pick a preset from the gear menu when downloading.',
+    presetCreate: 'Save current…', presetEmpty: 'No saved presets yet. Save current gear settings as a preset.', presetDelete: 'Delete', presetUse: 'Use',
+    presetDeleteConfirm: 'Delete preset?', presetNamePrompt: 'Preset name:', presetCreated: 'Preset saved', presetDeleted: 'Preset deleted', tPresetFail: 'Could not save preset:',
   },
 };
 
@@ -220,8 +232,10 @@ function applyI18n() {
     cselectSet('conv-preset', convertPresetsCache.map((p) => ({ value: p.id, label: convPresetLabel(p) })), cselectGet('conv-preset'));
     updateConvertDesc();
   }
+  if (cselects['dl-saved-preset']) refreshSavedPresetSelect();
   rebuildSettingsSelects();
   renderSlots();
+  renderPresetsList();
 }
 
 function presetLabel(p) { return state.lang === 'ru' ? (p.name_ru || p.name_en) : p.name_en; }
@@ -617,6 +631,101 @@ function showView(name) {
    if (name === 'convert') { loadConvertPresets(); loadBrowse(currentBrowsePath); }
    if (name === 'settings') loadSettings();
    if (name === 'doctor') loadDoctor();
+   if (name === 'presets') { void loadVideoPresets(); renderPresetsList(); }
+}
+
+/* ================= Пресеты загрузок (Ctrl+Shift+I, шестерёнка) ================= */
+function collectDlFields() {
+  const fields = { video_preset: cselectGet('preset') || 'default' };
+  if (cselectGet('quality')) fields.quality = cselectGet('quality');
+  if (el('timerange').value.trim()) fields.download_section = el('timerange').value.trim();
+  if (el('subs').checked) { fields.subs_enabled = true; fields.embed_subs = true; }
+  if (el('sponsor').checked) fields.sponsorblock = 'remove';
+  fields.embed_metadata = el('emb-meta').checked;
+  fields.embed_thumbnail = el('emb-thumb').checked;
+  return fields;
+}
+
+async function saveCurrentDlAsPreset() {
+  const name = prompt(T('presetNamePrompt'), 'My Preset');
+  if (!name || !name.trim()) return;
+  try {
+    const cfg = await backend.config();
+    const fields = collectDlFields();
+    const preset = { id: `preset_${Date.now()}`, name: name.trim(), fields };
+    cfg.download_presets = cfg.download_presets || [];
+    cfg.download_presets.push(preset);
+    await backend.saveConfig(cfg);
+    savedPresetsCache = cfg.download_presets;
+    refreshSavedPresetSelect();
+    cselectSet('dl-saved-preset', savedPresetsCache.map((p) => ({ value: p.id, label: p.name })).length ? [{ value: '', label: T('dlManual') }].concat(savedPresetsCache.map((p) => ({ value: p.id, label: p.name }))) : [{ value: '', label: T('dlNoPresets') }], preset.id);
+    updateDlPresetDesc();
+    renderPresetsList();
+    toast(T('presetCreated'));
+  } catch (e) {
+    toast(`${T('tPresetFail')} ${e.message}`, true);
+  }
+}
+
+function renderPresetsList() {
+  const box = el('presets-list');
+  if (!box) return;
+  if (!savedPresetsCache.length) {
+    box.innerHTML = `<div class="muted small">${T('presetEmpty')}</div>`;
+    return;
+  }
+  box.innerHTML = '';
+  savedPresetsCache.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'hrow';
+    row.style.setProperty('--i', i);
+    const info = document.createElement('div');
+    info.style.minWidth = '0';
+    const b = document.createElement('b');
+    b.textContent = p.name;
+    const sub = document.createElement('div');
+    sub.className = 'muted small';
+    const f = p.fields || {};
+    const parts = [];
+    if (f.video_preset) parts.push(f.video_preset);
+    if (f.quality) parts.push(f.quality + 'p');
+    if (f.download_section) parts.push(f.download_section);
+    sub.textContent = parts.join(' • ') || p.id;
+    info.appendChild(b);
+    info.appendChild(sub);
+    const btns = document.createElement('div');
+    btns.className = 'row';
+    const btnUse = document.createElement('button');
+    btnUse.className = 'btn small';
+    btnUse.textContent = T('presetUse');
+    btnUse.onclick = () => {
+      cselectSet('dl-saved-preset', [{ value: '', label: T('dlManual') }].concat(savedPresetsCache.map((x) => ({ value: x.id, label: x.name }))), p.id);
+      updateDlPresetDesc();
+      showView('home');
+      el('dlpanel').classList.remove('hidden');
+      toast(p.name);
+    };
+    const btnDel = document.createElement('button');
+    btnDel.className = 'btn small danger';
+    btnDel.textContent = T('presetDelete');
+    btnDel.onclick = async () => {
+      if (!confirm(`${T('presetDeleteConfirm')}\n${p.name}`)) return;
+      try {
+        const cfg = await backend.config();
+        cfg.download_presets = (cfg.download_presets || []).filter((x) => x.id !== p.id);
+        await backend.saveConfig(cfg);
+        savedPresetsCache = cfg.download_presets || [];
+        refreshSavedPresetSelect();
+        renderPresetsList();
+        toast(T('presetDeleted'));
+      } catch (e) { toast(`${T('tErr')}: ${e.message}`, true); }
+    };
+    btns.appendChild(btnUse);
+    btns.appendChild(btnDel);
+    row.appendChild(info);
+    row.appendChild(btns);
+    box.appendChild(row);
+  });
 }
 
 /* ================= Полоса по краям экрана ================= */
@@ -827,13 +936,15 @@ function createDownloadSlot(url, fields) {
 async function startDownload() {
   const url = el('url').value.trim();
   if (!url) return;
-  const fields = { video_preset: cselectGet('preset') || 'default' };
-  if (cselectGet('quality')) fields.quality = cselectGet('quality');
-  if (el('timerange').value.trim()) fields.download_section = el('timerange').value.trim();
-  if (el('subs').checked) { fields.subs_enabled = true; fields.embed_subs = true; }
-  if (el('sponsor').checked) fields.sponsorblock = 'remove';
-  fields.embed_metadata = el('emb-meta').checked;
-  fields.embed_thumbnail = el('emb-thumb').checked;
+  let fields;
+  const savedId = cselectGet('dl-saved-preset');
+  if (savedId) {
+    const p = savedPresetsCache.find((x) => x.id === savedId);
+    if (p && p.fields) fields = { ...p.fields };
+    else fields = collectDlFields();
+  } else {
+    fields = collectDlFields();
+  }
   el('url').value = '';
   el('dlpanel').classList.add('hidden');
   edgeFlash();
@@ -1258,6 +1369,7 @@ function closeLightbox() {
 let currentBrowsePath = '';
 let convertPresetsCache = [];
 let videoPresetsCache = [];
+let savedPresetsCache = [];
 
 async function loadConvertPresets() {
   try {
@@ -1279,15 +1391,60 @@ function updateConvertDesc() {
 
 async function loadVideoPresets() {
   try {
-    const { video_presets } = await backend.presets();
-    videoPresetsCache = video_presets || [];
+    const data = await backend.presets();
+    videoPresetsCache = data.video_presets || [];
+    savedPresetsCache = data.download_presets || [];
     const opts = videoPresetsCache.map((p, i) => ({ value: p.id, label: `${i}. ${presetLabel(p)}` }));
     const plain = videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) }));
     cselectSet('preset', opts, cselectGet('preset') || 'default');
     cselectSet('set-video-preset', plain, settingsCache ? (settingsCache.video_preset || 'default') : 'default');
+    refreshSavedPresetSelect();
+    renderPresetsList();
   } catch {
     cselectSet('preset', [{ value: '', label: 'daemon…' }], '');
   }
+}
+
+function refreshSavedPresetSelect() {
+  const cur = cselectGet('dl-saved-preset');
+  const opts = [{ value: '', label: T('dlManual') }];
+  if (savedPresetsCache.length) {
+    savedPresetsCache.forEach((p) => opts.push({ value: p.id, label: p.name }));
+  } else {
+    opts[0].label = T('dlManual') + ' — ' + T('dlNoPresets');
+  }
+  const keep = opts.some((o) => o.value === cur) ? cur : '';
+  cselectSet('dl-saved-preset', opts, keep);
+  updateDlPresetDesc();
+}
+
+function updateDlPresetDesc() {
+  const id = cselectGet('dl-saved-preset');
+  const box = el('dl-saved-desc');
+  if (!box) return;
+  if (!id) {
+    box.textContent = '';
+    // enable manual controls
+    el('preset').style.opacity = '';
+    el('quality').style.opacity = '';
+    return;
+  }
+  const p = savedPresetsCache.find((x) => x.id === id);
+  if (!p) { box.textContent = ''; return; }
+  const f = p.fields || {};
+  const parts = [];
+  if (f.video_preset) {
+    const vp = videoPresetsCache.find((x) => x.id === f.video_preset);
+    parts.push(vp ? presetLabel(vp) : f.video_preset);
+  }
+  if (f.quality) parts.push(f.quality + 'p');
+  if (f.download_section) parts.push(f.download_section);
+  if (f.subs_enabled) parts.push('subs:' + (f.sub_langs || ''));
+  if (f.sponsorblock && f.sponsorblock !== 'off') parts.push('SponsorBlock:' + f.sponsorblock);
+  box.textContent = parts.length ? parts.join(' • ') : p.name;
+  // dim manual controls when preset active (they're ignored)
+  el('preset').style.opacity = '0.55';
+  el('quality').style.opacity = '0.55';
 }
 
 async function loadBrowse(path) {
@@ -1654,6 +1811,12 @@ document.addEventListener('keydown', (e) => {
      if (e.code === 'Digit3') { e.preventDefault(); showView('convert'); return; }
      if (e.code === 'Digit4') { e.preventDefault(); showView('doctor'); return; }
    }
+   // Ctrl+Shift+I — настройки пресета (требование: перехват DevTools)
+   if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && !typing && e.code === 'KeyI') {
+     e.preventDefault();
+     showView('presets');
+     return;
+   }
    if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !typing) {
      if (e.code === 'KeyH') {
        e.preventDefault();
@@ -1699,6 +1862,12 @@ if (window.mediacliGuard) {
   });
 }
 
+if (window.mediacliPreset) {
+  window.mediacliPreset.onOpenPresetSettings(() => {
+    showView('presets');
+  });
+}
+
 /* ================= Размер слотов: Ctrl + колесо ================= */
 function getSlotMin() {
   try {
@@ -1712,6 +1881,7 @@ async function init() {
   buildSwatches();
   cselectInit('preset');
   cselectInit('quality');
+  cselectInit('dl-saved-preset', () => updateDlPresetDesc());
   cselectInit('conv-preset');
   cselectInit('set-language');
   cselectInit('set-user-goal');
@@ -1762,7 +1932,13 @@ async function init() {
   el('url').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') void startDownload();
   });
-  el('btn-dl-settings').onclick = () => el('dlpanel').classList.toggle('hidden');
+  el('btn-dl-settings').onclick = () => {
+    const p = el('dlpanel');
+    const willShow = p.classList.contains('hidden');
+    p.classList.toggle('hidden');
+    if (willShow) void loadVideoPresets();
+  };
+  el('btn-dl-save-preset').onclick = () => { void saveCurrentDlAsPreset(); };
 
   // Drag & drop: всё окно главной ведёт в конвертацию.
   setupDrop(el('view-home'), (p) => dropToConvert(p), el('home-empty'));
@@ -1847,6 +2023,10 @@ async function init() {
 
   // Система.
   el('btn-doctor-refresh').onclick = loadDoctor;
+
+  // Пресеты (Ctrl+Shift+I).
+  el('btn-presets-refresh').onclick = () => { void loadVideoPresets(); };
+  el('btn-presets-create').onclick = () => { void saveCurrentDlAsPreset(); };
 
   // Настройки.
   el('set-accent').addEventListener('input', (e) => {

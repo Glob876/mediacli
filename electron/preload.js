@@ -14,3 +14,7 @@ contextBridge.exposeInMainWorld('mediacliGuard', {
   onQueryActive: (cb) => ipcRenderer.on('mediacli:query-active', () => cb()),
   reportActive: (payload) => ipcRenderer.send('mediacli:active-report', payload),
 });
+
+contextBridge.exposeInMainWorld('mediacliPreset', {
+  onOpenPresetSettings: (cb) => ipcRenderer.on('mediacli:open-preset-settings', () => cb()),
+});
