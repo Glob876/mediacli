@@ -252,7 +252,6 @@ function applyI18n() {
 
 function presetLabel(p) { return state.lang === 'ru' ? (p.name_ru || p.name_en) : p.name_en; }
 function convPresetLabel(p) { return state.lang === 'ru' ? (p.name_ru || p.name_en) : p.name_en; }
-function themeLabel(t) { return state.lang === 'ru' ? (t.name_ru || t.name_en) : t.name_en; }
 
 const GOALS = {
   ru: {
@@ -1878,10 +1877,6 @@ function goalOptions() {
   return (metaCache.user_goals || ['editing']).map((v) => ({ value: v, label: goalLabel(v) }));
 }
 
-function themeOptions() {
-  return (metaCache.themes || []).map((t) => ({ value: t.id, label: themeLabel(t) }));
-}
-
 function rebuildSettingsSelects(cfg) {
   cfg = cfg || settingsCache || {};
   cselectSet('set-language', [
@@ -1913,20 +1908,6 @@ function rebuildSettingsSelects(cfg) {
   cselectSet('set-queue-max',
     ['1', '2', '3', '4'].map((v) => ({ value: v, label: v })),
     String(cfg.bg_queue_max || 3));
-  cselectSet('set-theme', themeOptions(), cfg.theme || 'cyan');
-  cselectSet('set-progress-style',
-    (metaCache.progress_styles || ['blocks']).map((v) => ({ value: v, label: v })),
-    cfg.progress_style || 'blocks');
-  cselectSet('set-logo-mode', [
-    { value: 'ascii', label: T('logoAsciiMode') },
-    { value: 'image', label: T('logoImgMode') },
-  ], cfg.logo_mode || 'ascii');
-  cselectSet('set-logo-ascii',
-    (metaCache.logo_ascii || ['standard']).map((v) => ({ value: v, label: v })),
-    cfg.logo_ascii_preset || 'standard');
-  cselectSet('set-logo-protocol',
-    (metaCache.logo_protocols || ['kitty']).map((v) => ({ value: v, label: v })),
-    cfg.logo_protocol || 'kitty');
   syncConditionalRows();
 }
 
@@ -1934,9 +1915,6 @@ function syncConditionalRows() {
   const cm = cselectGet('set-cookies-mode');
   el('row-cookies-file').classList.toggle('hidden', cm !== 'file');
   el('row-cookies-browser').classList.toggle('hidden', cm !== 'browser');
-  const lm = cselectGet('set-logo-mode');
-  el('row-logo-ascii').classList.toggle('hidden', lm !== 'ascii');
-  el('row-logo-img').classList.toggle('hidden', lm !== 'image');
 }
 
 async function checkFfmpeg() {
@@ -1980,16 +1958,11 @@ async function loadSettings() {
     el('set-cookies-file').value = cfg.cookies_file || '';
     el('set-archive-file').value = cfg.archive_file || '';
     el('set-ffmpeg-path').value = cfg.ffmpeg_path || '';
-    el('set-logo-image').value = cfg.logo_image_path || '';
-    el('set-default-editor').value = cfg.default_editor || '';
     el('set-no-mtime').checked = !!cfg.no_mtime;
     el('set-win-names').checked = !!cfg.windows_filenames;
     el('set-archive').checked = !!cfg.use_archive;
     el('set-ffmpeg-suffix').checked = cfg.use_ffmpeg_suffix !== false;
     el('set-overwrite').checked = !!cfg.overwrite_original;
-    el('set-terminal-bg').checked = cfg.use_terminal_bg !== false;
-    el('set-notify-bell').checked = cfg.notify_bell !== false;
-    el('set-auto-check-deps').checked = cfg.auto_check_deps !== false;
     el('set-show-logo').checked = cfg.show_home_logo !== false;
     rebuildSettingsSelects(cfg);
     void checkFfmpeg();
@@ -2128,11 +2101,6 @@ async function init() {
   cselectInit('set-proxy-mode');
   cselectInit('set-fragments');
   cselectInit('set-queue-max');
-  cselectInit('set-theme');
-  cselectInit('set-progress-style');
-  cselectInit('set-logo-mode', () => syncConditionalRows());
-  cselectInit('set-logo-ascii');
-  cselectInit('set-logo-protocol');
   // Пресет-редактор: все поля скачивания как в консоли
   cselectInit('preset-quality');
   cselectInit('preset-video-preset');
@@ -2323,7 +2291,6 @@ async function init() {
     if (!hexToRgb(accent)) { toast(T('tBadAccent'), true); return; }
     applyAccent(accent);
     const cookiesMode = cselectGet('set-cookies-mode');
-    const logoMode = cselectGet('set-logo-mode');
     const proxyModeRaw = cselectGet('set-proxy-mode');
     const proxyMode = (proxyModeRaw === 'system' || proxyModeRaw === 'custom' || proxyModeRaw === 'none')
       ? proxyModeRaw : (settingsCache.proxy_mode || 'system');
@@ -2351,17 +2318,7 @@ async function init() {
       no_mtime: el('set-no-mtime').checked,
       windows_filenames: el('set-win-names').checked,
       ffmpeg_path: el('set-ffmpeg-path').value.trim(),
-      theme: cselectGet('set-theme') || 'cyan',
-      progress_style: cselectGet('set-progress-style') || 'blocks',
-      use_terminal_bg: el('set-terminal-bg').checked,
-      notify_bell: el('set-notify-bell').checked,
-      auto_check_deps: el('set-auto-check-deps').checked,
       show_home_logo: el('set-show-logo').checked,
-      logo_mode: logoMode || 'ascii',
-      logo_ascii_preset: cselectGet('set-logo-ascii') || 'standard',
-      logo_protocol: cselectGet('set-logo-protocol') || 'kitty',
-      logo_image_path: logoMode === 'image' ? el('set-logo-image').value.trim() : (settingsCache.logo_image_path || ''),
-      default_editor: el('set-default-editor').value.trim(),
       accent_color: state.accent,
     };
     try {
