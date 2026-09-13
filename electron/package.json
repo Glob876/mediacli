@@ -1,7 +1,7 @@
 {
-  "name": "mediacli-shell",
+  "name": "mediagui-shell",
   "version": "0.1.0",
-  "description": "MediaCLI desktop shell (Electron) over the Go daemon API",
+  "description": "MediaGUI desktop shell (Electron) over the Go daemon API",
   "private": true,
   "author": "Glob876",
   "main": "main.js",
@@ -14,8 +14,8 @@
     "package:mac": "electron-builder --mac"
   },
   "build": {
-    "appId": "com.mogdop.mediacli",
-    "productName": "MediaCLI",
+    "appId": "com.mogdop.mediagui",
+    "productName": "MediaGUI",
     "directories": {
       "output": "release"
     },

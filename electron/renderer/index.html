@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MediaCLI</title>
+  <title>MediaGUI</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -82,9 +82,9 @@
         </div>
       </section>
 
-      <!-- Пустое состояние: только бренд и пара подсказок -->
+      <!-- Пустое состояние: логотип и пара подсказок -->
       <div id="home-empty">
-        <div class="brand">MediaCLI</div>
+        <img class="brand-logo" src="assets/logo.png" alt="MediaGUI" onerror="this.outerHTML='<div class=&quot;brand&quot;>MediaGUI</div>'" />
         <div class="hint" data-i18n="brandHint1">Вставьте ссылку выше и нажмите Enter — начнётся загрузка</div>
         <div class="hint" data-i18n="brandHint2">Перетащите файл в окно — откроется конвертация</div>
       </div>

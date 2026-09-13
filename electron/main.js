@@ -1,5 +1,5 @@
 'use strict';
-// MediaCLI Electron shell: spawns `mediacli daemon --port 0`, reads
+// MediaGUI Electron shell: spawns `mediacli daemon --port 0`, reads
 // MEDIACLI_DAEMON_PORT from its stdout and opens the renderer against it.
 // Dev/mock UI without Go: `npm run dev` (=> --mock, no daemon spawned).
 const { app, BrowserWindow, dialog, Menu, ipcMain } = require('electron');
@@ -50,7 +50,7 @@ function confirmCloseText(lang, count) {
       detail: en
         ? `Active tasks: ${count}. Unfinished downloads and conversions will be interrupted.`
         : `Активных задач: ${count}. Незавершённые загрузки и конвертации будут прерваны.`,
-      buttons: en ? ['Stay', 'Quit MediaCLI'] : ['Остаться', 'Закрыть программу'],
+      buttons: en ? ['Stay', 'Quit MediaGUI'] : ['Остаться', 'Закрыть программу'],
     };
   }
   return {
@@ -58,7 +58,7 @@ function confirmCloseText(lang, count) {
     detail: en
       ? 'Could not check active tasks. Unfinished downloads and conversions may be interrupted.'
       : 'Не удалось проверить активные задачи. Незавершённые загрузки и конвертации могут быть прерваны.',
-    buttons: en ? ['Stay', 'Quit MediaCLI'] : ['Остаться', 'Закрыть программу'],
+    buttons: en ? ['Stay', 'Quit MediaGUI'] : ['Остаться', 'Закрыть программу'],
   };
 }
 
@@ -99,7 +99,7 @@ async function createWindow() {
     height: 750,
     minWidth: 900,
     minHeight: 600,
-    title: 'MediaCLI',
+    title: 'MediaGUI',
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     webPreferences: {
@@ -139,7 +139,7 @@ async function createWindow() {
     const txt = confirmCloseText(rep.lang, rep.count);
     const { response } = await dialog.showMessageBox(win, {
       type: 'question',
-      title: 'MediaCLI',
+      title: 'MediaGUI',
       message: txt.message,
       detail: txt.detail,
       buttons: txt.buttons,
@@ -164,7 +164,7 @@ async function createWindow() {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   daemonProc.on('error', (err) => {
-    dialog.showErrorBox('MediaCLI', `Cannot start daemon binary:\n${err.message}`);
+    dialog.showErrorBox('MediaGUI', `Cannot start daemon binary:\n${err.message}`);
     app.quit();
   });
 
@@ -174,7 +174,7 @@ async function createWindow() {
       query: { port: String(port), token },
     });
   } catch (err) {
-    dialog.showErrorBox('MediaCLI', `Daemon failed to start:\n${err.message}`);
+    dialog.showErrorBox('MediaGUI', `Daemon failed to start:\n${err.message}`);
     app.quit();
   }
 }

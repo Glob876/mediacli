@@ -464,7 +464,7 @@ const mockApi = {
   _listeners: {},
   _history: [{ time: '2026-01-01 10:00:00', type: 'Download', source: 'https://example/v', target: 'video.mp4', status: 'Success' }],
   _config: {
-    download_dir: '/tmp/MediaCLI', language: 'ru', video_preset: 'default',
+    download_dir: '/tmp/MediaGUI', language: 'ru', video_preset: 'default',
     audio_format: 'mp3', sub_langs: 'ru,en', proxy_mode: 'system', proxy_url: '',
     concurrent_fragments: 4, bg_queue_max: 3, no_mtime: true, windows_filenames: true, use_archive: false,
     accent_color: '#bfff00', download_presets: [],
@@ -478,7 +478,7 @@ const mockApi = {
     { id: 'standard_mp4', name_en: 'Standard MP4 (H.264 + AAC)', name_ru: 'Стандартный MP4 (H.264 + AAC)', desc_en: 'H.264 video + AAC audio.', desc_ru: 'Видео H.264 + аудио AAC.', ext: 'mp4', suffix: '_mp4', flags: [] },
     { id: 'audio_mp3', name_en: 'Extract Audio MP3', name_ru: 'Извлечь аудио MP3', desc_en: 'Audio only.', desc_ru: 'Только аудио.', ext: 'mp3', suffix: '_audio', flags: [] },
   ],
-  _browsePath: '/tmp/MediaCLI',
+  _browsePath: '/tmp/MediaGUI',
   async presets() {
     // also expose saved download_presets in mock (persisted via localStorage config)
     let dlPresets = [];
@@ -500,7 +500,7 @@ const mockApi = {
     };
   },
   async convertPresets() { return { convert_presets: this._convertPresets }; },
-  async library() { return { dir: '/tmp/MediaCLI', files: this._library }; },
+  async library() { return { dir: '/tmp/MediaGUI', files: this._library }; },
   async browse() {
     return {
       path: this._browsePath, parent: '/tmp',
@@ -577,7 +577,7 @@ const mockApi = {
   },
   async resetConfig() {
     this._config = {
-      download_dir: '/tmp/MediaCLI', language: 'ru', video_preset: 'default',
+    download_dir: '/tmp/MediaGUI', language: 'ru', video_preset: 'default',
       audio_format: 'mp3', sub_langs: 'ru,en', proxy_mode: 'system', proxy_url: '',
       concurrent_fragments: 4, bg_queue_max: 3, no_mtime: true, windows_filenames: true, use_archive: false,
       accent_color: '#bfff00', ffmpeg_path: '', download_presets: [],

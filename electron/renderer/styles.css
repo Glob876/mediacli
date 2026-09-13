@@ -125,6 +125,15 @@ body {
   opacity: 0.55;
   animation: pageIn 0.5s ease;
 }
+/* Логотип вместо текстового заголовка — тоже полупрозрачный. */
+.brand-logo {
+  height: clamp(64px, 12vh, 110px);
+  width: auto;
+  opacity: 0.55;
+  animation: pageIn 0.5s ease;
+  transition: opacity 0.25s ease;
+}
+.brand-logo:hover { opacity: 0.85; }
 .hint {
   margin-top: 10px;
   font-size: 12px;
