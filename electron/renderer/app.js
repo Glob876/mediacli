@@ -574,28 +574,23 @@ if (MOCK) {
 
 const backend = MOCK ? mockApi : api;
 
-/* ================= Виды (вкладок нет — только ghost-навигация) ================= */
+/* ================= Виды (только горячие клавиши) ================= */
 function showView(name) {
-  document.querySelectorAll('.gnav[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
-  document.querySelectorAll('.view').forEach((p) => {
-    const show = p.id === `view-${name}`;
-    p.classList.toggle('hidden', !show);
-    if (show) {
-      p.classList.remove('page-enter');
-      void p.offsetWidth;
-      p.classList.add('page-enter');
-    }
-  });
-  if (name === 'home') renderSlots();
-  if (name === 'library') loadLibrary();
-  if (name === 'convert') { loadConvertPresets(); loadBrowse(currentBrowsePath); }
-  if (name === 'settings') loadSettings();
-  if (name === 'doctor') loadDoctor();
+   document.querySelectorAll('.view').forEach((p) => {
+     const show = p.id === `view-${name}`;
+     p.classList.toggle('hidden', !show);
+     if (show) {
+       p.classList.remove('page-enter');
+       void p.offsetWidth;
+       p.classList.add('page-enter');
+     }
+   });
+   if (name === 'home') renderSlots();
+   if (name === 'library') loadLibrary();
+   if (name === 'convert') { loadConvertPresets(); loadBrowse(currentBrowsePath); }
+   if (name === 'settings') loadSettings();
+   if (name === 'doctor') loadDoctor();
 }
-document.querySelectorAll('.gnav[data-view]').forEach((btn) => {
-  btn.onclick = () => showView(btn.dataset.view);
-});
-el('gnav-history').onclick = openHistory;
 
 /* ================= Полоса по краям экрана ================= */
 function edgeFlash() {
@@ -1567,20 +1562,28 @@ document.addEventListener('keydown', (e) => {
     if (!el('logviewer').classList.contains('hidden')) { closeLogViewer(); return; }
     if (!el('lightbox').classList.contains('hidden')) { closeLightbox(); return; }
     if (document.querySelector('.cselect.open')) { closeAllSelects(); return; }
-    if (!el('history-drawer').classList.contains('hidden')) { closeHistory(); }
+    if (!el('history-drawer').classList.contains('hidden')) { closeHistory(); return; }
+    const current = document.querySelector('.view:not(.hidden)');
+    if (current && current.id !== 'view-home') { showView('home'); return; }
     return;
   }
-  if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !typing) {
-    if (e.code === 'KeyH') {
-      e.preventDefault();
-      if (el('history-drawer').classList.contains('hidden')) openHistory();
-      else closeHistory();
-    } else if (e.code === 'KeyI') {
-      e.preventDefault();
-      showView('settings');
-    }
-  }
-});
+  if (e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && !typing) {
+     if (e.code === 'Digit1') { e.preventDefault(); showView('home'); return; }
+     if (e.code === 'Digit2') { e.preventDefault(); showView('library'); return; }
+     if (e.code === 'Digit3') { e.preventDefault(); showView('convert'); return; }
+     if (e.code === 'Digit4') { e.preventDefault(); showView('doctor'); return; }
+   }
+   if (e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && !typing) {
+     if (e.code === 'KeyH') {
+       e.preventDefault();
+       if (el('history-drawer').classList.contains('hidden')) openHistory();
+       else closeHistory();
+     } else if (e.code === 'KeyI') {
+       e.preventDefault();
+       showView('settings');
+     }
+   }
+ });
 
 /* ================= Guard закрытия окна ================= */
 // Считает активные работы: слоты + задачи демона вне слотов (конвертации).
