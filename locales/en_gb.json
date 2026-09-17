@@ -340,5 +340,14 @@
   "mux_title": "Mux Audio + Video",
   "mux_prompt_video": "Path to video file:",
   "mux_prompt_audio": "Path to audio file:",
-  "inspector_title": "Media Inspector"
+  "inspector_title": "Media Inspector",
+  "universal_title": "Universal Editor",
+  "universal_empty_hint": "Drop file or select path\nAlt+3 is empty until file loaded",
+  "universal_footer_empty": "Enter - load file   Esc/q - back   Alt+3 again",
+  "universal_footer": "Enter - menu   Esc - back",
+  "universal_load_file": "Load file...",
+  "universal_cancel": "Cancel",
+  "universal_change_file": "Change input file",
+  "universal_close": "Close editor",
+  "tab_universal": "Universal"
 }

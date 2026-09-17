@@ -242,6 +242,12 @@ func RunApp() error {
 				GlobalTerminal.Open(s, &cfg)
 				continue
 			}
+			// Alt+3 — отдельный универсальный редактор (пусто → выбор файла, иначе единый редактор всего)
+			if ev.Modifiers()&tcell.ModAlt != 0 && ev.Key() == tcell.KeyRune && ev.Rune() == '3' {
+				clearTerminalImages()
+				ScreenUniversal(s, &cfg, "")
+				continue
+			}
 			switch ev.Key() {
 			case tcell.KeyLeft:
 				if curTab > 0 {

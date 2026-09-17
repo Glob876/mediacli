@@ -1900,6 +1900,13 @@ function dropToConvert(path) {
   setConvertInput(path);
   showView('convert');
 }
+function openUniversalWithFile(path) {
+  wsInput = path;
+  showView('workspace');
+  wsRenderOps();
+  // defer probe until view rendered
+  setTimeout(() => { wsProbeSelected(); wsLoadBrowse(''); }, 50);
+}
 
 /* ================= История (drawer) ================= */
 function openHistory() {
@@ -2752,9 +2759,23 @@ async function init() {
   const dlAudioChk = el('dl-audio-only');
   if (dlAudioChk) dlAudioChk.addEventListener('change', () => { syncDlAudioMode(); });
 
-  // Drag & drop: всё окно главной ведёт в конвертацию.
-  setupDrop(el('view-home'), (p) => dropToConvert(p), el('home-empty'));
+  // Drag & drop: главная ведёт в универсальный редактор (Alt+3) с загруженным файлом
+  setupDrop(el('view-home'), (p) => openUniversalWithFile(p), el('home-empty'));
   setupDrop(el('conv-drop'), (p) => setConvertInput(p));
+  // Alt+3 — универсальный редактор (пусто если ничего не загружено)
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey && (e.code === 'Digit3' || e.key === '3')) {
+      e.preventDefault();
+      if (wsInput) {
+        showView('workspace');
+      } else {
+        // пустой редактор — просто открыть workspace без файла
+        showView('workspace');
+        wsRenderOps();
+        toast('Универсальный редактор (Alt+3) — перетащите файл или выберите слева');
+      }
+    }
+  });
 
   // Ctrl + колесо — размер слотов.
   el('view-home').addEventListener('wheel', (e) => {
@@ -2989,6 +3010,16 @@ function wsRenderOps() {
   if (inp) inp.textContent = wsInput || 'not selected — drag from left or pick';
   const out = el('ws-output');
   if (out && !out.value) wsOutput = '';
+  // toggle empty vs full editor
+  const empty = el('ws-empty');
+  const grid = document.querySelector('#view-workspace .workspace-grid');
+  const pipeline = document.querySelector('#view-workspace .ws-pipeline');
+  const queue = document.querySelector('#view-workspace .card:last-child');
+  const showFull = !!wsInput;
+  if (empty) empty.classList.toggle('hidden', showFull);
+  if (grid) grid.classList.toggle('hidden', !showFull);
+  if (pipeline) pipeline.classList.toggle('hidden', !showFull);
+  // queue stays visible but muted when empty
 }
 
 async function wsLoadBrowse(path) {

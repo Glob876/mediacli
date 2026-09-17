@@ -340,5 +340,14 @@
   "mux_title": "Склейка аудио + видео",
   "mux_prompt_video": "Путь к видеофайлу:",
   "mux_prompt_audio": "Путь к аудиофайлу:",
-  "inspector_title": "Инспектор медиа"
+  "inspector_title": "Инспектор медиа",
+  "universal_title": "Универсальный редактор",
+  "universal_empty_hint": "Перетащите файл или укажите путь\nAlt+3 пуст до загрузки файла",
+  "universal_footer_empty": "Enter - загрузить файл   Esc/q - назад   Alt+3 снова",
+  "universal_footer": "Enter - menu   Esc - back",
+  "universal_load_file": "Загрузить файл...",
+  "universal_cancel": "Отмена",
+  "universal_change_file": "Сменить файл",
+  "universal_close": "Закрыть редактор",
+  "tab_universal": "Универсальный"
 }
