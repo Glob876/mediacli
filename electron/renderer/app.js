@@ -19,7 +19,7 @@ const I18N = {
     dlSubs: 'Субтитры (ru,en)', dlSponsor: 'SponsorBlock (вырезать спонсорские сегменты)',
     dlMeta: 'Встраивать метаданные', dlThumb: 'Встраивать обложку (поиск миниатюр + перезапись файла)',
     brandHint1: 'Вставьте ссылку выше и нажмите Enter — начнётся загрузка',
-    brandHint2: 'Перетащите файл в окно — откроется конвертация',
+    brandHint2: 'Перетащите файл в окно — откроется универсальный редактор (Alt+3)',
     slotsTitle: 'Загрузки', slotSizeHint: 'Ctrl + колесо — размер слотов',
     clearDone: 'Очистить завершённые', groupBtn: 'Сгруппировать', ungroup: 'Расформировать',
     groupName: 'Группа', waiting: 'Ожидает очереди', queued: 'В очереди…',
@@ -83,7 +83,7 @@ const I18N = {
     presetEdit: 'Редактировать',
     paletteTitle: 'Команды', palettePh: 'Поиск команды…', paletteEmpty: 'Ничего не найдено',
     paletteHint: '↑↓ — выбор, Enter — выполнить, Esc — закрыть',
-    wsEmptyTitle: 'Универсальный редактор — всё в одном месте', wsEmptyHint: 'Перетащи файл на это окно (или на главную) или выбери слева — откроется единый редактор: звук-микс, pipeline, фильтры, субтитры, метаданные, preview.', wsEmptyAlt: 'открыть/переключить редактор', wsNavFile: 'Файл', wsNavInspector: 'Инспектор', wsNavVideo: 'Видео', wsNavAudio: 'Аудио / Микс', wsNavCut: 'Обрезка / Aspect', wsNavFilter: 'Фильтры', wsNavSubs: 'Субтитры', wsNavMeta: 'Метаданные', wsExport: 'ЭКСПОРТ', wsNoFile: 'не выбран — перетащи файл или выбери слева', wsSecInspectorHint: 'Детальная информация ffprobe уже в блоке Файл — здесь можно скопировать команду.', wsSecVideoHint: 'Выбери пресет или задай кодек вручную и нажми Добавить — появится в Pipeline.', wsSecAudioHint: 'Микс звука, громкость, нормализация, добавление дорожки.',
+    wsEmptyTitle: 'Универсальный редактор — всё в одном месте', wsEmptyHint: 'Перетащи файл на это окно (или на главную) или выбери слева — откроется единый редактор: звук-микс, pipeline, фильтры, субтитры, метаданные, preview.', wsEmptyAlt: 'открыть/переключить редактор', wsNavFile: 'Файл', wsNavInspector: 'Инспектор', wsNavVideo: 'Видео', wsNavAudio: 'Аудио / Микс', wsNavCut: 'Обрезка / Aspect', wsNavFilter: 'Фильтры', wsNavSubs: 'Субтитры', wsNavMeta: 'Метаданные', wsExport: 'ЭКСПОРТ', wsNoFile: 'не выбран — перетащи файл или выбери слева', wsSecInspectorHint: 'Детальная информация ffprobe уже в блоке Файл — здесь можно скопировать команду.', wsSecVideoHint: 'Выбери пресет или задай кодек вручную и нажми Добавить — появится в Pipeline.', wsPreviewTitle: 'Предпросмотр', wsSecAudioHint: 'Микс звука, громкость, нормализация, добавление дорожки.',
     consoleTitle: 'Консоль', consolePh: 'help — список команд',
   },
   en: {
@@ -95,7 +95,7 @@ const I18N = {
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
     dlMeta: 'Embed metadata', dlThumb: 'Embed thumbnail (thumbnail hunt + file rewrite)',
     brandHint1: 'Paste a link above and press Enter to start a download',
-    brandHint2: 'Drag a file into the window to convert it',
+    brandHint2: 'Drag a file into the window — universal editor will open (Alt+3)',
     slotsTitle: 'Downloads', slotSizeHint: 'Ctrl + wheel — slot size',
     clearDone: 'Clear finished', groupBtn: 'Group', ungroup: 'Ungroup',
     groupName: 'Group', waiting: 'Queued in group', queued: 'Queued…',
@@ -159,7 +159,7 @@ const I18N = {
     presetEdit: 'Edit',
     paletteTitle: 'Commands', palettePh: 'Search commands…', paletteEmpty: 'No matches',
     paletteHint: '↑↓ — navigate, Enter — run, Esc — close',
-    wsEmptyTitle: 'Universal editor — everything in one place', wsEmptyHint: 'Drag a file here (or onto Home) or pick from left — unified editor will open: audio mix, pipeline, filters, subtitles, metadata, preview.', wsEmptyAlt: 'open/switch editor', wsNavFile: 'File', wsNavInspector: 'Inspector', wsNavVideo: 'Video', wsNavAudio: 'Audio / Mix', wsNavCut: 'Cut / Aspect', wsNavFilter: 'Filters', wsNavSubs: 'Subtitles', wsNavMeta: 'Metadata', wsExport: 'EXPORT', wsNoFile: 'not selected — drag file or pick from left', wsSecInspectorHint: 'Detailed ffprobe info is in File block — copy command here.', wsSecVideoHint: 'Pick preset or set codec manually and click Add — appears in Pipeline.', wsSecAudioHint: 'Audio mix, volume, normalize, add track.',
+    wsEmptyTitle: 'Universal editor — everything in one place', wsEmptyHint: 'Drag a file here (or onto Home) or pick from left — unified editor will open: audio mix, pipeline, filters, subtitles, metadata, preview.', wsEmptyAlt: 'open/switch editor', wsNavFile: 'File', wsNavInspector: 'Inspector', wsNavVideo: 'Video', wsNavAudio: 'Audio / Mix', wsNavCut: 'Cut / Aspect', wsNavFilter: 'Filters', wsNavSubs: 'Subtitles', wsNavMeta: 'Metadata', wsExport: 'EXPORT', wsNoFile: 'not selected — drag file or pick from left', wsSecInspectorHint: 'Detailed ffprobe info is in File block — copy command here.', wsSecVideoHint: 'Pick preset or set codec manually and click Add — appears in Pipeline.', wsPreviewTitle: 'Preview', wsSecAudioHint: 'Audio mix, volume, normalize, add track.',
     consoleTitle: 'Console', consolePh: 'help — list commands',
   },
   'en-US': {
@@ -171,7 +171,7 @@ const I18N = {
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
     dlMeta: 'Embed metadata', dlThumb: 'Embed thumbnail (thumbnail hunt + file rewrite)',
     brandHint1: 'Paste a link above and press Enter to start a download',
-    brandHint2: 'Drag a file into the window to convert it',
+    brandHint2: 'Drag a file into the window — universal editor will open (Alt+3)',
     slotsTitle: 'Downloads', slotSizeHint: 'Ctrl + wheel — slot size',
     clearDone: 'Clear finished', groupBtn: 'Group', ungroup: 'Ungroup',
     groupName: 'Group', waiting: 'Queued in group', queued: 'Queued…',
@@ -235,7 +235,7 @@ const I18N = {
     presetEdit: 'Edit',
     paletteTitle: 'Commands', palettePh: 'Search commands…', paletteEmpty: 'No matches',
     paletteHint: '↑↓ — navigate, Enter — run, Esc — close',
-    wsEmptyTitle: 'Universal editor — everything in one place', wsEmptyHint: 'Drag a file here (or onto Home) or pick from left — unified editor will open: audio mix, pipeline, filters, subtitles, metadata, preview.', wsEmptyAlt: 'open/switch editor', wsNavFile: 'File', wsNavInspector: 'Inspector', wsNavVideo: 'Video', wsNavAudio: 'Audio / Mix', wsNavCut: 'Cut / Aspect', wsNavFilter: 'Filters', wsNavSubs: 'Subtitles', wsNavMeta: 'Metadata', wsExport: 'EXPORT', wsNoFile: 'not selected — drag file or pick from left', wsSecInspectorHint: 'Detailed ffprobe info is in File block — copy command here.', wsSecVideoHint: 'Pick preset or set codec manually and click Add — appears in Pipeline.', wsSecAudioHint: 'Audio mix, volume, normalize, add track.',
+    wsEmptyTitle: 'Universal editor — everything in one place', wsEmptyHint: 'Drag a file here (or onto Home) or pick from left — unified editor will open: audio mix, pipeline, filters, subtitles, metadata, preview.', wsEmptyAlt: 'open/switch editor', wsNavFile: 'File', wsNavInspector: 'Inspector', wsNavVideo: 'Video', wsNavAudio: 'Audio / Mix', wsNavCut: 'Cut / Aspect', wsNavFilter: 'Filters', wsNavSubs: 'Subtitles', wsNavMeta: 'Metadata', wsExport: 'EXPORT', wsNoFile: 'not selected — drag file or pick from left', wsSecInspectorHint: 'Detailed ffprobe info is in File block — copy command here.', wsSecVideoHint: 'Pick preset or set codec manually and click Add — appears in Pipeline.', wsPreviewTitle: 'Preview', wsSecAudioHint: 'Audio mix, volume, normalize, add track.',
     consoleTitle: 'Console', consolePh: 'help — list commands',
   },
 };
@@ -3068,24 +3068,57 @@ async function wsProbeSelected() {
     const info = await backend.probe(wsInput);
     wsInspectData = info;
     wsRenderInspector('streams');
-    // preview info
+    // preview info + video/audio preview (right independent)
     const pi = el('ws-preview-info');
-    if (pi) pi.textContent = `${info.format.format_name||''} ${info.format.duration||''}s — ${info.streams.length} streams`;
-  } catch(e){ el('ws-inspector').textContent = 'Probe failed: '+e.message; }
+    if (pi) pi.textContent = `${info.format.format_name||''} ${info.format.duration||''}s — ${info.streams.length} streams — ${wsInput}`;
+    // update preview player on right (independent of menu)
+    const isVideo = info.streams.some(s=>s.codec_type==='video');
+    const isAudio = !isVideo && info.streams.some(s=>s.codec_type==='audio');
+    const vEl = el('ws-video'), aEl = el('ws-audio'), wrap = el('ws-preview-wrap');
+    const fileUrl = backend.fileUrl(wsInput.split('/').pop()) || backend.fileUrl(wsInput);
+    // Try to load original file for instant preview
+    if (isVideo && vEl) {
+      vEl.src = fileUrl;
+      vEl.classList.remove('hidden');
+      if (aEl) aEl.classList.add('hidden');
+      if (wrap) wrap.classList.add('hidden');
+      vEl.load();
+    } else if (isAudio && aEl) {
+      aEl.src = fileUrl;
+      aEl.classList.remove('hidden');
+      if (vEl) vEl.classList.add('hidden');
+      if (wrap) wrap.classList.add('hidden');
+      aEl.load();
+    }
+    // also update full inspector in center
+    const full = el('ws-inspector-full');
+    if (full) full.textContent = JSON.stringify(info,null,2);
+  } catch(e){
+    const pre = el('ws-inspector');
+    if (pre) pre.textContent = 'Probe failed: '+e.message;
+  }
 }
 
 function wsRenderInspector(tab) {
   const pre = el('ws-inspector');
-  if (!pre || !wsInspectData) { if(pre) pre.textContent='No file selected'; return; }
+  const full = el('ws-inspector-full');
+  if (!wsInspectData) {
+    if(pre) pre.textContent='No file selected';
+    if(full) full.textContent='No file';
+    return;
+  }
   document.querySelectorAll('.ws-ins-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  let txt='';
   if (tab==='streams') {
-    pre.textContent = wsInspectData.streams.map(s=>`[${s.index} ${s.codec_type}] ${s.codec_name} ${s.width? s.width+'x'+s.height:''} ${s.language||''} ${s.pix_fmt||''}`).join('\n');
+    txt = wsInspectData.streams.map(s=>`[${s.index} ${s.codec_type}] ${s.codec_name} ${s.width? s.width+'x'+s.height:''} ${s.language||''} ${s.pix_fmt||''}`).join('\n');
   } else if (tab==='format') {
     const f=wsInspectData.format;
-    pre.textContent = `Format: ${f.format_name} (${f.format_long_name})\nDuration: ${f.duration} (${f.duration_sec})\nSize: ${f.size}\nBitrate: ${f.bit_rate}\nTags: ${JSON.stringify(f.tags||{},null,2)}`;
+    txt = `Format: ${f.format_name} (${f.format_long_name})\nDuration: ${f.duration} (${f.duration_sec})\nSize: ${f.size}\nBitrate: ${f.bit_rate}\nTags: ${JSON.stringify(f.tags||{},null,2)}`;
   } else {
-    pre.textContent = JSON.stringify(wsInspectData,null,2);
+    txt = JSON.stringify(wsInspectData,null,2);
   }
+  if (pre) pre.textContent = txt;
+  if (full) full.textContent = txt;
 }
 
 function wsBuildPayload() {
@@ -3116,6 +3149,11 @@ function wsInit() {
   if (!el('ws-add-op')) return;
   cselectInit('ws-add-op');
   cselectSet('ws-add-op', wsOpTypes.map(o=>({value:o.value,label:o.label})), 'transcode');
+  // new form selects
+  if (el('ws-v-container')) { cselectInit('ws-v-container'); cselectSet('ws-v-container', [{value:'mp4',label:'mp4'},{value:'mkv',label:'mkv'},{value:'mov',label:'mov'},{value:'webm',label:'webm'}], 'mp4'); }
+  if (el('ws-v-codec')) { cselectInit('ws-v-codec'); cselectSet('ws-v-codec', [{value:'libx264',label:'libx264'},{value:'libx265',label:'libx265'},{value:'libsvtav1',label:'libsvtav1'},{value:'copy',label:'copy (remux)'}], 'libx264'); }
+  if (el('ws-aspect-mode')) { cselectInit('ws-aspect-mode'); cselectSet('ws-aspect-mode', [{value:'crop',label:'crop'},{value:'letterbox',label:'letterbox'},{value:'blur',label:'blur'},{value:'stretch',label:'stretch'}], 'crop'); }
+  if (el('ws-subs-mode')) { cselectInit('ws-subs-mode'); cselectSet('ws-subs-mode', [{value:'burn',label:'burn-in'},{value:'embed',label:'embed'},{value:'extract',label:'extract'}], 'burn'); }
   el('btn-ws-add').onclick = async ()=>{
     const t = cselectGet('ws-add-op');
     let cfg = {};
@@ -3174,6 +3212,66 @@ function wsInit() {
   el('btn-ws-copy-ffprobe').onclick = ()=>{
     if(!wsInput) return; const cmd = `ffprobe -v quiet -print_format json -show_format -show_streams -show_chapters "${wsInput}"`;
     navigator.clipboard.writeText(cmd).then(()=>toast('Copied')).catch(()=>toast(cmd));
+  };
+  const btnCopy2 = el('btn-ws-copy-ffprobe2');
+  if (btnCopy2) btnCopy2.onclick = ()=> el('btn-ws-copy-ffprobe').click();
+  // per-section Add buttons with own menus (forms)
+  const addVideo = el('btn-ws-add-video');
+  if (addVideo) addVideo.onclick = ()=>{
+    const container = cselectGet('ws-v-container')||'mp4';
+    const vcodec = cselectGet('ws-v-codec')||'libx264';
+    const crf = (el('ws-v-crf')?.value.trim()||'18');
+    const preset = (el('ws-v-preset')?.value.trim()||'medium');
+    wsOps.push({type:'transcode', config:{ container, vcodec, acodec:'aac', crf, preset, pix_fmt:'yuv420p' }});
+    wsRenderOps(); toast('Видео добавлено в Pipeline');
+  };
+  const addAudio = el('btn-ws-add-audio');
+  if (addAudio) addAudio.onclick = ()=>{
+    const volStr = el('ws-a-vol')?.value.trim()||'';
+    let vol; if(volStr) vol=parseFloat(volStr);
+    const norm = !!el('ws-a-norm')?.checked;
+    wsOps.push({type:'audio', config:{ volume:vol, normalize:norm }});
+    wsRenderOps(); toast('Аудио добавлено');
+  };
+  const addMux = el('btn-ws-add-mux');
+  if (addMux) addMux.onclick = ()=>{
+    const extra = el('ws-a-extra')?.value.trim()||''; if(!extra){ toast('Укажи путь к аудио',true); return; }
+    const shortest = !!el('ws-a-shortest')?.checked;
+    wsOps.push({type:'mux', config:{ extra_inputs:[extra], shortest }});
+    wsRenderOps(); toast('Mux добавлен');
+  };
+  const addTrim = el('btn-ws-add-trim');
+  if (addTrim) addTrim.onclick = ()=>{
+    const s = el('ws-cut-start')?.value.trim()||''; const e = el('ws-cut-end')?.value.trim()||'';
+    wsOps.push({type:'trim', config:{ start:s, end:e, mode:'reencode' }});
+    wsRenderOps(); toast('Trim добавлен');
+  };
+  const addAspect = el('btn-ws-add-aspect');
+  if (addAspect) addAspect.onclick = ()=>{
+    const ratio = (el('ws-aspect-ratio')?.value.trim()||'9:16'); const [w,h]=ratio.split(':').map(Number);
+    const mode = cselectGet('ws-aspect-mode')||'crop';
+    wsOps.push({type:'aspect', config:{ ratio_w:w||9, ratio_h:h||16, mode, size_preset:'1080p' }});
+    wsRenderOps(); toast('Aspect добавлен');
+  };
+  const addFilter = el('btn-ws-add-filter');
+  if (addFilter) addFilter.onclick = ()=>{
+    const vf = el('ws-filter-vf')?.value.trim()||''; const af = el('ws-filter-af')?.value.trim()||'';
+    if(!vf && !af){ toast('Укажи VF/AF',true); return; }
+    wsOps.push({type:'filter', config:{ vf, af }});
+    wsRenderOps(); toast('Filter добавлен');
+  };
+  const addSubs = el('btn-ws-add-subs');
+  if (addSubs) addSubs.onclick = ()=>{
+    const mode = cselectGet('ws-subs-mode')||'burn'; const file = el('ws-subs-file')?.value.trim()||'';
+    if(!file){ toast('Укажи файл субтитров',true); return; }
+    wsOps.push({type:'subtitle', config:{ mode, input:file }});
+    wsRenderOps(); toast('Subtitle добавлен');
+  };
+  const addMeta = el('btn-ws-add-meta');
+  if (addMeta) addMeta.onclick = ()=>{
+    const title = el('ws-meta-title')?.value.trim()||''; const artist = el('ws-meta-artist')?.value.trim()||'';
+    wsOps.push({type:'metadata', config:{ title, artist }});
+    wsRenderOps(); toast('Metadata добавлен');
   };
   // drag into pipeline
   const wsCard = el('view-workspace');

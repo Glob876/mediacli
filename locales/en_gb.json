@@ -28,7 +28,7 @@
   "bg_option_solid": "Solid Theme Background",
   "bg_transferred": "Task transferred to background queue!",
   "brandHint1": "Paste a link above and press Enter to start a download",
-  "brandHint2": "Drag a file into the window to convert it",
+  "brandHint2": "Drag a file into the window — universal editor will open (Alt+3)",
   "browse": "Browse files",
   "cancel": "Cancel",
   "checking": "Checking…",
@@ -365,5 +365,6 @@
   "wsNoFile": "not selected — drag file or pick from left",
   "wsSecInspectorHint": "Detailed ffprobe info is in File block — copy command here.",
   "wsSecVideoHint": "Pick preset or set codec manually and click Add — appears in Pipeline.",
-  "wsSecAudioHint": "Audio mix, volume, normalize, add track."
+  "wsSecAudioHint": "Audio mix, volume, normalize, add track.",
+  "wsPreviewTitle": "Preview"
 }
