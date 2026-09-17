@@ -140,6 +140,10 @@ func RunApp() error {
 			ID:       "local",
 			TitleKey: "tab_local",
 			Items: []MenuItem{
+				{LabelKey: "menu_pipeline", Action: ScreenPipeline},
+				{LabelKey: "menu_mux", Action: ScreenMux},
+				{LabelKey: "menu_batch_convert", Action: ScreenBatch},
+				{LabelKey: "menu_inspector", Action: ScreenInspector},
 				{LabelKey: "menu_aspect_ratio", Action: ScreenAspectRatio},
 				{LabelKey: "menu_convert", Action: ScreenConvert},
 				{LabelKey: "menu_trim", Action: ScreenTrim},
