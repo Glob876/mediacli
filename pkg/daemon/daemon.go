@@ -66,7 +66,28 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/library/thumb", s.handleLibraryThumb)
 	s.mux.HandleFunc("GET /api/browse", s.handleBrowse)
 	s.mux.HandleFunc("GET /api/tools/ffmpeg", s.handleToolsFfmpeg)
+	s.mux.HandleFunc("GET /api/tools/ffprobe", s.handleToolsFfprobe)
 	s.mux.HandleFunc("GET /api/meta", s.handleMeta)
+	// MediaGUI workspace
+	s.mux.HandleFunc("GET /api/probe", s.handleProbe)
+	s.mux.HandleFunc("POST /api/pipeline/preview", s.handlePipelinePreview)
+	s.mux.HandleFunc("POST /api/pipeline/run", s.handlePipelineRun)
+	s.mux.HandleFunc("POST /api/pipeline/dry-run", s.handlePipelineDryRun)
+	s.mux.HandleFunc("GET /api/pipeline/presets", s.handleListMediaPresets)
+	s.mux.HandleFunc("POST /api/pipeline/presets", s.handleCreateMediaPreset)
+	s.mux.HandleFunc("DELETE /api/pipeline/presets/{id}", s.handleDeleteMediaPreset)
+	s.mux.HandleFunc("POST /api/operations/aspect", s.handleOpAspect)
+	s.mux.HandleFunc("POST /api/operations/mux", s.handleOpMux)
+	s.mux.HandleFunc("POST /api/operations/demux", s.handleOpDemux)
+	s.mux.HandleFunc("POST /api/operations/trim", s.handleOpTrim)
+	s.mux.HandleFunc("POST /api/operations/concat", s.handleOpConcat)
+	s.mux.HandleFunc("POST /api/operations/transcode", s.handleOpTranscode)
+	s.mux.HandleFunc("POST /api/operations/filter", s.handleOpFilter)
+	s.mux.HandleFunc("POST /api/operations/audio", s.handleOpAudio)
+	s.mux.HandleFunc("POST /api/operations/subtitle", s.handleOpSubtitle)
+	s.mux.HandleFunc("POST /api/operations/metadata", s.handleOpMetadata)
+	s.mux.HandleFunc("POST /api/batch", s.handleBatch)
+	s.mux.HandleFunc("POST /api/tasks/group/{groupId}/cancel", s.handleCancelGroup)
 }
 
 // Handler wraps the mux with CORS (loopback-only server) and token auth.
