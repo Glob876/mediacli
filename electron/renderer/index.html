@@ -60,13 +60,38 @@
           <div class="cselect" id="dl-saved-preset"></div>
         </label>
         <div class="muted small" id="dl-saved-desc" style="margin-bottom:8px"></div>
-        <div class="grid2">
-          <label><span data-i18n="dlPreset">Пресет кодека:</span>
-            <div class="cselect" id="preset"></div>
-          </label>
-          <label><span data-i18n="dlQuality">Макс. качество:</span>
-            <div class="cselect" id="quality"></div>
-          </label>
+        <div class="checks" style="margin-bottom:8px">
+          <label><input id="dl-audio-only" type="checkbox" /> <span data-i18n="dlAudioOnly">Извлечь только аудио</span></label>
+        </div>
+        <!-- Видео-пресеты (по умолчанию) -->
+        <div id="dl-video-group">
+          <div class="grid2">
+            <label><span data-i18n="dlVideoPreset">Видео-пресет:</span>
+              <div class="cselect" id="preset"></div>
+            </label>
+            <label><span data-i18n="dlQuality">Макс. качество:</span>
+              <div class="cselect" id="quality"></div>
+            </label>
+          </div>
+          <div class="grid2">
+            <label><span data-i18n="presetVcodec">Видео-кодек:</span>
+              <div class="cselect" id="dl-vcodec"></div>
+            </label>
+            <label><span data-i18n="presetFps">Лимит FPS:</span>
+              <div class="cselect" id="dl-fps"></div>
+            </label>
+          </div>
+        </div>
+        <!-- Аудио-пресеты (когда включен тумблер) -->
+        <div id="dl-audio-group" class="hidden">
+          <div class="grid2">
+            <label><span data-i18n="audioFmt">Аудио-формат:</span>
+              <div class="cselect" id="dl-audio-format"></div>
+            </label>
+            <label><span data-i18n="presetAudioQuality">Качество аудио:</span>
+              <div class="cselect" id="dl-audio-quality"></div>
+            </label>
+          </div>
         </div>
         <label><span data-i18n="dlCut">Вырезка по времени (напр. 00:01:00-00:03:30, либо не указывайте):</span>
           <input id="timerange" type="text" placeholder="00:01:00-00:03:30" spellcheck="false" />
@@ -111,6 +136,55 @@
         <button id="btn-library-refresh" class="btn small" data-i18n="refresh">Обновить</button>
       </div>
       <div id="library" class="cards thumbs"></div>
+    </section>
+
+    <!-- WORKSPACE — Pipeline Builder (NLE-lite) -->
+    <section id="view-workspace" class="view hidden">
+      <div class="workspace-grid">
+        <div class="card ws-library">
+          <div class="browse-head"><b>Library / Browse</b><button id="btn-ws-refresh" class="btn small" data-i18n="refresh">Обновить</button></div>
+          <div class="muted small browse-path" id="ws-path">…</div>
+          <div id="ws-dirs" class="browselist"></div>
+          <div id="ws-files" class="browselist"></div>
+          <div class="row" style="margin-top:6px"><button id="btn-ws-probe" class="btn small">Inspect Selected</button></div>
+        </div>
+        <div class="card ws-preview">
+          <b>Preview Player</b>
+          <div id="ws-preview-wrap" class="thumbwrap" style="height:180px;aspect-ratio:auto"><div class="ph">▶</div></div>
+          <video id="ws-video" controls class="hidden" style="width:100%;background:#000"></video>
+          <div class="muted small" id="ws-preview-info">Select a file and add operations to preview</div>
+          <div class="row"><button id="btn-ws-preview" class="btn small">Generate 5s Preview</button><button id="btn-ws-waveform" class="btn small">Waveform</button></div>
+        </div>
+        <div class="card ws-inspector">
+          <b>Inspector</b>
+          <div class="tabs small" style="display:flex;gap:4px;margin:6px 0">
+            <button class="btn small ws-ins-tab active" data-tab="streams">Streams</button>
+            <button class="btn small ws-ins-tab" data-tab="format">Format</button>
+            <button class="btn small ws-ins-tab" data-tab="raw">Raw JSON</button>
+          </div>
+          <pre id="ws-inspector" class="slot-log" style="max-height:220px">No file selected</pre>
+          <div class="row"><button id="btn-ws-copy-ffprobe" class="btn small">Copy ffprobe cmd</button></div>
+        </div>
+      </div>
+      <div class="card ws-pipeline" style="margin-top:8px">
+        <div class="row" style="justify-content:space-between"><b>Pipeline Builder</b><span class="muted small">Input → Operations → Output</span></div>
+        <div class="muted small" style="margin:4px 0">Input: <span id="ws-pipeline-input" class="muted">not selected — drag from left or pick</span></div>
+        <div id="ws-ops" class="list"></div>
+        <div class="row" style="margin-top:6px;flex-wrap:wrap">
+          <div class="cselect" id="ws-add-op" style="min-width:180px"></div>
+          <button id="btn-ws-add" class="btn small">+ Add</button>
+          <span class="spacer"></span>
+          <button id="btn-ws-show-cmd" class="btn small">Show Command</button>
+          <button id="btn-ws-save-preset" class="btn small">Save as Preset</button>
+          <button id="btn-ws-run" class="btn primary small" data-i18n="convertBtn">Run Pipeline</button>
+        </div>
+        <label style="margin-top:6px"><span data-i18n="convOutput">Выходной файл (необязательно):</span><input id="ws-output" type="text" placeholder="auto" /></label>
+        <pre id="ws-cmd-preview" class="slot-log hidden" style="margin-top:6px"></pre>
+      </div>
+      <div class="card" style="margin-top:8px">
+        <div class="row"><b>Queue (chain view)</b><span class="spacer"></span><button id="btn-ws-queue-clear" class="btn small">Clear finished</button></div>
+        <div id="ws-queue" class="list"></div>
+      </div>
     </section>
 
     <!-- КОНВЕРТАЦИЯ -->

@@ -304,6 +304,9 @@ func TestMetaThemesMatchUI(t *testing.T) {
 }
 
 func TestResetConfig(t *testing.T) {
+	// Изолируем файловую систему конфига: без этого тест перезапишет реальный
+	// ~/.config/mediacli/config.json пользователя (баг «слетел конфиг»).
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	srv := testServer()
 	rec := doReq(t, srv, "POST", "/api/config/reset", "", "secret")
 	if rec.Code != http.StatusOK {

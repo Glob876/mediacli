@@ -14,8 +14,8 @@ const I18N = {
     navHome: 'Главная', navLibrary: 'Видео', navConvert: 'Конвертация', navHistory: 'История операций', navSettings: 'Настройки', navDoctor: 'Система',
     urlPh: 'Вставьте ссылку (YouTube, VK, Twitch…) и нажмите Enter…',
     dlSettings: 'Настройки загрузки (пресеты)', download: 'Скачать',
-    dlPreset: 'Пресет кодека:', dlQuality: 'Макс. качество:',
-    qBest: 'Лучшее доступное (Max)', dlCut: 'Вырезка по времени (напр. 00:01:00-00:03:30, либо не указывайте):',
+    dlPreset: 'Пресет кодека:', dlVideoPreset: 'Видео-пресет:', dlQuality: 'Макс. качество:',
+    dlAudioOnly: 'Извлечь только аудио', qBest: 'Лучшее доступное (Max)', dlCut: 'Вырезка по времени (напр. 00:01:00-00:03:30, либо не указывайте):',
     dlSubs: 'Субтитры (ru,en)', dlSponsor: 'SponsorBlock (вырезать спонсорские сегменты)',
     dlMeta: 'Встраивать метаданные', dlThumb: 'Встраивать обложку (поиск миниатюр + перезапись файла)',
     brandHint1: 'Вставьте ссылку выше и нажмите Enter — начнётся загрузка',
@@ -89,8 +89,8 @@ const I18N = {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
     urlPh: 'Paste a link (YouTube, VK, Twitch…) and press Enter…',
     dlSettings: 'Download settings (presets)', download: 'Download',
-    dlPreset: 'Codec preset:', dlQuality: 'Max quality:',
-    qBest: 'Best available (Max)', dlCut: 'Time range cut (e.g. 00:01:00-00:03:30, or leave empty):',
+    dlPreset: 'Codec preset:', dlVideoPreset: 'Video preset:', dlQuality: 'Max quality:',
+    dlAudioOnly: 'Extract audio only', qBest: 'Best available (Max)', dlCut: 'Time range cut (e.g. 00:01:00-00:03:30, or leave empty):',
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
     dlMeta: 'Embed metadata', dlThumb: 'Embed thumbnail (thumbnail hunt + file rewrite)',
     brandHint1: 'Paste a link above and press Enter to start a download',
@@ -164,8 +164,8 @@ const I18N = {
     navHome: 'Home', navLibrary: 'Library', navConvert: 'Convert', navHistory: 'Operation history', navSettings: 'Settings', navDoctor: 'System',
     urlPh: 'Paste a link (YouTube, VK, Twitch…) and press Enter…',
     dlSettings: 'Download settings (presets)', download: 'Download',
-    dlPreset: 'Codec preset:', dlQuality: 'Max quality:',
-    qBest: 'Best available (Max)', dlCut: 'Time range cut (e.g. 00:01:00-00:03:30, or leave empty):',
+    dlPreset: 'Codec preset:', dlVideoPreset: 'Video preset:', dlQuality: 'Max quality:',
+    dlAudioOnly: 'Extract audio only', qBest: 'Best available (Max)', dlCut: 'Time range cut (e.g. 00:01:00-00:03:30, or leave empty):',
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
     dlMeta: 'Embed metadata', dlThumb: 'Embed thumbnail (thumbnail hunt + file rewrite)',
     brandHint1: 'Paste a link above and press Enter to start a download',
@@ -264,6 +264,15 @@ async function loadLocales() {
 
 const t2 = (key) => T(key); // алиас для совместимости
 
+function isAudioPresetId(id) { return typeof id === 'string' && id.startsWith('audio_'); }
+
+function dlVideoPresetOptions() {
+  const all = videoPresetsCache.length ? videoPresetsCache : [];
+  const videoOnly = all.filter((p) => !isAudioPresetId(p.id));
+  if (!videoOnly.length && all.length) return all.map((p) => ({ value: p.id, label: `${presetLabel(p)}` }));
+  return videoOnly.map((p, i) => ({ value: p.id, label: `${i}. ${presetLabel(p)}` }));
+}
+
 function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((n) => { n.textContent = T(n.dataset.i18n); });
   document.querySelectorAll('[data-i18n-ph]').forEach((n) => { n.placeholder = T(n.dataset.i18nPh); });
@@ -271,9 +280,20 @@ function applyI18n() {
   document.documentElement.lang = state.lang;
   cselectSet('quality', qualityOptions(), cselectGet('quality'));
   if (videoPresetsCache.length) {
-    cselectSet('preset', videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) })), cselectGet('preset'));
+    const vOpts = dlVideoPresetOptions();
+    // dl preset - only video presets (audio separated)
+    cselectSet('preset', vOpts, cselectGet('preset'));
     cselectSet('set-video-preset', videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) })), cselectGet('set-video-preset'));
+    if (cselects['preset-video-preset']) {
+      const cur = cselectGet('preset-video-preset');
+      const plain = videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) }));
+      cselectSet('preset-video-preset', plain.length ? plain : [{ value: 'default', label: 'default' }], cur || 'default');
+    }
   }
+  if (cselects['dl-vcodec']) cselectSet('dl-vcodec', presetVcodecOptions(), cselectGet('dl-vcodec'));
+  if (cselects['dl-fps']) cselectSet('dl-fps', presetFpsOptions(), cselectGet('dl-fps'));
+  if (cselects['dl-audio-format']) cselectSet('dl-audio-format', (metaCache.audio_formats || ['mp3','flac','wav','m4a','opus']).map((v) => ({ value: v, label: v })), cselectGet('dl-audio-format'));
+  if (cselects['dl-audio-quality']) cselectSet('dl-audio-quality', presetAudioQualityOptions(), cselectGet('dl-audio-quality'));
   if (convertPresetsCache.length) {
     cselectSet('conv-preset', convertPresetsCache.map((p) => ({ value: p.id, label: convPresetLabel(p) })), cselectGet('conv-preset'));
     updateConvertDesc();
@@ -485,6 +505,18 @@ const api = {
   meta: () => api.req('GET', '/api/meta'),
   task: (id) => api.req('GET', `/api/tasks/${id}`),
   ffmpegCheck: (path) => api.req('GET', '/api/tools/ffmpeg?path=' + encodeURIComponent(path || '')),
+  ffprobeCheck: (path) => api.req('GET', '/api/tools/ffprobe?path=' + encodeURIComponent(path || '')),
+  probe: (path) => api.req('GET', '/api/probe?path=' + encodeURIComponent(path)),
+  pipelineDryRun: (payload) => api.req('POST', '/api/pipeline/dry-run', payload),
+  pipelineRun: (payload) => api.req('POST', '/api/pipeline/run', payload),
+  pipelinePreview: (payload) => api.req('POST', '/api/pipeline/preview', payload),
+  mediaPresets: () => api.req('GET', '/api/pipeline/presets'),
+  saveMediaPreset: (p) => api.req('POST', '/api/pipeline/presets', p),
+  deleteMediaPreset: (id) => api.req('DELETE', `/api/pipeline/presets/${encodeURIComponent(id)}`),
+  batch: (payload) => api.req('POST', '/api/batch', payload),
+  cancelGroup: (groupId) => api.req('POST', `/api/tasks/group/${encodeURIComponent(groupId)}/cancel`),
+  opAspect: (payload) => api.req('POST', '/api/operations/aspect', payload),
+  opMux: (payload) => api.req('POST', '/api/operations/mux', payload),
   eventsUrl: (id) => `${BASE}/api/tasks/${id}/events?token=${encodeURIComponent(TOKEN)}`,
   fileUrl: (name) => `${BASE}/api/library/file?name=${encodeURIComponent(name)}&token=${encodeURIComponent(TOKEN)}`,
   thumbUrl: (name) => `${BASE}/api/library/thumb?name=${encodeURIComponent(name)}&token=${encodeURIComponent(TOKEN)}`,
@@ -634,10 +666,19 @@ const mockApi = {
     if (!t) throw new Error('not found');
     return { ...t, log_tail: [t.stage || t.status] };
   },
+  async probe(path) { return { path, format:{ format_name:'mp4', duration:'60', duration_sec:60, size:'1000000', bit_rate:'200000', tags:{} }, streams:[{index:0, codec_type:'video', codec_name:'h264', width:1920, height:1080, pix_fmt:'yuv420p'}], chapters:[] }; },
+  async pipelineDryRun(payload){ return { commands:[`ffmpeg -y -i ${payload.inputs[0]} -c:v libx264 mock_out.mp4`], count:1 }; },
+  async pipelineRun(payload){ const id=++this._id; this._tasks.unshift({id, title:'Pipeline mock', source:payload.inputs[0], status:'running', progress:10}); return { task_ids:[id], group_id:'mock_group' }; },
+  async pipelinePreview(payload){ return { preview_path:'#', command:'mock preview' }; },
+  async mediaPresets(){ return { presets:[] }; },
+  async saveMediaPreset(p){ return { ok:true, preset:p }; },
+  async deleteMediaPreset(id){ return { ok:true }; },
+  async batch(payload){ return { task_ids:[] , count:0}; },
   async ffmpegCheck(path) {
     if (path && path.includes('bad')) return { configured: path, resolved: path, found: false, error: 'mock: file not found' };
     return { configured: path || '', resolved: 'ffmpeg', found: true, version: 'mock ffmpeg 7.x' };
   },
+  async ffprobeCheck(path){ return { configured:path||'', resolved:'ffprobe', found:true, version:'mock ffprobe 7.x'}; },
   async status() {
     return {
       ok: true, version: 'mock',
@@ -671,24 +712,47 @@ function showView(name) {
        p.classList.add('page-enter');
      }
    });
-   if (name === 'home') renderSlots();
-   if (name === 'library') loadLibrary();
-   if (name === 'convert') { loadConvertPresets(); loadBrowse(currentBrowsePath); }
-   if (name === 'settings') loadSettings();
-   if (name === 'doctor') loadDoctor();
-   if (name === 'presets') { void loadVideoPresets(); renderPresetsList(); }
+    if (name === 'home') renderSlots();
+    if (name === 'library') loadLibrary();
+    if (name === 'convert') { loadConvertPresets(); loadBrowse(currentBrowsePath); }
+    if (name === 'settings') loadSettings();
+    if (name === 'doctor') loadDoctor();
+    if (name === 'presets') { void loadVideoPresets(); renderPresetsList(); }
+    if (name === 'workspace') { wsLoadBrowse(''); wsRenderOps(); }
 }
 
 /* ================= Пресеты загрузок (Ctrl+Shift+I, шестерёнка) ================= */
+function syncDlAudioMode() {
+  const audioOnly = !!el('dl-audio-only')?.checked;
+  const vg = el('dl-video-group');
+  const ag = el('dl-audio-group');
+  if (vg) vg.classList.toggle('hidden', audioOnly);
+  if (ag) ag.classList.toggle('hidden', !audioOnly);
+}
+
 function collectDlFields() {
-  const fields = { video_preset: cselectGet('preset') || 'default' };
-  if (cselectGet('quality')) fields.quality = cselectGet('quality');
-  if (el('timerange').value.trim()) fields.download_section = el('timerange').value.trim();
-  if (el('subs').checked) { fields.subs_enabled = true; fields.embed_subs = true; }
-  if (el('sponsor').checked) fields.sponsorblock = 'remove';
-  fields.embed_metadata = el('emb-meta').checked;
-  fields.embed_thumbnail = el('emb-thumb').checked;
-  return fields;
+  const audioOnly = !!el('dl-audio-only')?.checked;
+  const base = {};
+  if (el('timerange').value.trim()) base.download_section = el('timerange').value.trim();
+  if (el('subs').checked) { base.subs_enabled = true; base.embed_subs = true; }
+  if (el('sponsor').checked) base.sponsorblock = 'remove';
+  base.embed_metadata = el('emb-meta').checked;
+  base.embed_thumbnail = el('emb-thumb').checked;
+  if (audioOnly) {
+    base.audio_only = true;
+    base.audio_format = cselectGet('dl-audio-format') || 'mp3';
+    base.audio_quality = cselectGet('dl-audio-quality') || '0';
+    // video fields are irrelevant when audio_only, but keep quality out
+    return base;
+  }
+  base.video_preset = cselectGet('preset') || 'default';
+  if (cselectGet('quality')) base.quality = cselectGet('quality');
+  const vcodec = cselectGet('dl-vcodec');
+  if (vcodec && vcodec !== 'auto') base.vcodec = vcodec;
+  else if (vcodec === 'auto') base.vcodec = 'auto';
+  const fps = cselectGet('dl-fps');
+  if (fps) base.fps_limit = fps;
+  return base;
 }
 
 // Полноценный редактор пресета — повторяет консольный ScreenManualPresetConfig
@@ -1655,14 +1719,19 @@ async function loadVideoPresets() {
     const data = await backend.presets();
     videoPresetsCache = data.video_presets || [];
     savedPresetsCache = data.download_presets || [];
-    const opts = videoPresetsCache.map((p, i) => ({ value: p.id, label: `${i}. ${presetLabel(p)}` }));
+    const vOpts = dlVideoPresetOptions();
     const plain = videoPresetsCache.map((p) => ({ value: p.id, label: presetLabel(p) }));
-    cselectSet('preset', opts, cselectGet('preset') || 'default');
+    cselectSet('preset', vOpts, cselectGet('preset') || 'default');
     cselectSet('set-video-preset', plain, settingsCache ? (settingsCache.video_preset || 'default') : 'default');
     if (cselects['preset-video-preset']) {
       const cur = cselectGet('preset-video-preset');
       cselectSet('preset-video-preset', plain.length ? plain : [{ value: 'default', label: 'default' }], cur || 'default');
     }
+    // refresh audio/video extra selects if they exist and meta ready
+    if (cselects['dl-vcodec']) cselectSet('dl-vcodec', presetVcodecOptions(), cselectGet('dl-vcodec') || 'auto');
+    if (cselects['dl-fps']) cselectSet('dl-fps', presetFpsOptions(), cselectGet('dl-fps') || '');
+    if (cselects['dl-audio-format']) cselectSet('dl-audio-format', (metaCache.audio_formats || ['mp3','flac','wav','m4a','opus']).map((v) => ({ value: v, label: v })), cselectGet('dl-audio-format') || 'mp3');
+    if (cselects['dl-audio-quality']) cselectSet('dl-audio-quality', presetAudioQualityOptions(), cselectGet('dl-audio-quality') || '0');
     refreshSavedPresetSelect();
     renderPresetsList();
   } catch {
@@ -1687,29 +1756,42 @@ function updateDlPresetDesc() {
   const id = cselectGet('dl-saved-preset');
   const box = el('dl-saved-desc');
   if (!box) return;
+  const manualIds = ['preset','quality','dl-vcodec','dl-fps','dl-audio-format','dl-audio-quality','dl-video-group','dl-audio-group'];
+  const setDim = (v) => {
+    manualIds.forEach((mid) => {
+      const n = el(mid);
+      if (n) n.style.opacity = v ? '0.55' : '';
+    });
+    const chk = el('dl-audio-only');
+    if (chk) chk.disabled = !!v;
+  };
   if (!id) {
     box.textContent = '';
-    // enable manual controls
-    el('preset').style.opacity = '';
-    el('quality').style.opacity = '';
+    setDim(false);
+    syncDlAudioMode();
     return;
   }
   const p = savedPresetsCache.find((x) => x.id === id);
   if (!p) { box.textContent = ''; return; }
   const f = p.fields || {};
   const parts = [];
-  if (f.video_preset) {
-    const vp = videoPresetsCache.find((x) => x.id === f.video_preset);
-    parts.push(vp ? presetLabel(vp) : f.video_preset);
+  if (f.audio_only) {
+    parts.push(T('dlAudioOnly') + ': ' + (f.audio_format || 'mp3') + ' q' + (f.audio_quality || '0'));
+  } else {
+    if (f.video_preset) {
+      const vp = videoPresetsCache.find((x) => x.id === f.video_preset);
+      parts.push(vp ? presetLabel(vp) : f.video_preset);
+    }
+    if (f.quality) parts.push(f.quality + 'p');
+    if (f.vcodec && f.vcodec !== 'auto') parts.push(f.vcodec);
+    if (f.fps_limit) parts.push(f.fps_limit + 'fps');
+    if (f.audio_only) parts.push('audio:' + (f.audio_format || 'mp3'));
   }
-  if (f.quality) parts.push(f.quality + 'p');
   if (f.download_section) parts.push(f.download_section);
   if (f.subs_enabled) parts.push('subs:' + (f.sub_langs || ''));
   if (f.sponsorblock && f.sponsorblock !== 'off') parts.push('SponsorBlock:' + f.sponsorblock);
   box.textContent = parts.length ? parts.join(' • ') : p.name;
-  // dim manual controls when preset active (they're ignored)
-  el('preset').style.opacity = '0.55';
-  el('quality').style.opacity = '0.55';
+  setDim(true);
 }
 
 async function loadBrowse(path) {
@@ -2574,6 +2656,10 @@ async function init() {
   cselectInit('preset');
   cselectInit('quality');
   cselectInit('dl-saved-preset', () => updateDlPresetDesc());
+  cselectInit('dl-vcodec');
+  cselectInit('dl-fps');
+  cselectInit('dl-audio-format');
+  cselectInit('dl-audio-quality');
   cselectInit('conv-preset');
   cselectInit('set-language');
   cselectInit('set-user-goal');
@@ -2600,6 +2686,10 @@ async function init() {
   cselectInit('preset-cookies-browser');
   cselectInit('preset-proxy-mode', () => syncPresetEditorConditionalRows());
   cselectSet('quality', qualityOptions(), '');
+  cselectSet('dl-vcodec', presetVcodecOptions(), 'auto');
+  cselectSet('dl-fps', presetFpsOptions(), '');
+  cselectSet('dl-audio-format', (metaCache.audio_formats || ['mp3','flac','wav','m4a','opus']).map((v) => ({ value: v, label: v })), 'mp3');
+  cselectSet('dl-audio-quality', presetAudioQualityOptions(), '0');
   cselectSet('preset-quality', presetQualityOptions(), '');
   cselectSet('preset-vcodec', presetVcodecOptions(), 'auto');
   cselectSet('preset-fps', presetFpsOptions(), '');
@@ -2639,8 +2729,12 @@ async function init() {
   await loadVideoPresets();
   await loadConvertPresets();
   await loadMeta();
+  // after meta loaded, refresh dl audio format options
+  if (cselects['dl-audio-format']) cselectSet('dl-audio-format', (metaCache.audio_formats || ['mp3','flac','wav','m4a','opus']).map((v) => ({ value: v, label: v })), cselectGet('dl-audio-format') || 'mp3');
   renderSlots();
   pumpQueue();
+  syncDlAudioMode();
+  try { wsInit(); } catch(e){ console.error(e); }
 
   // Главная: топбар.
   el('btn-dl-start').onclick = () => { void startDownload(); };
@@ -2654,6 +2748,8 @@ async function init() {
     if (willShow) void loadVideoPresets();
   };
   el('btn-dl-save-preset').onclick = () => { void saveCurrentDlAsPreset(); };
+  const dlAudioChk = el('dl-audio-only');
+  if (dlAudioChk) dlAudioChk.addEventListener('change', () => { syncDlAudioMode(); });
 
   // Drag & drop: всё окно главной ведёт в конвертацию.
   setupDrop(el('view-home'), (p) => dropToConvert(p), el('home-empty'));
@@ -2854,6 +2950,185 @@ async function init() {
       toast(T('tSaved'));
     } catch (e) { toast(`${T('tSaveFail')} ${e.message}`, true); }
   };
+}
+
+// ================= Workspace — Pipeline Builder =================
+let wsInput = '';
+let wsOutput = '';
+let wsOps = [];
+let wsInspectData = null;
+
+const wsOpTypes = [
+  { value: 'transcode', label: 'Transcode / Remux' },
+  { value: 'aspect', label: 'Aspect & Geometry (16:9 → 9:16)' },
+  { value: 'trim', label: 'Trim / Cut' },
+  { value: 'mux', label: 'Mux (add audio)' },
+  { value: 'audio', label: 'Audio (volume/loudnorm)' },
+  { value: 'filter', label: 'Video Filter (eq, blur…)' },
+  { value: 'subtitle', label: 'Subtitle burn-in' },
+  { value: 'metadata', label: 'Metadata' },
+  { value: 'scale', label: 'Scale' },
+  { value: 'fps', label: 'FPS' },
+];
+
+function wsRenderOps() {
+  const box = el('ws-ops');
+  if (!box) return;
+  box.innerHTML = '';
+  wsOps.forEach((op, idx) => {
+    const div = document.createElement('div');
+    div.className = 'ws-ops-item';
+    div.style.setProperty('--i', idx);
+    div.innerHTML = `<span class="op-type">${op.type}</span><span class="op-desc">${JSON.stringify(op.config).slice(0,80)}</span>
+      <button class="btn small" data-i="${idx}">✕</button>`;
+    div.querySelector('button').onclick = () => { wsOps.splice(idx,1); wsRenderOps(); };
+    box.appendChild(div);
+  });
+  const inp = el('ws-pipeline-input');
+  if (inp) inp.textContent = wsInput || 'not selected — drag from left or pick';
+  const out = el('ws-output');
+  if (out && !out.value) wsOutput = '';
+}
+
+async function wsLoadBrowse(path) {
+  try {
+    const data = await backend.browse(path || '');
+    if (el('ws-path')) el('ws-path').textContent = data.path;
+    const dirsEl = el('ws-dirs');
+    const filesEl = el('ws-files');
+    if (!dirsEl || !filesEl) return;
+    dirsEl.innerHTML = ''; filesEl.innerHTML = '';
+    (data.dirs||[]).forEach((d,i)=>{
+      const div=document.createElement('div'); div.className='brow'; div.style.setProperty('--i',i);
+      div.innerHTML=`<span>📁 ${d}</span>`; div.onclick=()=>wsLoadBrowse(data.path.replace(/\/$/,'')+'/'+d);
+      dirsEl.appendChild(div);
+    });
+    (data.files||[]).forEach((f,i)=>{
+      const div=document.createElement('div'); div.className='brow'+(f.is_media?' is_media':''); div.style.setProperty('--i',i);
+      div.innerHTML=`<span>${f.name}</span><span class=sz>${(f.size/1024/1024).toFixed(1)} MB</span>`;
+      div.onclick=()=>{ wsInput = (data.path.replace(/\/$/,'')+'/'+f.name); wsRenderOps(); wsProbeSelected(); };
+      filesEl.appendChild(div);
+    });
+  } catch(e){ toast(e.message,true); }
+}
+
+async function wsProbeSelected() {
+  if (!wsInput) return;
+  try {
+    const info = await backend.probe(wsInput);
+    wsInspectData = info;
+    wsRenderInspector('streams');
+    // preview info
+    const pi = el('ws-preview-info');
+    if (pi) pi.textContent = `${info.format.format_name||''} ${info.format.duration||''}s — ${info.streams.length} streams`;
+  } catch(e){ el('ws-inspector').textContent = 'Probe failed: '+e.message; }
+}
+
+function wsRenderInspector(tab) {
+  const pre = el('ws-inspector');
+  if (!pre || !wsInspectData) { if(pre) pre.textContent='No file selected'; return; }
+  document.querySelectorAll('.ws-ins-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  if (tab==='streams') {
+    pre.textContent = wsInspectData.streams.map(s=>`[${s.index} ${s.codec_type}] ${s.codec_name} ${s.width? s.width+'x'+s.height:''} ${s.language||''} ${s.pix_fmt||''}`).join('\n');
+  } else if (tab==='format') {
+    const f=wsInspectData.format;
+    pre.textContent = `Format: ${f.format_name} (${f.format_long_name})\nDuration: ${f.duration} (${f.duration_sec})\nSize: ${f.size}\nBitrate: ${f.bit_rate}\nTags: ${JSON.stringify(f.tags||{},null,2)}`;
+  } else {
+    pre.textContent = JSON.stringify(wsInspectData,null,2);
+  }
+}
+
+function wsBuildPayload() {
+  if (!wsInput) { toast('Pick input file first',true); return null; }
+  const ops = wsOps.map(o=>({ type:o.type, config:o.config }));
+  return { inputs:[wsInput], operations:ops, output:{ path:(el('ws-output')?.value.trim() || ''), overwrite:false }, name:'workspace-pipeline' };
+}
+
+async function wsShowCommand() {
+  const payload = wsBuildPayload(); if(!payload) return;
+  try {
+    const res = await backend.pipelineDryRun(payload);
+    const pre = el('ws-cmd-preview');
+    pre.classList.remove('hidden');
+    pre.textContent = (res.commands||[]).join('\n');
+  } catch(e){ toast(e.message,true); }
+}
+
+async function wsRun() {
+  const payload = wsBuildPayload(); if(!payload) return;
+  try {
+    const res = await backend.pipelineRun(payload);
+    toast(`Pipeline enqueued: ${(res.task_ids||[]).length} tasks`);
+  } catch(e){ toast(e.message,true); }
+}
+
+function wsInit() {
+  if (!el('ws-add-op')) return;
+  cselectInit('ws-add-op');
+  cselectSet('ws-add-op', wsOpTypes.map(o=>({value:o.value,label:o.label})), 'transcode');
+  el('btn-ws-add').onclick = async ()=>{
+    const t = cselectGet('ws-add-op');
+    let cfg = {};
+    // simple prompts per type
+    if (t==='transcode') {
+      const v = prompt('VCodec (libx264/libx265/copy):','libx264');
+      if (v===null) return; cfg.vcodec=v||'libx264';
+      const crf = prompt('CRF (empty=none):','18'); if(crf!==null) cfg.crf=crf;
+      cfg.container='mp4';
+    } else if (t==='aspect') {
+      const ratio = prompt('Ratio W:H (e.g. 9:16):','9:16'); if(!ratio) return;
+      const [w,h] = ratio.split(':').map(Number);
+      const mode = prompt('Mode (crop/letterbox/blur/stretch):','crop')||'crop';
+      cfg = { ratio_w:w, ratio_h:h, mode, size_preset:'1080p' };
+    } else if (t==='trim') {
+      const s = prompt('Start (e.g. 00:00:05):','00:00:00')||''; const e = prompt('End (e.g. 00:00:10):','')||'';
+      cfg = { start:s, end:e, mode:'reencode' };
+    } else if (t==='mux') {
+      const extra = prompt('Extra input path (audio):',''); if(!extra) return; cfg = { extra_inputs:[extra], shortest:true };
+    } else if (t==='audio') {
+      const vol = prompt('Volume (1.0 original):','1.0'); cfg = { volume: vol? parseFloat(vol): undefined };
+    } else if (t==='filter') {
+      const vf = prompt('VF (e.g. eq=brightness=0.1):',''); cfg = { vf: vf||'' };
+    } else if (t==='subtitle') {
+      const inp = prompt('Subtitle file path:',''); if(!inp) return; cfg = { mode:'burn', input:inp };
+    } else if (t==='metadata') {
+      const title = prompt('Title:',''); cfg = { title: title||'' };
+    } else if (t==='scale') {
+      const w = prompt('Width:','1280')||'0'; const h = prompt('Height:','0')||'0'; cfg = { width:parseInt(w), height:parseInt(h), algo:'lanczos' };
+    } else if (t==='fps') {
+      const fps = prompt('FPS:','30')||'30'; cfg = { fps };
+    }
+    wsOps.push({ type:t, config:cfg });
+    wsRenderOps();
+  };
+  el('btn-ws-show-cmd').onclick = wsShowCommand;
+  el('btn-ws-run').onclick = wsRun;
+  el('btn-ws-save-preset').onclick = async ()=>{
+    const name = prompt('Preset name:','My Pipeline'); if(!name) return;
+    const payload = { name, description:'', operations: wsOps.map(o=>({type:o.type, config:o.config})) };
+    try { await backend.saveMediaPreset(payload); toast('Preset saved'); } catch(e){ toast(e.message,true); }
+  };
+  el('btn-ws-preview').onclick = async ()=>{
+    const payload = wsBuildPayload(); if(!payload) return;
+    payload.start='1'; payload.duration='5';
+    try {
+      const res = await backend.pipelinePreview(payload);
+      const v = el('ws-video'); const wrap = el('ws-preview-wrap');
+      if (v && res.preview_path) { v.src = res.preview_path; v.classList.remove('hidden'); if(wrap) wrap.classList.add('hidden'); v.play().catch(()=>{}); }
+      toast('Preview generated');
+    } catch(e){ toast(e.message,true); }
+  };
+  el('btn-ws-probe').onclick = wsProbeSelected;
+  el('btn-ws-refresh').onclick = ()=>wsLoadBrowse('');
+  document.querySelectorAll('.ws-ins-tab').forEach(b=>b.onclick=()=>wsRenderInspector(b.dataset.tab));
+  el('btn-ws-copy-ffprobe').onclick = ()=>{
+    if(!wsInput) return; const cmd = `ffprobe -v quiet -print_format json -show_format -show_streams -show_chapters "${wsInput}"`;
+    navigator.clipboard.writeText(cmd).then(()=>toast('Copied')).catch(()=>toast(cmd));
+  };
+  // drag into pipeline
+  const wsCard = el('view-workspace');
+  if (wsCard) setupDrop(wsCard, (p)=>{ wsInput=p; wsRenderOps(); wsProbeSelected(); });
+  wsLoadBrowse('');
 }
 
 function subscribeConvert(id) {
