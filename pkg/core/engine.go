@@ -60,6 +60,8 @@ type Config struct {
 	AccentColor           string                 `json:"accent_color"`   // акцент Electron-оболочки, напр. "#bfff00"
 	FfmpegPath            string                 `json:"ffmpeg_path"`    // явный путь к ffmpeg (для yt-dlp --ffmpeg-location); пусто = PATH
 	ShowHomeLogo          bool                   `json:"show_home_logo"` // показывать логотип на главном экране Electron
+	MediaPresets          []DownloadPreset       `json:"media_presets,omitempty"` // legacy alias, use media_presets.json instead
+	FfprobePath           string                 `json:"ffprobe_path,omitempty"`
 }
 
 type DownloadPreset struct {
@@ -996,6 +998,9 @@ type BackgroundTask struct {
 	StartedAt  time.Time
 	FinishedAt time.Time
 	ExitCode   int
+	GroupID    string `json:"group_id,omitempty"`
+	ChainIndex int    `json:"chain_index,omitempty"`
+	ChainTotal int    `json:"chain_total,omitempty"`
 
 	cmdObj *exec.Cmd
 }
