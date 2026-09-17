@@ -2506,6 +2506,7 @@ async function runConsoleCommand(raw) {
 
 /* ---------- палитра команд ---------- */
 const PALETTE = [
+  { id: 'go-workspace', ru: 'Рабочее место (Pipeline)', en: 'Workspace (Pipeline)', keys: 'workspace pipeline рабочее место мастерская', run: () => showView('workspace') },
   { id: 'go-home', ru: 'Главная', en: 'Home', keys: 'home главная view', run: () => showView('home') },
   { id: 'go-library', ru: 'Видео', en: 'Library', keys: 'library video видео файлы', run: () => showView('library') },
   { id: 'go-convert', ru: 'Конвертация', en: 'Convert', keys: 'convert конвертация ffmpeg', run: () => showView('convert') },
