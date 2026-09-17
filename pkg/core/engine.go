@@ -726,11 +726,13 @@ func CleanZeroByteFiles(outDir, template string) {
 // 3. История операций и функции удаления
 
 type HistoryEntry struct {
-	Time   string `json:"time"`
-	Type   string `json:"type"`
-	Source string `json:"source"`
-	Target string `json:"target"`
-	Status string `json:"status"`
+	Time       string `json:"time"`
+	Type       string `json:"type"`
+	Source     string `json:"source"`
+	Target     string `json:"target"`
+	Status     string `json:"status"`
+	PipelineID string `json:"pipeline_id,omitempty"`
+	Command    string `json:"command,omitempty"`
 }
 
 func AddHistoryEntry(opType, source, target, status string) error {
@@ -1231,6 +1233,55 @@ func (qm *BackgroundQueueManager) CancelTask(taskID int) bool {
 	return false
 }
 
+func (qm *BackgroundQueueManager) CancelGroup(groupID string) int {
+	if groupID == "" {
+		return 0
+	}
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	n := 0
+	for _, t := range qm.tasks {
+		if t.GroupID == groupID && (t.Status == StatusQueued || t.Status == StatusRunning) {
+			if t.Status == StatusRunning && t.cmdObj != nil && t.cmdObj.Process != nil {
+				_ = t.cmdObj.Process.Kill()
+			}
+			t.Status = StatusCancelled
+			t.FinishedAt = time.Now()
+			n++
+		}
+	}
+	return n
+}
+
+func (qm *BackgroundQueueManager) EnqueueChain(cmds [][]string, title, source, target, groupID string) []*BackgroundTask {
+	if len(cmds) == 0 {
+		return nil
+	}
+	qm.mu.Lock()
+	defer qm.mu.Unlock()
+	var tasks []*BackgroundTask
+	for i, cmd := range cmds {
+		task := &BackgroundTask{
+			ID:         qm.nextID,
+			Cmd:        cmd,
+			Title:      fmt.Sprintf("%s [%d/%d]", title, i+1, len(cmds)),
+			Source:     source,
+			Target:     target,
+			Status:     StatusQueued,
+			Stage:      "Queued...",
+			LogLines:   make([]string, 0),
+			StartedAt:  time.Now(),
+			GroupID:    groupID,
+			ChainIndex: i + 1,
+			ChainTotal: len(cmds),
+		}
+		qm.nextID++
+		qm.tasks = append(qm.tasks, task)
+		tasks = append(tasks, task)
+	}
+	return tasks
+}
+
 func (qm *BackgroundQueueManager) GetTasks() []*BackgroundTask {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
@@ -1244,17 +1295,20 @@ func (qm *BackgroundQueueManager) GetTasks() []*BackgroundTask {
 // потребителей (daemon API, будущий Electron-шелл). Поля BackgroundTask
 // мутируют под мьютексом очереди, поэтому читать их напрямую нельзя.
 type TaskSnapshot struct {
-	ID        int        `json:"id"`
-	Title     string     `json:"title"`
-	Source    string     `json:"source"`
-	Target    string     `json:"target"`
-	Status    TaskStatus `json:"status"`
-	Stage     string     `json:"stage"`
-	Progress  float64    `json:"progress"`
-	ExitCode  int        `json:"exit_code"`
-	StartedAt time.Time  `json:"started_at"`
-	FinishedAt time.Time `json:"finished_at,omitempty"`
-	LogTail   []string   `json:"log_tail,omitempty"`
+	ID         int        `json:"id"`
+	Title      string     `json:"title"`
+	Source     string     `json:"source"`
+	Target     string     `json:"target"`
+	Status     TaskStatus `json:"status"`
+	Stage      string     `json:"stage"`
+	Progress   float64    `json:"progress"`
+	ExitCode   int        `json:"exit_code"`
+	StartedAt  time.Time  `json:"started_at"`
+	FinishedAt time.Time  `json:"finished_at,omitempty"`
+	LogTail    []string   `json:"log_tail,omitempty"`
+	GroupID    string     `json:"group_id,omitempty"`
+	ChainIndex int        `json:"chain_index,omitempty"`
+	ChainTotal int        `json:"chain_total,omitempty"`
 }
 
 func snapshotTask(t *BackgroundTask) TaskSnapshot {
@@ -1269,6 +1323,9 @@ func snapshotTask(t *BackgroundTask) TaskSnapshot {
 		ExitCode:   t.ExitCode,
 		StartedAt:  t.StartedAt,
 		FinishedAt: t.FinishedAt,
+		GroupID:    t.GroupID,
+		ChainIndex: t.ChainIndex,
+		ChainTotal: t.ChainTotal,
 	}
 	if n := len(t.LogLines); n > 0 {
 		from := n - 20
