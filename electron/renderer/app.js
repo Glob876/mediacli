@@ -83,6 +83,7 @@ const I18N = {
     presetEdit: 'Редактировать',
     paletteTitle: 'Команды', palettePh: 'Поиск команды…', paletteEmpty: 'Ничего не найдено',
     paletteHint: '↑↓ — выбор, Enter — выполнить, Esc — закрыть',
+    wsEmptyTitle: 'Универсальный редактор — всё в одном месте', wsEmptyHint: 'Перетащи файл на это окно (или на главную) или выбери слева — откроется единый редактор: звук-микс, pipeline, фильтры, субтитры, метаданные, preview.', wsEmptyAlt: 'открыть/переключить редактор', wsNavFile: 'Файл', wsNavInspector: 'Инспектор', wsNavVideo: 'Видео', wsNavAudio: 'Аудио / Микс', wsNavCut: 'Обрезка / Aspect', wsNavFilter: 'Фильтры', wsNavSubs: 'Субтитры', wsNavMeta: 'Метаданные', wsExport: 'ЭКСПОРТ', wsNoFile: 'не выбран — перетащи файл или выбери слева', wsSecInspectorHint: 'Детальная информация ffprobe уже в блоке Файл — здесь можно скопировать команду.', wsSecVideoHint: 'Выбери пресет или задай кодек вручную и нажми Добавить — появится в Pipeline.', wsSecAudioHint: 'Микс звука, громкость, нормализация, добавление дорожки.',
     consoleTitle: 'Консоль', consolePh: 'help — список команд',
   },
   en: {
@@ -158,6 +159,7 @@ const I18N = {
     presetEdit: 'Edit',
     paletteTitle: 'Commands', palettePh: 'Search commands…', paletteEmpty: 'No matches',
     paletteHint: '↑↓ — navigate, Enter — run, Esc — close',
+    wsEmptyTitle: 'Universal editor — everything in one place', wsEmptyHint: 'Drag a file here (or onto Home) or pick from left — unified editor will open: audio mix, pipeline, filters, subtitles, metadata, preview.', wsEmptyAlt: 'open/switch editor', wsNavFile: 'File', wsNavInspector: 'Inspector', wsNavVideo: 'Video', wsNavAudio: 'Audio / Mix', wsNavCut: 'Cut / Aspect', wsNavFilter: 'Filters', wsNavSubs: 'Subtitles', wsNavMeta: 'Metadata', wsExport: 'EXPORT', wsNoFile: 'not selected — drag file or pick from left', wsSecInspectorHint: 'Detailed ffprobe info is in File block — copy command here.', wsSecVideoHint: 'Pick preset or set codec manually and click Add — appears in Pipeline.', wsSecAudioHint: 'Audio mix, volume, normalize, add track.',
     consoleTitle: 'Console', consolePh: 'help — list commands',
   },
   'en-US': {
@@ -233,6 +235,7 @@ const I18N = {
     presetEdit: 'Edit',
     paletteTitle: 'Commands', palettePh: 'Search commands…', paletteEmpty: 'No matches',
     paletteHint: '↑↓ — navigate, Enter — run, Esc — close',
+    wsEmptyTitle: 'Universal editor — everything in one place', wsEmptyHint: 'Drag a file here (or onto Home) or pick from left — unified editor will open: audio mix, pipeline, filters, subtitles, metadata, preview.', wsEmptyAlt: 'open/switch editor', wsNavFile: 'File', wsNavInspector: 'Inspector', wsNavVideo: 'Video', wsNavAudio: 'Audio / Mix', wsNavCut: 'Cut / Aspect', wsNavFilter: 'Filters', wsNavSubs: 'Subtitles', wsNavMeta: 'Metadata', wsExport: 'EXPORT', wsNoFile: 'not selected — drag file or pick from left', wsSecInspectorHint: 'Detailed ffprobe info is in File block — copy command here.', wsSecVideoHint: 'Pick preset or set codec manually and click Add — appears in Pipeline.', wsSecAudioHint: 'Audio mix, volume, normalize, add track.',
     consoleTitle: 'Console', consolePh: 'help — list commands',
   },
 };
@@ -1870,12 +1873,25 @@ function paintConvertTask(id, snap) {
 
 /* ================= Drag & Drop ================= */
 function dropFileOf(e) {
-  const files = e.dataTransfer && e.dataTransfer.files;
-  if (!files || !files.length) return null;
-  const f = files[0];
-  const p = f.path || f.name;
-  if (!p || (MOCK && !f.path)) return MOCK && f.name ? f.name : null;
-  return p;
+  const dt = e.dataTransfer;
+  if (!dt) return null;
+  if (dt.files && dt.files.length) {
+    const f = dt.files[0];
+    if (f.path && f.path.length > 1) return f.path;
+  }
+  const uri = (dt.getData && (dt.getData('text/uri-list') || dt.getData('text/plain'))) || '';
+  if (uri) {
+    const first = uri.trim().split('\n')[0].trim();
+    if (first) {
+      try {
+        const url = new URL(first);
+        if (url.protocol === 'file:') return decodeURIComponent(url.pathname);
+      } catch {}
+      if (first.includes('/') || first.includes('\\') || first.includes(':')) return first;
+    }
+  }
+  if (dt.files && dt.files[0] && dt.files[0].name) return dt.files[0].name;
+  return null;
 }
 
 function setupDrop(zone, onFile, hoverEl) {
@@ -3007,19 +3023,21 @@ function wsRenderOps() {
     box.appendChild(div);
   });
   const inp = el('ws-pipeline-input');
-  if (inp) inp.textContent = wsInput || 'not selected — drag from left or pick';
+  if (inp) {
+    const full = wsInput || '';
+    inp.textContent = full || T('wsNoFile');
+    inp.title = full;
+    // also show full path in tooltip to avoid basename-only confusion
+    inp.style.wordBreak = 'break-all';
+  }
   const out = el('ws-output');
   if (out && !out.value) wsOutput = '';
-  // toggle empty vs full editor
+  // toggle empty vs full editor (Alt+3 universal)
   const empty = el('ws-empty');
-  const grid = document.querySelector('#view-workspace .workspace-grid');
-  const pipeline = document.querySelector('#view-workspace .ws-pipeline');
-  const queue = document.querySelector('#view-workspace .card:last-child');
+  const layout = document.querySelector('#view-workspace .ws-layout');
   const showFull = !!wsInput;
   if (empty) empty.classList.toggle('hidden', showFull);
-  if (grid) grid.classList.toggle('hidden', !showFull);
-  if (pipeline) pipeline.classList.toggle('hidden', !showFull);
-  // queue stays visible but muted when empty
+  if (layout) layout.classList.toggle('hidden', !showFull);
 }
 
 async function wsLoadBrowse(path) {
@@ -3161,6 +3179,28 @@ function wsInit() {
   const wsCard = el('view-workspace');
   if (wsCard) setupDrop(wsCard, (p)=>{ wsInput=p; wsRenderOps(); wsProbeSelected(); });
   wsLoadBrowse('');
+  // sidebar navigation
+  document.querySelectorAll('.ws-nav').forEach(btn=>{
+    btn.onclick = ()=>{
+      document.querySelectorAll('.ws-nav').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const sec = btn.dataset.ws;
+      document.querySelectorAll('[id^=ws-section-]').forEach(s=>s.classList.add('hidden'));
+      const target = el('ws-section-'+sec);
+      if (target) target.classList.remove('hidden');
+      // file section is default composite, ensure grid visible
+      if (sec==='file') {
+        // show file grid already inside ws-section-file
+      }
+    };
+  });
+  const expBtn = el('btn-ws-export');
+  if (expBtn) expBtn.onclick = ()=>{ wsRun(); };
+}
+// helper for sidebar quick add
+function wsQuickAdd(type){
+  cselectSet('ws-add-op', wsOpTypes.map(o=>({value:o.value,label:o.label})), type);
+  el('btn-ws-add').click();
 }
 
 function subscribeConvert(id) {

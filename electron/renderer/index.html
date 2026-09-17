@@ -141,11 +141,27 @@
     <!-- WORKSPACE — Универсальный редактор (Alt+3) -->
     <section id="view-workspace" class="view hidden">
       <div id="ws-empty" class="card" style="text-align:center;padding:32px 16px;border:1px dashed var(--lime)">
-        <div style="font-size:15px;color:var(--fg);opacity:.9">Универсальный редактор — всё в одном месте</div>
-        <div class="muted small" style="margin-top:8px">Перетащи файл на это окно (или на главную) или выбери слева — откроется единый редактор: звук-микс, pipeline, фильтры, субтитры, метаданные, preview.</div>
-        <div class="muted small" style="margin-top:6px">Alt+3 — открыть/переключить редактор</div>
+        <div style="font-size:15px;color:var(--fg);opacity:.9" data-i18n="wsEmptyTitle">Универсальный редактор — всё в одном месте</div>
+        <div class="muted small" style="margin-top:8px" data-i18n="wsEmptyHint">Перетащи файл на это окно (или на главную) или выбери слева — откроется единый редактор: звук-микс, pipeline, фильтры, субтитры, метаданные, preview.</div>
+        <div class="muted small" style="margin-top:6px">Alt+3 — <span data-i18n="wsEmptyAlt">открыть/переключить редактор</span></div>
       </div>
-      <div class="workspace-grid">
+      <div class="ws-layout" style="display:grid;grid-template-columns:168px 1fr;gap:8px;align-items:start">
+        <nav class="ws-sidebar card" style="display:flex;flex-direction:column;gap:4px;padding:8px;position:sticky;top:8px">
+          <button class="btn small ws-nav active" data-ws="file" data-i18n="wsNavFile">Файл</button>
+          <button class="btn small ws-nav" data-ws="inspector" data-i18n="wsNavInspector">Инспектор</button>
+          <button class="btn small ws-nav" data-ws="video" data-i18n="wsNavVideo">Видео</button>
+          <button class="btn small ws-nav" data-ws="audio" data-i18n="wsNavAudio">Аудио / Микс</button>
+          <button class="btn small ws-nav" data-ws="cut" data-i18n="wsNavCut">Обрезка / Aspect</button>
+          <button class="btn small ws-nav" data-ws="filter" data-i18n="wsNavFilter">Фильтры</button>
+          <button class="btn small ws-nav" data-ws="subs" data-i18n="wsNavSubs">Субтитры</button>
+          <button class="btn small ws-nav" data-ws="meta" data-i18n="wsNavMeta">Метаданные</button>
+          <div style="flex:1"></div>
+          <button id="btn-ws-export" class="btn primary" style="justify-content:center" data-i18n="wsExport">ЭКСПОРТ</button>
+          <div class="muted small" style="text-align:center;opacity:.6">Alt+3</div>
+        </nav>
+        <div class="ws-main">
+          <div id="ws-section-file">
+            <div class="workspace-grid">
         <div class="card ws-library">
           <div class="browse-head"><b>Library / Browse</b><button id="btn-ws-refresh" class="btn small" data-i18n="refresh">Обновить</button></div>
           <div class="muted small browse-path" id="ws-path">…</div>
@@ -170,6 +186,15 @@
           <pre id="ws-inspector" class="slot-log" style="max-height:220px">No file selected</pre>
           <div class="row"><button id="btn-ws-copy-ffprobe" class="btn small">Copy ffprobe cmd</button></div>
         </div>
+          </div>
+          <!-- sections for sidebar -->
+          <div id="ws-section-inspector" class="hidden"><div class="card"><b data-i18n="wsNavInspector">Инспектор</b><div class="muted small" data-i18n="wsSecInspectorHint">Детальная информация ffprobe уже в блоке Файл — здесь можно скопировать команду.</div></div></div>
+          <div id="ws-section-video" class="hidden"><div class="card"><b data-i18n="wsNavVideo">Видео</b><div class="muted small" style="margin:6px 0" data-i18n="wsSecVideoHint">Выбери пресет или задай кодек вручную и нажми Добавить — появится в Pipeline.</div><div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn small" onclick="wsQuickAdd('transcode')">+ Transcode</button><button class="btn small" onclick="wsQuickAdd('scale')">+ Scale</button><button class="btn small" onclick="wsQuickAdd('fps')">+ FPS</button></div></div></div>
+          <div id="ws-section-audio" class="hidden"><div class="card"><b data-i18n="wsNavAudio">Аудио / Микс</b><div class="muted small" style="margin:6px 0" data-i18n="wsSecAudioHint">Микс звука, громкость, нормализация, добавление дорожки.</div><div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn small" onclick="wsQuickAdd('audio')">+ Audio</button><button class="btn small" onclick="wsQuickAdd('mux')">+ Mux</button></div></div></div>
+          <div id="ws-section-cut" class="hidden"><div class="card"><b data-i18n="wsNavCut">Обрезка / Aspect</b><div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn small" onclick="wsQuickAdd('trim')">+ Trim</button><button class="btn small" onclick="wsQuickAdd('aspect')">+ Aspect</button></div></div></div>
+          <div id="ws-section-filter" class="hidden"><div class="card"><b data-i18n="wsNavFilter">Фильтры</b><button class="btn small" onclick="wsQuickAdd('filter')">+ Filter</button></div></div>
+          <div id="ws-section-subs" class="hidden"><div class="card"><b data-i18n="wsNavSubs">Субтитры</b><button class="btn small" onclick="wsQuickAdd('subtitle')">+ Subtitle</button></div></div>
+          <div id="ws-section-meta" class="hidden"><div class="card"><b data-i18n="wsNavMeta">Метаданные</b><button class="btn small" onclick="wsQuickAdd('metadata')">+ Metadata</button></div></div>
       </div>
       <div class="card ws-pipeline" style="margin-top:8px">
         <div class="row" style="justify-content:space-between"><b>Pipeline Builder</b><span class="muted small">Input → Operations → Output</span></div>
@@ -189,6 +214,8 @@
       <div class="card" style="margin-top:8px">
         <div class="row"><b>Queue (chain view)</b><span class="spacer"></span><button id="btn-ws-queue-clear" class="btn small">Clear finished</button></div>
         <div id="ws-queue" class="list"></div>
+      </div>
+        </div>
       </div>
     </section>
 
