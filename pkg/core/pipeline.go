@@ -229,7 +229,17 @@ func BuildPipeline(p Pipeline, cfg Config) ([][]string, error) {
 				break
 			}
 		}
-		if probe != nil && hasAudio && !hasVideo && ext == ".mp4" {
+		copyOnly := len(p.Operations) > 0
+		for _, op := range p.Operations {
+			trim, ok := op.(*TrimOp)
+			if !ok || trim.Mode != "copy" {
+				copyOnly = false
+				break
+			}
+		}
+		if copyOnly && ext == ".mp4" && filepath.Ext(p.Inputs[0]) != "" {
+			ext = filepath.Ext(p.Inputs[0])
+		} else if probe != nil && hasAudio && !hasVideo && ext == ".mp4" {
 			ext = ".m4a"
 		}
 		base := strings.TrimSuffix(p.Inputs[0], filepath.Ext(p.Inputs[0])) + "_pipelined"

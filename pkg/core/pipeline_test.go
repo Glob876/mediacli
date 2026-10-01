@@ -37,6 +37,7 @@ func TestPipelineTrimAndAspectWithFFmpeg(t *testing.T) {
 		{"video crop", video, []Operation{&TrimOp{Start: "1", End: "2", Mode: "reencode"}, &AspectOp{RatioW: 9, RatioH: 16, Mode: "crop", Width: 90, Height: 160}}, ".mp4", 90},
 		{"video bars", video, []Operation{&AspectOp{RatioW: 9, RatioH: 16, Mode: "letterbox", Width: 90, Height: 160}}, ".mp4", 90},
 		{"audio trim", audio, []Operation{&TrimOp{Start: "0.5", End: "1.5", Mode: "reencode"}}, ".m4a", 0},
+		{"audio fast trim", audio, []Operation{&TrimOp{Start: "0.5", End: "1.5", Mode: "copy"}}, ".wav", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmds, err := BuildPipeline(Pipeline{Inputs: []string{tc.input}, Operations: tc.ops}, cfg)
