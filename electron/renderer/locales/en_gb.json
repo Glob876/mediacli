@@ -28,7 +28,7 @@
   "bg_option_solid": "Solid Theme Background",
   "bg_transferred": "Task transferred to background queue!",
   "brandHint1": "Paste a link above and press Enter to start a download",
-  "brandHint2": "Drag a file into the window to convert it",
+  "brandHint2": "Drag a file into the window to open the editor (Alt+3)",
   "browse": "Browse files",
   "cancel": "Cancel",
   "checking": "Checking…",

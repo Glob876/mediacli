@@ -138,31 +138,44 @@
       <div id="library" class="cards thumbs"></div>
     </section>
 
-    <!-- WORKSPACE — Универсальный редактор (Alt+3) -->
+    <!-- Универсальный редактор (Alt+3) -->
     <section id="view-workspace" class="view hidden">
       <div id="ws-empty" class="card" style="text-align:center;padding:32px 16px;border:1px dashed var(--lime)">
-        <div style="font-size:15px;color:var(--fg);opacity:.9" data-i18n="wsEmptyTitle">Универсальный редактор — всё в одном месте</div>
-        <div class="muted small" style="margin-top:8px" data-i18n="wsEmptyHint">Перетащи файл на это окно (или на главную) или выбери слева — откроется единый редактор: звук-микс, pipeline, фильтры, субтитры, метаданные, preview.</div>
-        <div class="muted small" style="margin-top:6px">Alt+3 — <span data-i18n="wsEmptyAlt">открыть/переключить редактор</span></div>
+        <div style="font-size:15px;color:var(--fg);opacity:.9" data-i18n="wsEmptyTitle">Универсальный редактор</div>
+        <div class="muted small" style="margin-top:8px" data-i18n="wsEmptyHint">Перетащите медиафайл или укажите путь к нему.</div>
+        <div class="row" style="justify-content:center;margin-top:14px"><input id="ws-open-path" type="text" placeholder="/path/to/video.mp4" style="max-width:480px" /><button id="btn-ws-open" class="btn primary" data-i18n="wsOpen">Открыть</button></div>
       </div>
-      <div class="ws-layout hidden" style="display:grid;grid-template-columns:168px 1fr 380px;gap:8px;align-items:start">
-        <nav class="ws-sidebar card" style="display:flex;flex-direction:column;gap:4px;padding:8px;position:sticky;top:8px">
+      <div class="ws-layout">
+        <nav class="ws-sidebar card">
           <button class="btn small ws-nav active" data-ws="file" data-i18n="wsNavFile">Файл</button>
+          <details class="ws-advanced-nav"><summary data-i18n="wsAdvanced">Точная настройка</summary><div>
           <button class="btn small ws-nav" data-ws="video" data-i18n="wsNavVideo">Видео</button>
           <button class="btn small ws-nav" data-ws="audio" data-i18n="wsNavAudio">Аудио / Микс</button>
-          <button class="btn small ws-nav" data-ws="cut" data-i18n="wsNavCut">Обрезка / Aspect</button>
+          <button class="btn small ws-nav" data-ws="cut" data-i18n="wsNavCut">Обрезка / Кадр</button>
           <button class="btn small ws-nav" data-ws="filter" data-i18n="wsNavFilter">Фильтры</button>
           <button class="btn small ws-nav" data-ws="subs" data-i18n="wsNavSubs">Субтитры</button>
           <button class="btn small ws-nav" data-ws="meta" data-i18n="wsNavMeta">Метаданные</button>
+          </div></details>
           <button class="btn small ws-nav" data-ws="inspector" data-i18n="wsNavInspector">Инспектор</button>
           <div style="flex:1"></div>
           <button id="btn-ws-export" class="btn primary" style="justify-content:center" data-i18n="wsExport">ЭКСПОРТ</button>
           <div class="muted small" style="text-align:center;opacity:.6">Alt+3</div>
         </nav>
         <div class="ws-center">
+          <div class="card ws-selected">
+            <b data-i18n="wsSelectedTitle">Выбранные действия</b>
+            <p class="muted small" data-i18n="wsSelectedHint">Перетащите тег справа сюда или нажмите на него. Правая кнопка по выбранному тегу удаляет его.</p>
+            <div id="ws-ops" class="ws-tag-drop" tabindex="0"><span class="muted" data-i18n="wsDropHint">Перетащите сюда действие →</span></div>
+            <div class="row ws-export-row"><button id="btn-ws-show-cmd" class="btn small" data-i18n="wsShowCommand">Показать команду</button><button id="btn-ws-save-preset" class="btn small" data-i18n="wsSavePreset">Сохранить набор</button><span class="spacer"></span><button id="btn-ws-run" class="btn primary" data-i18n="wsExport">Экспорт</button></div>
+            <label><span data-i18n="convOutput">Выходной файл (необязательно):</span><input id="ws-output" type="text" placeholder="auto" /></label>
+            <pre id="ws-cmd-preview" class="slot-log hidden" style="margin-top:6px"></pre>
+            <div id="ws-pipeline-input" class="muted small"></div>
+            <div class="hidden"><div class="cselect" id="ws-add-op"></div><button id="btn-ws-add"></button></div>
+          </div>
           <div id="ws-section-file" class="ws-section">
             <div class="card ws-library">
               <div class="browse-head"><b data-i18n="wsNavFile">Файл</b><button id="btn-ws-refresh" class="btn small" data-i18n="refresh">Обновить</button></div>
+              <div class="row" style="margin:8px 0"><input id="ws-change-path" type="text" placeholder="/path/to/video.mp4" /><button id="btn-ws-change" class="btn small" data-i18n="wsOpen">Открыть</button></div>
               <div class="muted small browse-path" id="ws-path">…</div>
               <div id="ws-dirs" class="browselist"></div>
               <div id="ws-files" class="browselist"></div>
@@ -172,14 +185,14 @@
           <div id="ws-section-video" class="ws-section hidden">
             <div class="card">
               <b data-i18n="wsNavVideo">Видео</b>
-              <div class="muted small" style="margin:6px 0" data-i18n="wsSecVideoHint">Выбери пресет или задай кодек вручную и нажми Добавить — появится в Pipeline.</div>
+              <div class="muted small" style="margin:6px 0" data-i18n="wsSecVideoHint">Дополнительные настройки кодеков.</div>
               <div class="grid2">
-                <label><span>Контейнер</span><div class="cselect" id="ws-v-container"></div></label>
-                <label><span>VCodec</span><div class="cselect" id="ws-v-codec"></div></label>
+                <label><span data-i18n="wsFileFormat">Формат файла</span><div class="cselect" id="ws-v-container"></div></label>
+                <label><span data-i18n="wsCodec">Видеокодек</span><div class="cselect" id="ws-v-codec"></div></label>
               </div>
               <div class="grid2">
-                <label><span>CRF</span><input id="ws-v-crf" type="text" placeholder="18" /></label>
-                <label><span>Preset</span><input id="ws-v-preset" type="text" placeholder="medium" /></label>
+                <label><span data-i18n="wsQuality">Качество (CRF)</span><input id="ws-v-crf" type="text" placeholder="18" /></label>
+                <label><span data-i18n="wsEncodeSpeed">Скорость кодирования</span><input id="ws-v-preset" type="text" placeholder="medium" /></label>
               </div>
               <div class="row" style="margin-top:6px"><button id="btn-ws-add-video" class="btn small">+ Добавить в Pipeline</button></div>
             </div>
@@ -196,25 +209,29 @@
           </div>
           <div id="ws-section-cut" class="ws-section hidden">
             <div class="card">
-              <b data-i18n="wsNavCut">Обрезка / Aspect</b>
+              <b data-i18n="wsTrimTitle">Обрезка длины</b>
+              <div class="muted small" data-i18n="wsTrimHint">Укажите начало и конец. Работает для видео и аудио.</div>
               <div class="grid2">
-                <label><span>Trim start</span><input id="ws-cut-start" type="text" placeholder="00:00:05" /></label>
-                <label><span>Trim end</span><input id="ws-cut-end" type="text" placeholder="00:00:10" /></label>
+                <label><span data-i18n="wsStart">Начало</span><input id="ws-cut-start" type="text" placeholder="00:00:05" /></label>
+                <label><span data-i18n="wsEnd">Конец</span><input id="ws-cut-end" type="text" placeholder="00:00:10" /></label>
               </div>
-              <div class="row" style="margin-top:6px"><button id="btn-ws-add-trim" class="btn small">+ Trim</button></div>
+              <div class="row ws-range-row"><input id="ws-cut-start-range" type="range" min="0" max="1000" value="0" /><input id="ws-cut-end-range" type="range" min="0" max="1000" value="1000" /></div>
+              <div class="row" style="margin-top:6px"><button id="btn-ws-set-start" class="btn small" data-i18n="wsSetStart">Начало = позиция плеера</button><button id="btn-ws-set-end" class="btn small" data-i18n="wsSetEnd">Конец = позиция плеера</button></div>
+              <div class="row" style="margin-top:6px"><label><input id="ws-cut-copy" type="checkbox" /> <span data-i18n="wsFastCut">Быстро, по ключевым кадрам</span></label><button id="btn-ws-add-trim" class="btn small" data-i18n="wsAddTrim">Применить обрезку</button></div>
               <hr style="border:0;border-top:1px solid var(--border);margin:10px 0" />
+              <b data-i18n="wsAspectTitle">Соотношение сторон</b>
               <div class="grid2">
-                <label><span>Aspect W:H</span><input id="ws-aspect-ratio" type="text" placeholder="9:16" /></label>
-                <label><span>Mode</span><div class="cselect" id="ws-aspect-mode"></div></label>
+                <label><span data-i18n="wsRatio">Соотношение W:H</span><select id="ws-aspect-preset"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="4:5">4:5</option><option value="4:3">4:3</option><option value="21:9">21:9</option><option value="custom" data-i18n="wsCustom">Своё…</option></select><input id="ws-aspect-ratio" type="text" value="16:9" class="hidden" placeholder="3:2" /></label>
+                <label><span data-i18n="wsFitMode">Как вписать видео</span><div class="cselect" id="ws-aspect-mode"></div></label>
               </div>
-              <div class="row" style="margin-top:6px"><button id="btn-ws-add-aspect" class="btn small">+ Aspect</button></div>
+              <div class="row" style="margin-top:6px"><label><span data-i18n="wsResolution">Разрешение</span><select id="ws-aspect-resolution"><option value="720p">720p</option><option value="1080p" selected>1080p</option><option value="4k">4K</option></select></label><button id="btn-ws-add-aspect" class="btn small" data-i18n="wsApplyAspect">Применить формат</button></div>
             </div>
           </div>
           <div id="ws-section-filter" class="ws-section hidden">
             <div class="card">
               <b data-i18n="wsNavFilter">Фильтры</b>
-              <label><span>VF (comma, e.g. eq=brightness=0.1, hflip)</span><input id="ws-filter-vf" type="text" placeholder="hflip" /></label>
-              <label style="margin-top:6px"><span>AF (e.g. volume=0.8)</span><input id="ws-filter-af" type="text" placeholder="" /></label>
+              <label><span data-i18n="wsVideoFilter">Видеофильтр FFmpeg (например, hflip)</span><input id="ws-filter-vf" type="text" placeholder="hflip" /></label>
+              <label style="margin-top:6px"><span data-i18n="wsAudioFilter">Аудиофильтр FFmpeg (например, volume=0.8)</span><input id="ws-filter-af" type="text" placeholder="" /></label>
               <div class="row" style="margin-top:6px"><button id="btn-ws-add-filter" class="btn small">+ Filter</button></div>
             </div>
           </div>
@@ -241,33 +258,24 @@
               <div class="row"><button id="btn-ws-copy-ffprobe2" class="btn small">Copy ffprobe cmd</button></div>
             </div>
           </div>
-          <div class="card ws-pipeline" style="margin-top:8px">
-            <div class="row" style="justify-content:space-between"><b>Pipeline Builder</b><span class="muted small">Input → Operations → Output</span></div>
-            <div class="muted small" style="margin:4px 0;word-break:break-all">Input: <span id="ws-pipeline-input" class="muted">not selected — drag from left or pick</span></div>
-            <div id="ws-ops" class="list"></div>
-            <div class="row" style="margin-top:6px;flex-wrap:wrap">
-              <div class="cselect" id="ws-add-op" style="min-width:180px"></div>
-              <button id="btn-ws-add" class="btn small">+ Add</button>
-              <span class="spacer"></span>
-              <button id="btn-ws-show-cmd" class="btn small">Show Command</button>
-              <button id="btn-ws-save-preset" class="btn small">Save as Preset</button>
-              <button id="btn-ws-run" class="btn small" data-i18n="convertBtn">Run Pipeline</button>
-            </div>
-            <label style="margin-top:6px"><span data-i18n="convOutput">Выходной файл (необязательно):</span><input id="ws-output" type="text" placeholder="auto" /></label>
-            <pre id="ws-cmd-preview" class="slot-log hidden" style="margin-top:6px"></pre>
-          </div>
           <div class="card" style="margin-top:8px">
-            <div class="row"><b>Queue (chain view)</b><span class="spacer"></span><button id="btn-ws-queue-clear" class="btn small">Clear finished</button></div>
+            <div class="row"><b data-i18n="wsQueue">Задачи редактора</b><span class="spacer"></span><button id="btn-ws-queue-refresh" class="btn small" data-i18n="refresh">Обновить</button></div>
             <div id="ws-queue" class="list"></div>
           </div>
         </div>
-        <div class="card ws-preview" style="position:sticky;top:8px">
+        <div class="ws-right">
+        <div class="card ws-tags">
+          <b data-i18n="wsAvailableTitle">Действия</b>
+          <p class="muted small" data-i18n="wsAvailableHint">Перетащите тег в выбранные действия или нажмите на него.</p>
+          <div id="ws-tag-palette" class="ws-tag-list"></div>
+        </div>
+        <div class="card ws-preview">
           <b data-i18n="wsPreviewTitle">Предпросмотр</b>
           <div id="ws-preview-wrap" class="thumbwrap" style="height:200px;aspect-ratio:auto"><div class="ph">▶</div></div>
           <video id="ws-video" controls style="width:100%;background:#000" class="hidden"></video>
           <audio id="ws-audio" controls style="width:100%" class="hidden"></audio>
           <div class="muted small" id="ws-preview-info" style="word-break:break-all">Select a file</div>
-          <div class="row" style="margin-top:6px"><button id="btn-ws-preview" class="btn small">Generate 5s Preview</button><button id="btn-ws-waveform" class="btn small">Waveform</button></div>
+          <div class="row" style="margin-top:6px"><button id="btn-ws-preview" class="btn small" data-i18n="wsPreviewBtn">Предпросмотр результата (5 с)</button><button id="btn-ws-original" class="btn small" data-i18n="wsOriginal">Оригинал</button></div>
           <hr style="border:0;border-top:1px solid var(--border);margin:10px 0" />
           <b class="small">Inspector</b>
           <div class="tabs small" style="display:flex;gap:4px;margin:6px 0">
@@ -277,6 +285,15 @@
           </div>
           <pre id="ws-inspector" class="slot-log" style="max-height:180px">No file selected</pre>
           <div class="row"><button id="btn-ws-copy-ffprobe" class="btn small">Copy ffprobe cmd</button></div>
+        </div>
+        </div>
+      </div>
+      <div id="ws-tag-modal" class="ws-modal hidden" role="dialog" aria-modal="true" aria-labelledby="ws-tag-modal-title">
+        <div class="ws-modal-panel card">
+          <h2 id="ws-tag-modal-title"></h2>
+          <p id="ws-tag-modal-desc" class="muted small"></p>
+          <div id="ws-tag-modal-fields" class="ws-modal-fields"></div>
+          <div class="row ws-modal-actions"><button id="btn-ws-tag-cancel" class="btn small" data-i18n="wsCancel">Отмена</button><button id="btn-ws-tag-add" class="btn primary" data-i18n="wsAdd">Добавить</button></div>
         </div>
       </div>
     </section>

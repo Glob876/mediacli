@@ -19,7 +19,7 @@ const I18N = {
     dlSubs: 'Субтитры (ru,en)', dlSponsor: 'SponsorBlock (вырезать спонсорские сегменты)',
     dlMeta: 'Встраивать метаданные', dlThumb: 'Встраивать обложку (поиск миниатюр + перезапись файла)',
     brandHint1: 'Вставьте ссылку выше и нажмите Enter — начнётся загрузка',
-    brandHint2: 'Перетащите файл в окно — откроется универсальный редактор (Alt+3)',
+    brandHint2: 'Alt+3 — редактор видео и аудио',
     slotsTitle: 'Загрузки', slotSizeHint: 'Ctrl + колесо — размер слотов',
     clearDone: 'Очистить завершённые', groupBtn: 'Сгруппировать', ungroup: 'Расформировать',
     groupName: 'Группа', waiting: 'Ожидает очереди', queued: 'В очереди…',
@@ -95,7 +95,7 @@ const I18N = {
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
     dlMeta: 'Embed metadata', dlThumb: 'Embed thumbnail (thumbnail hunt + file rewrite)',
     brandHint1: 'Paste a link above and press Enter to start a download',
-    brandHint2: 'Drag a file into the window — universal editor will open (Alt+3)',
+    brandHint2: 'Alt+3 — video and audio editor',
     slotsTitle: 'Downloads', slotSizeHint: 'Ctrl + wheel — slot size',
     clearDone: 'Clear finished', groupBtn: 'Group', ungroup: 'Ungroup',
     groupName: 'Group', waiting: 'Queued in group', queued: 'Queued…',
@@ -171,7 +171,7 @@ const I18N = {
     dlSubs: 'Subtitles (ru,en)', dlSponsor: 'SponsorBlock (cut sponsor segments)',
     dlMeta: 'Embed metadata', dlThumb: 'Embed thumbnail (thumbnail hunt + file rewrite)',
     brandHint1: 'Paste a link above and press Enter to start a download',
-    brandHint2: 'Drag a file into the window — universal editor will open (Alt+3)',
+    brandHint2: 'Alt+3 — video and audio editor',
     slotsTitle: 'Downloads', slotSizeHint: 'Ctrl + wheel — slot size',
     clearDone: 'Clear finished', groupBtn: 'Group', ungroup: 'Ungroup',
     groupName: 'Group', waiting: 'Queued in group', queued: 'Queued…',
@@ -241,6 +241,34 @@ const I18N = {
 };
 
 const T = (key) => (I18N[state.lang] && I18N[state.lang][key]) || I18N.ru[key] || key;
+Object.assign(I18N.ru, {
+  wsOpen:'Открыть', wsTrimTitle:'Обрезка длины', wsTrimHint:'Укажите начало и конец. Работает для видео и аудио.',
+  wsSetStart:'Начало = позиция плеера', wsSetEnd:'Конец = позиция плеера', wsFastCut:'Быстро, по ключевым кадрам',
+  wsAddTrim:'Применить обрезку', wsAspectTitle:'Соотношение сторон', wsRatio:'Соотношение W:H',
+  wsCustom:'Своё…', wsResolution:'Разрешение', wsApplyAspect:'Применить формат',
+  wsQueue:'Задачи редактора', wsPreviewBtn:'Предпросмотр результата (5 с)', wsOriginal:'Оригинал',
+  wsSelectedTitle:'Выбранные теги', wsSelectedHint:'Перетащите тег справа сюда или нажмите на него. Правая кнопка по выбранному тегу удаляет его.',
+  wsDropHint:'Перетащите сюда тег →', wsAvailableTitle:'Теги действий', wsAvailableHint:'Перетащите тег в выбранные или нажмите на него.',
+  wsShowCommand:'Показать команду', wsSavePreset:'Сохранить набор', wsCodec:'Видеокодек', wsCancel:'Отмена', wsAdd:'Добавить',
+  wsFileFormat:'Формат файла', wsQuality:'Качество (CRF)', wsEncodeSpeed:'Скорость кодирования',
+  wsEmptyHint:'Перетащите видео или аудио в окно либо укажите путь к файлу.', wsNavCut:'Обрезка / Кадр', wsSecVideoHint:'Дополнительные настройки кодеков.',
+  wsAdvanced:'Точная настройка',
+  wsStart:'Начало', wsEnd:'Конец', wsFitMode:'Как вписать видео', wsVideoFilter:'Видеофильтр FFmpeg (например, hflip)', wsAudioFilter:'Аудиофильтр FFmpeg (например, volume=0.8)',
+});
+for (const lang of ['en', 'en-US']) Object.assign(I18N[lang], {
+  wsOpen:'Open', wsTrimTitle:'Trim duration', wsTrimHint:'Set start and end. Works for video and audio.',
+  wsSetStart:'Start = playhead', wsSetEnd:'End = playhead', wsFastCut:'Fast, keyframe aligned',
+  wsAddTrim:'Apply trim', wsAspectTitle:'Aspect ratio', wsRatio:'Ratio W:H',
+  wsCustom:'Custom…', wsResolution:'Resolution', wsApplyAspect:'Apply aspect',
+  wsQueue:'Editor tasks', wsPreviewBtn:'Preview result (5 s)', wsOriginal:'Original',
+  wsSelectedTitle:'Selected tags', wsSelectedHint:'Drag a tag here or click it. Right-click a selected tag to remove it.',
+  wsDropHint:'Drop a tag here →', wsAvailableTitle:'Action tags', wsAvailableHint:'Drag a tag to selected tags or click it.',
+  wsShowCommand:'Show command', wsSavePreset:'Save set', wsCodec:'Video codec', wsCancel:'Cancel', wsAdd:'Add',
+  wsFileFormat:'File format', wsQuality:'Quality (CRF)', wsEncodeSpeed:'Encoding speed',
+  wsEmptyHint:'Drop a video or audio file here, or enter its path.', wsNavCut:'Trim / Frame', wsSecVideoHint:'Additional codec settings.',
+  wsAdvanced:'Detailed settings',
+  wsStart:'Start', wsEnd:'End', wsFitMode:'How to fit video', wsVideoFilter:'FFmpeg video filter (e.g. hflip)', wsAudioFilter:'FFmpeg audio filter (e.g. volume=0.8)',
+});
 
 // Загрузка локалей из файлов locales/*.json (с фолбэком на встроенный I18N)
 async function loadLocales() {
@@ -522,6 +550,7 @@ const api = {
   opMux: (payload) => api.req('POST', '/api/operations/mux', payload),
   eventsUrl: (id) => `${BASE}/api/tasks/${id}/events?token=${encodeURIComponent(TOKEN)}`,
   fileUrl: (name) => `${BASE}/api/library/file?name=${encodeURIComponent(name)}&token=${encodeURIComponent(TOKEN)}`,
+  mediaUrl: (path) => `${BASE}/api/media/file?path=${encodeURIComponent(path)}&token=${encodeURIComponent(TOKEN)}`,
   thumbUrl: (name) => `${BASE}/api/library/thumb?name=${encodeURIComponent(name)}&token=${encodeURIComponent(TOKEN)}`,
 };
 
@@ -694,6 +723,7 @@ const mockApi = {
   },
   eventsUrl: (id) => `mock:${id}`,
   fileUrl: (name) => '#',
+  mediaUrl: (path) => '#',
   thumbUrl: (name) => null,
 };
 if (MOCK) {
@@ -721,7 +751,7 @@ function showView(name) {
     if (name === 'settings') loadSettings();
     if (name === 'doctor') loadDoctor();
     if (name === 'presets') { void loadVideoPresets(); renderPresetsList(); }
-    if (name === 'workspace') { wsLoadBrowse(''); wsRenderOps(); }
+    if (name === 'workspace') { wsLoadBrowse(''); wsRenderTagPalette(); wsRenderOps(); void wsRefreshQueue(); }
 }
 
 /* ================= Пресеты загрузок (Ctrl+Shift+I, шестерёнка) ================= */
@@ -1917,13 +1947,9 @@ function dropToConvert(path) {
   showView('convert');
 }
 function openUniversalWithFile(path) {
-  wsInput = path;
   showView('workspace');
-  wsRenderOps();
-  // defer probe until view rendered
-  setTimeout(() => { wsProbeSelected(); wsLoadBrowse(''); }, 50);
+  void wsOpenFile(path);
 }
-
 /* ================= История (drawer) ================= */
 function openHistory() {
   el('history-drawer').classList.remove('hidden');
@@ -2142,6 +2168,7 @@ document.addEventListener('keydown', (e) => {
   const tag = (e.target && e.target.tagName) || '';
   const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
   if (e.key === 'Escape') {
+    if (!el('ws-tag-modal').classList.contains('hidden')) { wsCloseTagModal(); return; }
     if (!el('palette').classList.contains('hidden')) { closePalette(); return; }
     if (!el('console').classList.contains('hidden')) { closeConsole(); return; }
     if (!el('preset-editor').classList.contains('hidden')) { closePresetEditor(); return; }
@@ -2156,7 +2183,7 @@ document.addEventListener('keydown', (e) => {
   if (e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && !typing) {
      if (e.code === 'Digit1') { e.preventDefault(); showView('home'); return; }
      if (e.code === 'Digit2') { e.preventDefault(); showView('library'); return; }
-     if (e.code === 'Digit3') { e.preventDefault(); showView('convert'); return; }
+     if (e.code === 'Digit3') { e.preventDefault(); showView('workspace'); return; }
      if (e.code === 'Digit4') { e.preventDefault(); showView('doctor'); return; }
    }
    // Ctrl+Shift+I — настройки пресета (требование: перехват DevTools)
@@ -2529,7 +2556,6 @@ async function runConsoleCommand(raw) {
 
 /* ---------- палитра команд ---------- */
 const PALETTE = [
-  { id: 'go-workspace', ru: 'Рабочее место (Pipeline)', en: 'Workspace (Pipeline)', keys: 'workspace pipeline рабочее место мастерская', run: () => showView('workspace') },
   { id: 'go-home', ru: 'Главная', en: 'Home', keys: 'home главная view', run: () => showView('home') },
   { id: 'go-library', ru: 'Видео', en: 'Library', keys: 'library video видео файлы', run: () => showView('library') },
   { id: 'go-convert', ru: 'Конвертация', en: 'Convert', keys: 'convert конвертация ffmpeg', run: () => showView('convert') },
@@ -2758,8 +2784,6 @@ async function init() {
   renderSlots();
   pumpQueue();
   syncDlAudioMode();
-  try { wsInit(); } catch(e){ console.error(e); }
-
   // Главная: топбар.
   el('btn-dl-start').onclick = () => { void startDownload(); };
   el('url').addEventListener('keydown', (e) => {
@@ -2775,23 +2799,9 @@ async function init() {
   const dlAudioChk = el('dl-audio-only');
   if (dlAudioChk) dlAudioChk.addEventListener('change', () => { syncDlAudioMode(); });
 
-  // Drag & drop: главная ведёт в универсальный редактор (Alt+3) с загруженным файлом
-  setupDrop(el('view-home'), (p) => openUniversalWithFile(p), el('home-empty'));
+  setupDrop(el('view-home'), openUniversalWithFile, el('home-empty'));
   setupDrop(el('conv-drop'), (p) => setConvertInput(p));
-  // Alt+3 — универсальный редактор (пусто если ничего не загружено)
-  document.addEventListener('keydown', (e) => {
-    if (e.altKey && (e.code === 'Digit3' || e.key === '3')) {
-      e.preventDefault();
-      if (wsInput) {
-        showView('workspace');
-      } else {
-        // пустой редактор — просто открыть workspace без файла
-        showView('workspace');
-        wsRenderOps();
-        toast('Универсальный редактор (Alt+3) — перетащите файл или выберите слева');
-      }
-    }
-  });
+  wsInit();
 
   // Ctrl + колесо — размер слотов.
   el('view-home').addEventListener('wheel', (e) => {
@@ -2995,6 +3005,55 @@ let wsInput = '';
 let wsOutput = '';
 let wsOps = [];
 let wsInspectData = null;
+let wsDuration = 0;
+const wsTaskIds = new Set();
+
+async function wsRefreshQueue() {
+  const box = el('ws-queue');
+  if (!box) return;
+  try {
+    const {tasks} = await backend.tasks();
+    box.replaceChildren();
+    const relevant = (tasks || []).filter(task => wsTaskIds.has(task.id));
+    if (!relevant.length) { box.textContent = '—'; return; }
+    for (const task of relevant) {
+      const row = document.createElement('div'); row.className='ws-ops-item';
+      row.textContent = `#${task.id} · ${task.status} · ${Math.round(task.progress || 0)}% · ${task.target || ''}`;
+      box.appendChild(row);
+    }
+  } catch (e) { box.textContent = e.message; }
+}
+
+function wsSeconds(value) {
+  const parts = String(value).trim().split(':');
+  if (parts.length > 3 || !parts.every(p => /^\d+(?:\.\d+)?$/.test(p))) return NaN;
+  return parts.reduce((n, p) => n * 60 + Number(p), 0);
+}
+function wsTime(seconds) {
+  const s = Math.max(0, Number(seconds) || 0);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${(s % 60).toFixed(2).padStart(5,'0')}`;
+}
+async function wsOpenFile(path) {
+  const candidate = String(path || '').trim();
+  if (!candidate) { toast('Укажите путь к файлу', true); return; }
+  try {
+    const info = await backend.probe(candidate);
+    if (!(info.streams || []).some(s => s.codec_type === 'video' || s.codec_type === 'audio')) throw new Error('Нет видео или аудио дорожки');
+    if (wsInput && wsInput !== candidate) wsOps = [];
+    wsInput = candidate;
+    wsInspectData = info;
+    wsDuration = Number(info.format?.duration_sec || info.format?.duration || 0);
+    el('ws-cut-start').value = '00:00:00';
+    el('ws-cut-end').value = wsDuration > 0 ? wsTime(wsDuration) : '';
+    el('ws-cut-start-range').value = '0';
+    el('ws-cut-end-range').value = '1000';
+    el('ws-change-path').value = candidate;
+    wsRenderOps();
+    wsProbeSelected();
+  } catch (e) { toast(`Не удалось открыть файл: ${e.message}`, true); }
+}
 
 const wsOpTypes = [
   { value: 'transcode', label: 'Transcode / Remux' },
@@ -3009,18 +3068,139 @@ const wsOpTypes = [
   { value: 'fps', label: 'FPS' },
 ];
 
+const wsTagCatalog = [
+  {type:'trim', icon:'✂️', ru:'Обрезка', en:'Trim', descRu:'Оставить нужный отрезок видео или аудио', descEn:'Keep a segment of video or audio'},
+  {type:'aspect', icon:'▣', ru:'Формат кадра', en:'Aspect ratio', descRu:'Обрезать края или добавить поля', descEn:'Crop edges or add bars'},
+  {type:'audio', icon:'🔊', ru:'Громкость', en:'Volume', descRu:'Изменить или нормализовать звук', descEn:'Adjust or normalize audio'},
+  {type:'transcode', icon:'🎞️', ru:'Кодеки', en:'Codecs', descRu:'Выбрать формат файла и кодеки', descEn:'Choose file format and codecs'},
+  {type:'filter', icon:'✨', ru:'Фильтры', en:'Filters', descRu:'Видео и аудио фильтры FFmpeg', descEn:'FFmpeg video and audio filters'},
+  {type:'mux', icon:'🎵', ru:'Добавить аудио', en:'Add audio', descRu:'Добавить внешнюю звуковую дорожку', descEn:'Add an external audio track'},
+  {type:'subtitle', icon:'💬', ru:'Субтитры', en:'Subtitles', descRu:'Встроить или наложить субтитры', descEn:'Embed or burn subtitles'},
+  {type:'metadata', icon:'🏷️', ru:'Данные файла', en:'Metadata', descRu:'Заголовок и исполнитель', descEn:'Title and artist'},
+  {type:'scale', icon:'↔️', ru:'Размер', en:'Resize', descRu:'Изменить разрешение', descEn:'Change resolution'},
+  {type:'fps', icon:'⏱️', ru:'Частота кадров', en:'Frame rate', descRu:'Изменить FPS', descEn:'Change FPS'},
+];
+const wsTagLabel = tag => state.lang === 'ru' ? tag.ru : tag.en;
+let wsModalType = '';
+let wsModalEditing = -1;
+
+function wsTagFields(type, config = {}) {
+  const field = (key, ru, en, kind='text', value='', options=[]) => ({key, label:L2(ru,en), kind, value:config[key] ?? value, options});
+  switch(type) {
+    case 'trim': return [field('start','Начало','Start','text','00:00:00'),field('end','Конец','End','text',wsDuration ? wsTime(wsDuration) : ''),field('mode','Точность','Accuracy','select','reencode',[['reencode',L2('Точно: перекодировать','Accurate: re-encode')],['copy',L2('Быстро: по ключевым кадрам','Fast: keyframes')]])];
+    case 'aspect': return [field('ratio','Соотношение W:H','Ratio W:H','text','9:16'),field('mode','Заполнение кадра','Frame fit','select','crop',[['crop',L2('Без полей: обрезать края','Fill: crop edges')],['letterbox',L2('Без потерь: добавить поля','Fit: add bars')],['blur',L2('Размытые поля','Blurred bars')],['stretch',L2('Растянуть','Stretch')]]),field('size_preset','Разрешение','Resolution','select','1080p',[['720p','720p'],['1080p','1080p'],['4k','4K']])];
+    case 'audio': return [field('volume','Громкость (1 = исходная)','Volume (1 = original)','number',1),field('normalize','Нормализовать громкость','Normalize loudness','check',false)];
+    case 'transcode': return [field('container','Формат файла','File format','select','mp4',[['mp4','MP4'],['mkv','MKV'],['mov','MOV'],['webm','WebM']]),field('vcodec','Видеокодек','Video codec','select','libx264',[['libx264','H.264 (совместимый)'],['libx265','H.265 (меньше файл)'],['libsvtav1','AV1'],['copy',L2('Оставить исходный','Keep original')]]),field('acodec','Аудиокодек','Audio codec','select','aac',[['aac','AAC'],['libopus','Opus'],['copy',L2('Оставить исходный','Keep original')]]),field('crf','Качество (CRF, меньше = лучше)','Quality (CRF, lower = better)','number',20)];
+    case 'filter': return [field('vf','Видеофильтр FFmpeg','FFmpeg video filter','text',''),field('af','Аудиофильтр FFmpeg','FFmpeg audio filter','text','')];
+    case 'mux': return [field('extra','Путь к аудиофайлу','Audio file path','text',''),field('shortest','Завершить по короткой дорожке','Stop at shortest track','check',true)];
+    case 'subtitle': return [field('input','Путь к субтитрам','Subtitle file path','text',''),field('mode','Режим','Mode','select','burn',[['burn',L2('Наложить на видео','Burn into video')],['embed',L2('Встроить дорожкой','Embed as track')]])];
+    case 'metadata': return [field('title','Название','Title'),field('artist','Исполнитель','Artist')];
+    case 'scale': return [field('width','Ширина','Width','number',1280),field('height','Высота','Height','number',720)];
+    case 'fps': return [field('fps','Кадров в секунду','Frames per second','number',30)];
+    default: return [];
+  }
+}
+
+function wsOpenTagModal(type, editing = -1) {
+  const tag = wsTagCatalog.find(x => x.type === type);
+  if (!tag) return;
+  if (type === 'aspect' && wsInspectData && !wsInspectData.streams?.some(s=>s.codec_type==='video')) { toast(L2('Нужна видеодорожка','Video track required'),true); return; }
+  wsModalType = type; wsModalEditing = editing;
+  el('ws-tag-modal-title').textContent = `${tag.icon} ${wsTagLabel(tag)}`;
+  el('ws-tag-modal-desc').textContent = state.lang === 'ru' ? tag.descRu : tag.descEn;
+  const box = el('ws-tag-modal-fields'); box.replaceChildren();
+  const saved = editing >= 0 ? wsOps[editing].config : {};
+  const values = {...saved};
+  if (type === 'aspect' && saved.ratio_w && saved.ratio_h) values.ratio = `${saved.ratio_w}:${saved.ratio_h}`;
+  if (type === 'mux') values.extra = saved.extra_inputs?.[0] || '';
+  for (const f of wsTagFields(type, values)) {
+    const label=document.createElement('label');
+    const caption=document.createElement('span'); caption.textContent=f.label;
+    const input=document.createElement(f.kind==='select' ? 'select' : 'input');
+    input.id=`ws-modal-${f.key}`;
+    if (f.kind==='select') {
+      f.options.forEach(([value,text])=>{ const option=document.createElement('option'); option.value=value; option.textContent=text; input.appendChild(option); });
+      input.value=String(f.value);
+    } else if (f.kind==='check') { input.type='checkbox'; input.checked=!!f.value; label.className='ws-check'; }
+    else { input.type=f.kind; input.value=String(f.value); if (f.kind==='number') input.step='any'; }
+    label.append(caption,input); box.appendChild(label);
+  }
+  el('btn-ws-tag-add').textContent = editing >= 0 ? L2('Сохранить','Save') : T('wsAdd');
+  el('ws-tag-modal').classList.remove('hidden');
+  box.querySelector('input, select')?.focus();
+}
+function wsCloseTagModal() { el('ws-tag-modal').classList.add('hidden'); wsModalType=''; wsModalEditing=-1; }
+function wsSaveTagModal() {
+  const type=wsModalType;
+  const get=key=>el(`ws-modal-${key}`);
+  const cfg={};
+  for (const field of wsTagFields(type)) cfg[field.key]=field.kind==='check' ? get(field.key).checked : get(field.key).value.trim();
+  if (type==='trim') {
+    const start=cfg.start ? wsSeconds(cfg.start) : 0, end=cfg.end ? wsSeconds(cfg.end) : wsDuration;
+    if ((!cfg.start && !cfg.end) || !Number.isFinite(start) || start<0 || (cfg.end && (!Number.isFinite(end) || end<=start)) || (wsDuration>0 && (start>=wsDuration || end>wsDuration+0.1))) { toast(L2('Проверьте начало и конец','Check start and end'),true); return; }
+  }
+  if (type==='aspect') {
+    if (!/^\d+:\d+$/.test(cfg.ratio)) { toast(L2('Введите W:H, например 9:16','Enter W:H, e.g. 9:16'),true); return; }
+    const [w,h]=cfg.ratio.split(':').map(Number);
+    if (w<1 || h<1 || w>100 || h>100) { toast(L2('Некорректное соотношение','Invalid ratio'),true); return; }
+    cfg.ratio_w=w; cfg.ratio_h=h; delete cfg.ratio;
+  }
+  if (type==='audio') { cfg.volume=Number(cfg.volume); if (!Number.isFinite(cfg.volume) || cfg.volume<0 || cfg.volume>10) { toast(L2('Громкость: от 0 до 10','Volume: 0 to 10'),true); return; } }
+  if (type==='transcode') {
+    cfg.crf=Number(cfg.crf);
+    if (!Number.isInteger(cfg.crf) || cfg.crf<0 || cfg.crf>51) { toast('CRF: 0–51',true); return; }
+    cfg.crf=String(cfg.crf);
+    if (cfg.vcodec==='copy') { delete cfg.crf; cfg.acodec='copy'; }
+    else cfg.preset='medium';
+  }
+  if (type==='mux') { if (!cfg.extra) { toast(L2('Укажите аудиофайл','Choose audio file'),true); return; } cfg.extra_inputs=[cfg.extra]; cfg.acodec='aac'; delete cfg.extra; }
+  if (type==='subtitle' && !cfg.input) { toast(L2('Укажите файл субтитров','Choose subtitle file'),true); return; }
+  if (type==='filter' && !cfg.vf && !cfg.af) { toast(L2('Укажите фильтр','Enter a filter'),true); return; }
+  if (type==='scale') { cfg.width=Number(cfg.width); cfg.height=Number(cfg.height); cfg.algo='lanczos'; if (!Number.isInteger(cfg.width) || !Number.isInteger(cfg.height) || cfg.width<2 || cfg.height<2) { toast(L2('Неверный размер','Invalid size'),true); return; } }
+  if (type==='fps') { if (!Number.isFinite(Number(cfg.fps)) || Number(cfg.fps)<=0 || Number(cfg.fps)>240) { toast('FPS: 1–240',true); return; } }
+  const op={type,config:cfg};
+  if (wsModalEditing>=0) wsOps[wsModalEditing]=op;
+  else if (type==='trim' || type==='aspect') { wsOps=wsOps.filter(x=>x.type!==type); if (type==='trim') wsOps.unshift(op); else wsOps.push(op); }
+  else wsOps.push(op);
+  wsCloseTagModal(); wsRenderOps();
+}
+function wsRenderTagPalette() {
+  const box=el('ws-tag-palette'); if (!box) return;
+  box.replaceChildren();
+  wsTagCatalog.forEach(tag=>{
+    const button=document.createElement('button'); button.className='ws-tag'; button.type='button'; button.draggable=true;
+    button.title=state.lang==='ru' ? tag.descRu : tag.descEn;
+    const icon=document.createElement('span'); icon.className='ws-tag-icon'; icon.textContent=tag.icon;
+    const label=document.createElement('span'); label.className='ws-tag-name'; label.textContent=wsTagLabel(tag);
+    button.append(icon,label);
+    button.onclick=()=>wsOpenTagModal(tag.type);
+    button.ondragstart=e=>{ e.dataTransfer.setData('application/x-mediacli-tag',tag.type); e.dataTransfer.effectAllowed='copy'; };
+    box.appendChild(button);
+  });
+}
+
 function wsRenderOps() {
   const box = el('ws-ops');
   if (!box) return;
-  box.innerHTML = '';
+  box.replaceChildren();
+  if (!wsOps.length) {
+    const hint=document.createElement('span'); hint.className='muted'; hint.textContent=T('wsDropHint'); box.appendChild(hint);
+  }
   wsOps.forEach((op, idx) => {
-    const div = document.createElement('div');
-    div.className = 'ws-ops-item';
-    div.style.setProperty('--i', idx);
-    div.innerHTML = `<span class="op-type">${op.type}</span><span class="op-desc">${JSON.stringify(op.config).slice(0,80)}</span>
-      <button class="btn small" data-i="${idx}">✕</button>`;
-    div.querySelector('button').onclick = () => { wsOps.splice(idx,1); wsRenderOps(); };
-    box.appendChild(div);
+    const tag=wsTagCatalog.find(x=>x.type===op.type);
+    const chip=document.createElement('button'); chip.type='button'; chip.className='ws-selected-tag';
+    const icon=document.createElement('span'); icon.textContent=tag?.icon || '⚙️';
+    const name=document.createElement('strong'); name.textContent=tag ? wsTagLabel(tag) : op.type;
+    const summary=document.createElement('span'); summary.className='ws-tag-summary';
+    if (op.type==='trim') summary.textContent=`${op.config.start || '0'} → ${op.config.end || '∞'}`;
+    else if (op.type==='aspect') summary.textContent=`${op.config.ratio_w}:${op.config.ratio_h} · ${op.config.mode}`;
+    else if (op.type==='transcode') summary.textContent=`${op.config.container?.toUpperCase() || ''} · ${op.config.vcodec || ''}`;
+    else summary.textContent=Object.values(op.config).filter(x=>typeof x==='string').join(' · ').slice(0,48);
+    chip.append(icon,name,summary);
+    chip.title=L2('Нажмите для настройки · правая кнопка удаляет','Click to edit · right-click removes');
+    chip.onclick=()=>wsOpenTagModal(op.type,idx);
+    chip.oncontextmenu=e=>{ e.preventDefault(); wsOps.splice(idx,1); wsRenderOps(); };
+    box.appendChild(chip);
   });
   const inp = el('ws-pipeline-input');
   if (inp) {
@@ -3037,7 +3217,7 @@ function wsRenderOps() {
   const layout = document.querySelector('#view-workspace .ws-layout');
   const showFull = !!wsInput;
   if (empty) empty.classList.toggle('hidden', showFull);
-  if (layout) layout.classList.toggle('hidden', !showFull);
+  if (layout) layout.classList.remove('hidden');
 }
 
 async function wsLoadBrowse(path) {
@@ -3050,13 +3230,15 @@ async function wsLoadBrowse(path) {
     dirsEl.innerHTML = ''; filesEl.innerHTML = '';
     (data.dirs||[]).forEach((d,i)=>{
       const div=document.createElement('div'); div.className='brow'; div.style.setProperty('--i',i);
-      div.innerHTML=`<span>📁 ${d}</span>`; div.onclick=()=>wsLoadBrowse(data.path.replace(/\/$/,'')+'/'+d);
+      div.textContent=`📁 ${d}`; div.onclick=()=>wsLoadBrowse(data.path.replace(/\/$/,'')+'/'+d);
       dirsEl.appendChild(div);
     });
     (data.files||[]).forEach((f,i)=>{
       const div=document.createElement('div'); div.className='brow'+(f.is_media?' is_media':''); div.style.setProperty('--i',i);
-      div.innerHTML=`<span>${f.name}</span><span class=sz>${(f.size/1024/1024).toFixed(1)} MB</span>`;
-      div.onclick=()=>{ wsInput = (data.path.replace(/\/$/,'')+'/'+f.name); wsRenderOps(); wsProbeSelected(); };
+      const name=document.createElement('span'); name.textContent=f.name;
+      const size=document.createElement('span'); size.className='sz'; size.textContent=`${(f.size/1024/1024).toFixed(1)} MB`;
+      div.append(name,size);
+      div.onclick=()=>{ void wsOpenFile(data.path.replace(/\/$/,'')+'/'+f.name); };
       filesEl.appendChild(div);
     });
   } catch(e){ toast(e.message,true); }
@@ -3075,7 +3257,7 @@ async function wsProbeSelected() {
     const isVideo = info.streams.some(s=>s.codec_type==='video');
     const isAudio = !isVideo && info.streams.some(s=>s.codec_type==='audio');
     const vEl = el('ws-video'), aEl = el('ws-audio'), wrap = el('ws-preview-wrap');
-    const fileUrl = backend.fileUrl(wsInput.split('/').pop()) || backend.fileUrl(wsInput);
+    const fileUrl = backend.mediaUrl(wsInput);
     // Try to load original file for instant preview
     if (isVideo && vEl) {
       vEl.src = fileUrl;
@@ -3123,6 +3305,7 @@ function wsRenderInspector(tab) {
 
 function wsBuildPayload() {
   if (!wsInput) { toast('Pick input file first',true); return null; }
+  if (!wsOps.length) { toast('Добавьте хотя бы одно действие', true); return null; }
   const ops = wsOps.map(o=>({ type:o.type, config:o.config }));
   return { inputs:[wsInput], operations:ops, output:{ path:(el('ws-output')?.value.trim() || ''), overwrite:false }, name:'workspace-pipeline' };
 }
@@ -3141,12 +3324,26 @@ async function wsRun() {
   const payload = wsBuildPayload(); if(!payload) return;
   try {
     const res = await backend.pipelineRun(payload);
-    toast(`Pipeline enqueued: ${(res.task_ids||[]).length} tasks`);
+    (res.task_ids || []).forEach(id => wsTaskIds.add(id));
+    toast(`Экспорт запущен: ${res.target || ''}`);
+    void wsRefreshQueue();
   } catch(e){ toast(e.message,true); }
 }
 
 function wsInit() {
   if (!el('ws-add-op')) return;
+  wsRenderTagPalette();
+  const drop=el('ws-ops');
+  drop.addEventListener('dragover',e=>{ e.preventDefault(); e.stopPropagation(); drop.classList.add('drag-over'); });
+  drop.addEventListener('dragleave',()=>drop.classList.remove('drag-over'));
+  drop.addEventListener('drop',e=>{
+    e.preventDefault(); e.stopPropagation(); drop.classList.remove('drag-over');
+    const type=e.dataTransfer.getData('application/x-mediacli-tag');
+    if (type) wsOpenTagModal(type);
+  });
+  el('btn-ws-tag-cancel').onclick=wsCloseTagModal;
+  el('btn-ws-tag-add').onclick=wsSaveTagModal;
+  el('ws-tag-modal').addEventListener('click',e=>{ if (e.target.id==='ws-tag-modal') wsCloseTagModal(); });
   cselectInit('ws-add-op');
   cselectSet('ws-add-op', wsOpTypes.map(o=>({value:o.value,label:o.label})), 'transcode');
   // new form selects
@@ -3154,6 +3351,25 @@ function wsInit() {
   if (el('ws-v-codec')) { cselectInit('ws-v-codec'); cselectSet('ws-v-codec', [{value:'libx264',label:'libx264'},{value:'libx265',label:'libx265'},{value:'libsvtav1',label:'libsvtav1'},{value:'copy',label:'copy (remux)'}], 'libx264'); }
   if (el('ws-aspect-mode')) { cselectInit('ws-aspect-mode'); cselectSet('ws-aspect-mode', [{value:'crop',label:'crop'},{value:'letterbox',label:'letterbox'},{value:'blur',label:'blur'},{value:'stretch',label:'stretch'}], 'crop'); }
   if (el('ws-subs-mode')) { cselectInit('ws-subs-mode'); cselectSet('ws-subs-mode', [{value:'burn',label:'burn-in'},{value:'embed',label:'embed'},{value:'extract',label:'extract'}], 'burn'); }
+  el('btn-ws-open').onclick = () => { void wsOpenFile(el('ws-open-path').value); };
+  el('ws-open-path').addEventListener('keydown', e => { if (e.key === 'Enter') void wsOpenFile(e.target.value); });
+  el('btn-ws-change').onclick = () => { void wsOpenFile(el('ws-change-path').value); };
+  el('ws-change-path').addEventListener('keydown', e => { if (e.key === 'Enter') void wsOpenFile(e.target.value); });
+  el('ws-aspect-preset').onchange = e => {
+    const custom = e.target.value === 'custom';
+    el('ws-aspect-ratio').classList.toggle('hidden', !custom);
+    if (!custom) el('ws-aspect-ratio').value = e.target.value;
+  };
+  const setFromPlayer = id => {
+    const player = el('ws-video').classList.contains('hidden') ? el('ws-audio') : el('ws-video');
+    el(id).value = wsTime(player.currentTime || 0);
+  };
+  el('btn-ws-set-start').onclick = () => setFromPlayer('ws-cut-start');
+  el('btn-ws-set-end').onclick = () => setFromPlayer('ws-cut-end');
+  for (const [rangeId, fieldId] of [['ws-cut-start-range','ws-cut-start'], ['ws-cut-end-range','ws-cut-end']]) {
+    el(rangeId).oninput = e => { if (wsDuration > 0) el(fieldId).value = wsTime(wsDuration * Number(e.target.value) / 1000); };
+    el(fieldId).onchange = e => { const n=wsSeconds(e.target.value); if (wsDuration > 0 && Number.isFinite(n)) el(rangeId).value = String(Math.max(0,Math.min(1000,Math.round(n/wsDuration*1000)))); };
+  }
   el('btn-ws-add').onclick = async ()=>{
     const t = cselectGet('ws-add-op');
     let cfg = {};
@@ -3198,14 +3414,25 @@ function wsInit() {
   };
   el('btn-ws-preview').onclick = async ()=>{
     const payload = wsBuildPayload(); if(!payload) return;
-    payload.start='1'; payload.duration='5';
+    payload.start='0'; payload.duration='5';
     try {
       const res = await backend.pipelinePreview(payload);
-      const v = el('ws-video'); const wrap = el('ws-preview-wrap');
-      if (v && res.preview_path) { v.src = res.preview_path; v.classList.remove('hidden'); if(wrap) wrap.classList.add('hidden'); v.play().catch(()=>{}); }
+      const isVideo = wsInspectData?.streams?.some(s=>s.codec_type==='video');
+      const player = el(isVideo ? 'ws-video' : 'ws-audio');
+      const other = el(isVideo ? 'ws-audio' : 'ws-video');
+      if (player && res.preview_path) {
+        player.src = backend.mediaUrl(res.preview_path); player.classList.remove('hidden');
+        other.classList.add('hidden'); el('ws-preview-wrap').classList.add('hidden');
+        player.load(); player.play().catch(()=>{});
+      }
       toast('Preview generated');
     } catch(e){ toast(e.message,true); }
   };
+  el('btn-ws-original').onclick = () => { void wsProbeSelected(); };
+  el('btn-ws-queue-refresh').onclick = () => { void wsRefreshQueue(); };
+  setInterval(() => {
+    if (!el('view-workspace').classList.contains('hidden') && wsTaskIds.size) void wsRefreshQueue();
+  }, 3000);
   el('btn-ws-probe').onclick = wsProbeSelected;
   el('btn-ws-refresh').onclick = ()=>wsLoadBrowse('');
   document.querySelectorAll('.ws-ins-tab').forEach(b=>b.onclick=()=>wsRenderInspector(b.dataset.tab));
@@ -3243,14 +3470,25 @@ function wsInit() {
   const addTrim = el('btn-ws-add-trim');
   if (addTrim) addTrim.onclick = ()=>{
     const s = el('ws-cut-start')?.value.trim()||''; const e = el('ws-cut-end')?.value.trim()||'';
-    wsOps.push({type:'trim', config:{ start:s, end:e, mode:'reencode' }});
-    wsRenderOps(); toast('Trim добавлен');
+    const start = s ? wsSeconds(s) : 0, end = e ? wsSeconds(e) : wsDuration;
+    if (!Number.isFinite(start) || start < 0 || (e && (!Number.isFinite(end) || end <= start)) || (!s && !e)) {
+      toast('Проверьте начало и конец обрезки', true); return;
+    }
+    if (wsDuration > 0 && (start >= wsDuration || (e && end > wsDuration + 0.1))) { toast('Время за пределами файла', true); return; }
+    wsOps = wsOps.filter(op => op.type !== 'trim');
+    wsOps.unshift({type:'trim', config:{ start:s, end:e, mode:el('ws-cut-copy').checked ? 'copy' : 'reencode' }});
+    wsRenderOps(); toast('Обрезка добавлена');
   };
   const addAspect = el('btn-ws-add-aspect');
   if (addAspect) addAspect.onclick = ()=>{
-    const ratio = (el('ws-aspect-ratio')?.value.trim()||'9:16'); const [w,h]=ratio.split(':').map(Number);
+    if (!wsInspectData?.streams?.some(s=>s.codec_type==='video')) { toast('Для аудио соотношение сторон недоступно',true); return; }
+    const ratio = el('ws-aspect-preset').value === 'custom' ? el('ws-aspect-ratio').value.trim() : el('ws-aspect-preset').value;
+    if (!/^\d+:\d+$/.test(ratio)) { toast('Формат: W:H, например 9:16',true); return; }
+    const [w,h]=ratio.split(':').map(Number);
+    if (w < 1 || h < 1 || w > 100 || h > 100) { toast('Укажите отношение от 1:1 до 100:100',true); return; }
     const mode = cselectGet('ws-aspect-mode')||'crop';
-    wsOps.push({type:'aspect', config:{ ratio_w:w||9, ratio_h:h||16, mode, size_preset:'1080p' }});
+    wsOps = wsOps.filter(op => op.type !== 'aspect');
+    wsOps.push({type:'aspect', config:{ ratio_w:w, ratio_h:h, mode, size_preset:el('ws-aspect-resolution').value }});
     wsRenderOps(); toast('Aspect добавлен');
   };
   const addFilter = el('btn-ws-add-filter');
@@ -3275,7 +3513,7 @@ function wsInit() {
   };
   // drag into pipeline
   const wsCard = el('view-workspace');
-  if (wsCard) setupDrop(wsCard, (p)=>{ wsInput=p; wsRenderOps(); wsProbeSelected(); });
+  if (wsCard) setupDrop(wsCard, (p)=>{ void wsOpenFile(p); });
   wsLoadBrowse('');
   // sidebar navigation
   document.querySelectorAll('.ws-nav').forEach(btn=>{

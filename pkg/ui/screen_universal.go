@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"mediacli/pkg/core"
@@ -11,269 +12,178 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// ScreenUniversal — отдельный универсальный редактор на Alt+3
-// Сначала пусто (drop/выбор), после загрузки файла — единый редактор всего: микс звука, pipeline, фильтры.
+// ScreenUniversal is the keyboard editor opened with Alt+3.
 func ScreenUniversal(s tcell.Screen, cfg *core.Config, initialPath string) {
-	p := strings.TrimSpace(initialPath)
-	if p != "" {
-		p = core.ParseUserPath(p)
-		if _, err := os.Stat(p); err != nil {
-			p = ""
+	tr := func(ru, en string) string {
+		if strings.HasPrefix(cfg.Language, "ru") {
+			return ru
 		}
+		return en
 	}
-	// Empty state: предложить загрузить файл
-	if p == "" {
-		for {
-			w, h := s.Size()
-			s.Clear()
-			DrawHeader(s, T(*cfg, "universal_title"), w, *cfg)
-			msg := T(*cfg, "universal_empty_hint")
-			lines := strings.Split(msg, "\n")
-			y := h/2 - len(lines)/2
-			for i, line := range lines {
-				DrawString(s, max(2, (w-len(line))/2), y+i, line, w-4, GetBaseStyle(*cfg))
-			}
-			opts := []string{T(*cfg, "universal_load_file"), T(*cfg, "universal_cancel")}
-			// нарисуем опции внизу
-			for i, o := range opts {
-				style := GetBaseStyle(*cfg)
-				if i == 0 {
-					style = GetHighlightStyle(*cfg)
-				}
-				DrawString(s, max(2, (w-len(o))/2), y+len(lines)+2+i, o, w-4, style)
-			}
-			DrawFooter(s, T(*cfg, "universal_footer_empty"), w, h)
-			s.Show()
-			ev := s.PollEvent()
-			switch ev := ev.(type) {
-			case *tcell.EventKey:
-				if CheckTerminalHotkey(ev) {
-					GlobalTerminal.Open(s, cfg)
-					continue
-				}
-				switch ev.Key() {
-				case tcell.KeyEscape:
-					return
-				case tcell.KeyEnter:
-					fpath, ok := TextInput(s, cfg, T(*cfg, "universal_title"), T(*cfg, "aspect_prompt_file"), "", T(*cfg, "footer_input"))
-					if !ok || strings.TrimSpace(fpath) == "" {
-						continue
-					}
-					cand := core.ParseUserPath(fpath)
-					if _, err := os.Stat(cand); err != nil {
-						ShowMessage(s, cfg, T(*cfg, "universal_title"), []string{T(*cfg, "convert_err_notfound", cand)}, T(*cfg, "footer_message"))
-						continue
-					}
-					p = cand
-					goto EDITOR
-				case tcell.KeyRune:
-					if ev.Rune() == 'q' {
-						return
-					}
-				}
-			}
-		}
-	}
-EDITOR:
-	if p == "" {
-		return
-	}
-	// Unified editor: показать probe и дать pipeline-меню прямо здесь (звук+pipeline)
-	info, _ := core.ProbeMediaInfoWithConfig(p, *cfg)
+	path := strings.TrimSpace(initialPath)
 	var ops []core.Operation
 	for {
-		w, h := s.Size()
-		s.Clear()
-		DrawHeader(s, T(*cfg, "universal_title")+" — "+filepath.Base(p), w, *cfg)
-		// Левая часть — info, правая — pipeline
-		// Упрощённо: заголовок файла + pipelines
-		y := 2
-		DrawString(s, 2, y, fmt.Sprintf("File: %s", filepath.Base(p)), w-4, GetAccentStyle(*cfg))
-		y++
+		if path == "" {
+			input, ok := TextInput(s, cfg, tr("Редактор Alt+3", "Alt+3 editor"), tr("Путь к видео или аудио:", "Video or audio file path:"), "", T(*cfg, "footer_input"))
+			if !ok {
+				return
+			}
+			candidate := core.ParseUserPath(strings.TrimSpace(input))
+			if st, err := os.Stat(candidate); err != nil || st.IsDir() {
+				ShowMessage(s, cfg, tr("Файл не найден", "File not found"), []string{candidate}, T(*cfg, "footer_message"))
+				continue
+			}
+			path, ops = candidate, nil
+		}
+		info, _ := core.ProbeMediaInfoWithConfig(path, *cfg)
+		summary := filepath.Base(path)
 		if info != nil {
-			DrawString(s, 2, y, fmt.Sprintf("Format: %s  Duration: %s  Streams: %d", info.Format.FormatName, info.Format.Duration, len(info.Streams)), w-4, GetDimStyle(*cfg))
-			y++
-			for _, st := range info.Streams {
-				dim := ""
-				if st.Width > 0 {
-					dim = fmt.Sprintf(" %dx%d", st.Width, st.Height)
-				}
-				DrawString(s, 2, y, fmt.Sprintf(" [%s] %s%s", st.CodecType, st.CodecName, dim), w-4, GetBaseStyle(*cfg))
-				y++
-				if y >= h-10 {
-					break
-				}
-			}
+			summary += fmt.Sprintf(" · %s s · %d streams", info.Format.Duration, len(info.Streams))
 		}
-		y++
-		DrawString(s, 2, y, strings.Repeat("─", w-4), w-4, GetDimStyle(*cfg))
-		y++
-		if len(ops) == 0 {
-			DrawString(s, 2, y, T(*cfg, "pipeline_empty"), w-4, GetDimStyle(*cfg))
-		} else {
-			DrawString(s, 2, y, "Pipeline:", w-4, GetAccentStyle(*cfg))
-			y++
-			for i, op := range ops {
-				DrawString(s, 4, y, fmt.Sprintf("%d. [%s] %s", i+1, op.Type(), op.Describe()), w-8, GetBaseStyle(*cfg))
-				y++
-			}
+		for n, op := range ops {
+			summary += fmt.Sprintf("\n%d. %s", n+1, op.Describe())
 		}
-		DrawFooter(s, T(*cfg, "universal_footer"), w, h)
-		s.Show()
-
 		items := []string{
-			T(*cfg, "pipeline_add_transcode"),
-			T(*cfg, "pipeline_add_audio") + " (mix/volume/loudnorm)",
-			T(*cfg, "pipeline_add_mux") + " (add audio track)",
-			T(*cfg, "pipeline_add_filter"),
-			T(*cfg, "pipeline_add_subtitle"),
-			T(*cfg, "pipeline_add_trim"),
-			T(*cfg, "pipeline_add_aspect"),
-			T(*cfg, "pipeline_show_command"),
-			T(*cfg, "pipeline_run"),
-			T(*cfg, "universal_change_file"),
-			T(*cfg, "universal_close"),
+			tr("Обрезать длину", "Trim duration"),
+			tr("Соотношение сторон: обрезать / поля", "Aspect ratio: crop / bars"),
+			tr("Громкость / нормализация", "Volume / normalization"),
+			tr("Видеофильтр / аудиофильтр", "Video / audio filter"),
+			tr("Кодек и контейнер", "Codec and container"),
+			tr("Показать команду", "Show command"),
+			tr("Экспортировать", "Export"),
+			tr("Убрать последнее действие", "Remove last action"),
+			tr("Другой файл", "Choose another file"),
+			tr("Расширенный Pipeline", "Advanced pipeline"),
+			tr("Закрыть", "Close"),
 		}
-		idx := RunMenu(s, cfg, T(*cfg, "universal_title"), items, fmt.Sprintf("File: %s — %d ops", filepath.Base(p), len(ops)), T(*cfg, "footer_nav"))
-		if idx < 0 || idx == 10 {
+		choice := RunMenu(s, cfg, tr("Редактор Alt+3", "Alt+3 editor"), items, summary, T(*cfg, "footer_nav"))
+		if choice < 0 || choice == 10 {
 			return
 		}
-		switch idx {
+		switch choice {
 		case 0:
-			presets := []string{"H.264 CRF18", "H.265 CRF23", "AV1", "copy (remux)", "Custom"}
-			pi := RunMenu(s, cfg, T(*cfg, "pipeline_add_transcode"), presets, "Codec:", T(*cfg, "footer_nav"))
-			if pi < 0 {
-				continue
-			}
-			op := &core.TranscodeOp{}
-			switch pi {
-			case 0:
-				op.VCodec = "libx264"; op.ACodec = "aac"; op.CRF = "18"; op.Preset = "medium"; op.Container = "mp4"
-			case 1:
-				op.VCodec = "libx265"; op.ACodec = "aac"; op.CRF = "23"; op.Preset = "medium"; op.Container = "mp4"
-			case 2:
-				op.VCodec = "libsvtav1"; op.ACodec = "aac"; op.CRF = "24"; op.Preset = "5"; op.Container = "mkv"
-			case 3:
-				op.Remux = true; op.Container = "mp4"; op.VCodec = "copy"; op.ACodec = "copy"
-			case 4:
-				if v, ok := TextInput(s, cfg, "Custom", "VCodec:", "libx264", T(*cfg, "footer_input")); ok {
-					op.VCodec = strings.TrimSpace(v)
-				}
-				if v, ok := TextInput(s, cfg, "Custom", "ACodec:", "aac", T(*cfg, "footer_input")); ok {
-					op.ACodec = strings.TrimSpace(v)
-				}
-			}
-			ops = append(ops, op)
-		case 1:
-			volStr, ok := TextInput(s, cfg, "Audio Mix", "Volume (1.0=orig, 0.5=half, empty=skip):", "", T(*cfg, "footer_input"))
-			if !ok {
-				continue
-			}
-			aop := &core.AudioOp{}
-			if v := strings.TrimSpace(volStr); v != "" {
-				var f float64
-				fmt.Sscanf(v, "%f", &f)
-				aop.Volume = &f
-			}
-			if RunMenu(s, cfg, "Normalize", []string{"No", "Yes loudnorm"}, "", T(*cfg, "footer_nav")) == 1 {
-				aop.Normalize = true
-			}
-			ops = append(ops, aop)
-		case 2:
-			extra, ok := TextInput(s, cfg, "Mux", "Path to extra audio to mix/add:", "", T(*cfg, "footer_input"))
-			if !ok || strings.TrimSpace(extra) == "" {
-				continue
-			}
-			ep := core.ParseUserPath(extra)
-			if _, err := os.Stat(ep); err != nil {
-				ShowMessage(s, cfg, "Mux", []string{fmt.Sprintf("Not found: %s", ep)}, T(*cfg, "footer_message"))
-				continue
-			}
-			ops = append(ops, &core.MuxOp{ExtraInputs: []string{ep}, Shortest: true})
-		case 3:
-			vf, ok := TextInput(s, cfg, "Filter", "VF (e.g. eq=brightness=0.1,hflip):", "", T(*cfg, "footer_input"))
-			if !ok {
-				continue
-			}
-			if strings.TrimSpace(vf) == "" {
-				continue
-			}
-			ops = append(ops, &core.FilterOp{VF: strings.TrimSpace(vf)})
-		case 4:
-			sub, ok := TextInput(s, cfg, "Subtitle", "Path to .srt (burn):", "", T(*cfg, "footer_input"))
-			if !ok || strings.TrimSpace(sub) == "" {
-				continue
-			}
-			ops = append(ops, &core.SubtitleOp{Mode: "burn", Input: core.ParseUserPath(sub)})
-		case 5:
 			start, ok := TextInput(s, cfg, T(*cfg, "trim_title"), T(*cfg, "trim_prompt_start"), "00:00:00", T(*cfg, "footer_input"))
 			if !ok {
 				continue
 			}
-			end, _ := TextInput(s, cfg, T(*cfg, "trim_title"), T(*cfg, "trim_prompt_end"), "", T(*cfg, "footer_input"))
-			ops = append(ops, &core.TrimOp{Start: strings.TrimSpace(start), End: strings.TrimSpace(end), Mode: "reencode"})
-		case 6:
-			ratioStr, ok := TextInput(s, cfg, "Aspect", "Ratio W:H (9:16):", "9:16", T(*cfg, "footer_input"))
+			end, ok := TextInput(s, cfg, T(*cfg, "trim_title"), T(*cfg, "trim_prompt_end"), "", T(*cfg, "footer_input"))
 			if !ok {
 				continue
 			}
-			parts := strings.Split(ratioStr, ":")
-			rw, rh := 9, 16
-			if len(parts) == 2 {
-				fmt.Sscanf(strings.TrimSpace(parts[0]), "%d", &rw)
-				fmt.Sscanf(strings.TrimSpace(parts[1]), "%d", &rh)
+			mode := "reencode"
+			if RunMenu(s, cfg, T(*cfg, "trim_title"), []string{tr("Точно (перекодировать)", "Accurate (re-encode)"), tr("Быстро (ключевые кадры)", "Fast (keyframes)")}, "", T(*cfg, "footer_nav")) == 1 {
+				mode = "copy"
 			}
-			ops = append(ops, &core.AspectOp{RatioW: rw, RatioH: rh, Mode: "crop", SizePreset: "1080p"})
-		case 7:
+			op := &core.TrimOp{Start: strings.TrimSpace(start), End: strings.TrimSpace(end), Mode: mode}
+			if err := op.Validate(info); err != nil {
+				ShowMessage(s, cfg, "Trim", []string{err.Error()}, T(*cfg, "footer_message"))
+				continue
+			}
+			ops = replaceEditorOp(ops, op)
+		case 1:
+			ratio, ok := TextInput(s, cfg, tr("Соотношение сторон", "Aspect ratio"), "W:H (16:9, 9:16, 1:1, 4:5):", "9:16", T(*cfg, "footer_input"))
+			if !ok {
+				continue
+			}
+			parts := strings.Split(ratio, ":")
+			if len(parts) != 2 {
+				ShowMessage(s, cfg, "Aspect", []string{"Use W:H"}, T(*cfg, "footer_message"))
+				continue
+			}
+			w, we := strconv.Atoi(strings.TrimSpace(parts[0]))
+			h, he := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if we != nil || he != nil || w < 1 || h < 1 || w > 100 || h > 100 {
+				ShowMessage(s, cfg, "Aspect", []string{"Invalid W:H"}, T(*cfg, "footer_message"))
+				continue
+			}
+			modes := []string{tr("Без полей (обрезать)", "Fill (crop)"), tr("Без потерь (с полями)", "Fit (bars)"), tr("Размытые поля", "Blurred bars"), tr("Растянуть", "Stretch")}
+			mi := RunMenu(s, cfg, "Aspect", modes, "", T(*cfg, "footer_nav"))
+			if mi < 0 {
+				continue
+			}
+			mode := []string{"crop", "letterbox", "blur", "stretch"}[mi]
+			op := &core.AspectOp{RatioW: w, RatioH: h, Mode: mode, SizePreset: "1080p"}
+			if err := op.Validate(info); err != nil {
+				ShowMessage(s, cfg, "Aspect", []string{err.Error()}, T(*cfg, "footer_message"))
+				continue
+			}
+			ops = replaceEditorOp(ops, op)
+		case 2:
+			value, ok := TextInput(s, cfg, "Audio", tr("Громкость: 1.0 исходная, 0.5 половина:", "Volume: 1.0 original, 0.5 half:"), "1.0", T(*cfg, "footer_input"))
+			if !ok {
+				continue
+			}
+			volume, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err != nil || volume < 0 || volume > 10 {
+				ShowMessage(s, cfg, "Audio", []string{"Invalid volume (0–10)"}, T(*cfg, "footer_message"))
+				continue
+			}
+			norm := RunMenu(s, cfg, "Loudnorm", []string{tr("Нет", "No"), tr("Да", "Yes")}, "", T(*cfg, "footer_nav")) == 1
+			ops = replaceEditorOp(ops, &core.AudioOp{Volume: &volume, Normalize: norm})
+		case 3:
+			vf, ok := TextInput(s, cfg, "Video filter", "VF (e.g. hflip):", "", T(*cfg, "footer_input"))
+			if !ok {
+				continue
+			}
+			af, ok := TextInput(s, cfg, "Audio filter", "AF (e.g. volume=0.8):", "", T(*cfg, "footer_input"))
+			if ok && (vf != "" || af != "") {
+				ops = append(ops, &core.FilterOp{VF: strings.TrimSpace(vf), AF: strings.TrimSpace(af)})
+			}
+		case 4:
+			presets := []string{"H.264 MP4", "H.265 MP4", "AV1 MKV", "Remux MKV"}
+			index := RunMenu(s, cfg, "Transcode", presets, "", T(*cfg, "footer_nav"))
+			if index < 0 {
+				continue
+			}
+			options := []*core.TranscodeOp{{Container: "mp4", VCodec: "libx264", ACodec: "aac", CRF: "20", Preset: "medium"}, {Container: "mp4", VCodec: "libx265", ACodec: "aac", CRF: "23", Preset: "medium"}, {Container: "mkv", VCodec: "libsvtav1", ACodec: "aac", CRF: "24", Preset: "5"}, {Container: "mkv", Remux: true}}
+			ops = replaceEditorOp(ops, options[index])
+		case 5, 6:
 			if len(ops) == 0 {
-				ShowMessage(s, cfg, "Pipeline", []string{"No ops"}, T(*cfg, "footer_message"))
+				ShowMessage(s, cfg, "Editor", []string{tr("Добавьте действие", "Add an action")}, T(*cfg, "footer_message"))
 				continue
 			}
-			pipe := core.Pipeline{Inputs: []string{p}, Operations: ops, Output: core.OutputSpec{Path: p + ".out.mp4"}}
-			cmds, err := core.BuildPipeline(pipe, *cfg)
+			pipe := core.Pipeline{Inputs: []string{path}, Operations: ops}
+			commands, err := core.BuildPipeline(pipe, *cfg)
 			if err != nil {
-				ShowMessage(s, cfg, "Error", []string{err.Error()}, T(*cfg, "footer_message"))
+				ShowMessage(s, cfg, "Editor", []string{err.Error()}, T(*cfg, "footer_message"))
 				continue
 			}
-			var lines []string
-			for _, c := range cmds {
-				lines = append(lines, strings.Join(core.MaskCmdForLog(c), " "))
-			}
-			ShowMessage(s, cfg, "Command (dry-run)", lines, T(*cfg, "footer_message"))
-		case 8:
-			if len(ops) == 0 {
-				ShowMessage(s, cfg, "Pipeline", []string{"No ops"}, T(*cfg, "footer_message"))
-				continue
-			}
-			pipe := core.Pipeline{Inputs: []string{p}, Operations: ops, Output: core.OutputSpec{Path: ""}}
-			cmds, err := core.BuildPipeline(pipe, *cfg)
-			if err != nil {
-				ShowMessage(s, cfg, "Error", []string{err.Error()}, T(*cfg, "footer_message"))
-				continue
-			}
-			if len(cmds) == 1 {
-				out := cmds[0][len(cmds[0])-1]
-				RunWithLogHook(s, cfg, cmds[0], "Universal", filepath.Base(p), filepath.Base(out), nil)
+			if choice == 5 {
+				var lines []string
+				for _, command := range commands {
+					lines = append(lines, strings.Join(core.MaskCmdForLog(command), " "))
+				}
+				ShowMessage(s, cfg, "FFmpeg", lines, T(*cfg, "footer_message"))
 			} else {
-				groupID := fmt.Sprintf("uni_%d", len(cmds))
-				tasks := core.GlobalQueue.EnqueueChain(cmds, "Universal (TUI)", p, p+".out.mp4", groupID)
-				ShowMessage(s, cfg, "Queued", []string{fmt.Sprintf("Enqueued %d tasks group %s", len(tasks), groupID)}, T(*cfg, "footer_message"))
+				target := commands[len(commands)-1][len(commands[len(commands)-1])-1]
+				if len(commands) == 1 {
+					RunWithLogHook(s, cfg, commands[0], "Editor", filepath.Base(path), filepath.Base(target), nil)
+				} else {
+					core.GlobalQueue.EnqueueChain(commands, "Editor", path, target, fmt.Sprintf("editor_%s", filepath.Base(path)))
+					ShowMessage(s, cfg, "Editor", []string{tr("Экспорт поставлен в очередь", "Export queued")}, T(*cfg, "footer_message"))
+				}
 			}
-			return
+		case 7:
+			if len(ops) > 0 {
+				ops = ops[:len(ops)-1]
+			}
+		case 8:
+			path, ops = "", nil
 		case 9:
-			// change file
-			fpath, ok := TextInput(s, cfg, T(*cfg, "universal_title"), T(*cfg, "aspect_prompt_file"), p, T(*cfg, "footer_input"))
-			if !ok || strings.TrimSpace(fpath) == "" {
-				continue
-			}
-			cand := core.ParseUserPath(fpath)
-			if _, err := os.Stat(cand); err != nil {
-				ShowMessage(s, cfg, T(*cfg, "universal_title"), []string{T(*cfg, "convert_err_notfound", cand)}, T(*cfg, "footer_message"))
-				continue
-			}
-			p = cand
-			info, _ = core.ProbeMediaInfoWithConfig(p, *cfg)
-			ops = nil
+			ScreenPipeline(s, cfg)
 		}
 	}
+}
+
+func replaceEditorOp(ops []core.Operation, next core.Operation) []core.Operation {
+	filtered := make([]core.Operation, 0, len(ops)+1)
+	for _, op := range ops {
+		if op.Type() != next.Type() {
+			filtered = append(filtered, op)
+		}
+	}
+	if next.Type() == "trim" {
+		return append([]core.Operation{next}, filtered...)
+	}
+	return append(filtered, next)
 }
