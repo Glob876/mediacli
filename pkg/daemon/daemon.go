@@ -63,6 +63,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/convert", s.handleCreateConvert)
 	s.mux.HandleFunc("GET /api/library", s.handleLibrary)
 	s.mux.HandleFunc("GET /api/library/file", s.handleLibraryFile)
+	s.mux.HandleFunc("GET /api/media/file", s.handleMediaFile)
 	s.mux.HandleFunc("GET /api/library/thumb", s.handleLibraryThumb)
 	s.mux.HandleFunc("GET /api/browse", s.handleBrowse)
 	s.mux.HandleFunc("GET /api/tools/ffmpeg", s.handleToolsFfmpeg)
@@ -691,6 +692,33 @@ func (s *Server) handleLibraryFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFile(w, r, candidate)
+}
+
+// handleMediaFile streams a user-selected local media file to the editor player.
+// The server is loopback-only and the route uses the same token check as the API.
+func (s *Server) handleMediaFile(w http.ResponseWriter, r *http.Request) {
+	raw := strings.TrimSpace(r.URL.Query().Get("path"))
+	if raw == "" {
+		writeErr(w, http.StatusBadRequest, "path is required")
+		return
+	}
+	path := core.ParseUserPath(raw)
+	ext := strings.ToLower(filepath.Ext(path))
+	allowed := map[string]bool{
+		".mp4": true, ".m4v": true, ".mov": true, ".mkv": true, ".webm": true,
+		".avi": true, ".mp3": true, ".m4a": true, ".aac": true, ".flac": true,
+		".wav": true, ".ogg": true, ".opus": true,
+	}
+	if !allowed[ext] {
+		writeErr(w, http.StatusBadRequest, "unsupported media file")
+		return
+	}
+	st, err := os.Stat(path)
+	if err != nil || !st.Mode().IsRegular() {
+		writeErr(w, http.StatusNotFound, "file not found")
+		return
+	}
+	http.ServeFile(w, r, path)
 }
 
 type browseFile struct {

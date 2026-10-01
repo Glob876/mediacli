@@ -3,9 +3,53 @@ package daemon
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestEditorPreviewAndMediaStream(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg unavailable")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe unavailable")
+	}
+	input := filepath.Join(t.TempDir(), "input.wav")
+	cmd := exec.Command("ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=2", input)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("fixture: %v: %s", err, out)
+	}
+	srv := testServer()
+	body := `{"inputs":[` + quoteJSON(input) + `],"operations":[{"type":"trim","config":{"start":"0.5","end":"1.5","mode":"reencode"}}],"duration":"0.5"}`
+	rec := doReq(t, srv, "POST", "/api/pipeline/preview", body, "secret")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preview: %d %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		PreviewPath string `json:"preview_path"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(response.PreviewPath)
+	if response.PreviewPath == "" {
+		t.Fatal("no preview path")
+	}
+	target := "/api/media/file?path=" + url.QueryEscape(response.PreviewPath)
+	stream := doReq(t, srv, "GET", target, "", "secret")
+	if stream.Code != http.StatusOK || stream.Body.Len() == 0 {
+		t.Fatalf("stream: %d bytes=%d", stream.Code, stream.Body.Len())
+	}
+	if unauth := doReq(t, srv, "GET", target, "", ""); unauth.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated stream: %d", unauth.Code)
+	}
+}
+
+func quoteJSON(value string) string { data, _ := json.Marshal(value); return string(data) }
 
 func TestProbeValidation(t *testing.T) {
 	srv := testServer()

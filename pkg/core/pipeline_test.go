@@ -1,6 +1,76 @@
 package core
 
-import "testing"
+import (
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestPipelineTrimAndAspectWithFFmpeg(t *testing.T) {
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg unavailable")
+	}
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe unavailable")
+	}
+	dir := t.TempDir()
+	video := filepath.Join(dir, "source.mp4")
+	audio := filepath.Join(dir, "source.wav")
+	for _, args := range [][]string{
+		{"-f", "lavfi", "-i", "color=c=red:s=160x90:r=10:d=3", "-c:v", "mpeg4", video},
+		{"-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-c:a", "pcm_s16le", audio},
+	} {
+		cmd := exec.Command("ffmpeg", append([]string{"-loglevel", "error", "-y"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("fixture: %v: %s", err, out)
+		}
+	}
+	cfg := GetDefaultConfig()
+	for _, tc := range []struct {
+		name      string
+		input     string
+		ops       []Operation
+		wantExt   string
+		wantWidth int
+	}{
+		{"video crop", video, []Operation{&TrimOp{Start: "1", End: "2", Mode: "reencode"}, &AspectOp{RatioW: 9, RatioH: 16, Mode: "crop", Width: 90, Height: 160}}, ".mp4", 90},
+		{"video bars", video, []Operation{&AspectOp{RatioW: 9, RatioH: 16, Mode: "letterbox", Width: 90, Height: 160}}, ".mp4", 90},
+		{"audio trim", audio, []Operation{&TrimOp{Start: "0.5", End: "1.5", Mode: "reencode"}}, ".m4a", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmds, err := BuildPipeline(Pipeline{Inputs: []string{tc.input}, Operations: tc.ops}, cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			args := cmds[0]
+			if !strings.HasSuffix(args[len(args)-1], tc.wantExt) {
+				t.Fatalf("wrong output extension: %v", args)
+			}
+			cmd := exec.Command(args[0], args[1:]...)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("ffmpeg: %v: %s", err, out)
+			}
+			info, err := ProbeMediaInfoWithConfig(args[len(args)-1], cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantWidth > 0 {
+				found := false
+				for _, st := range info.Streams {
+					if st.CodecType == "video" && st.Width == tc.wantWidth && st.Height == 160 {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("unexpected video dimensions: %+v", info.Streams)
+				}
+			} else if info.Format.DurationSec < 0.8 || info.Format.DurationSec > 1.2 {
+				t.Fatalf("audio trim duration: %f", info.Format.DurationSec)
+			}
+		})
+	}
+}
 
 func TestBuildPipeline_Transcode(t *testing.T) {
 	cfg := GetDefaultConfig()

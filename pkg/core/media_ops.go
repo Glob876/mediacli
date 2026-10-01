@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -10,20 +11,20 @@ import (
 // ================= Transcode =================
 
 type TranscodeOp struct {
-	Container string `json:"container,omitempty"` // mp4/mkv/mov/webm etc
-	VCodec    string `json:"vcodec,omitempty"`    // libx264, copy, etc
-	ACodec    string `json:"acodec,omitempty"`
-	CRF       string `json:"crf,omitempty"`
-	Preset    string `json:"preset,omitempty"`
-	BitrateV  string `json:"bitrate_v,omitempty"` // 2M, 500k
-	BitrateA  string `json:"bitrate_a,omitempty"`
-	PixFmt    string `json:"pix_fmt,omitempty"`
-	Profile   string `json:"profile,omitempty"`
-	MaxRate   string `json:"maxrate,omitempty"`
-	BufSize   string `json:"bufsize,omitempty"`
-	GOP       string `json:"gop,omitempty"`
+	Container string   `json:"container,omitempty"` // mp4/mkv/mov/webm etc
+	VCodec    string   `json:"vcodec,omitempty"`    // libx264, copy, etc
+	ACodec    string   `json:"acodec,omitempty"`
+	CRF       string   `json:"crf,omitempty"`
+	Preset    string   `json:"preset,omitempty"`
+	BitrateV  string   `json:"bitrate_v,omitempty"` // 2M, 500k
+	BitrateA  string   `json:"bitrate_a,omitempty"`
+	PixFmt    string   `json:"pix_fmt,omitempty"`
+	Profile   string   `json:"profile,omitempty"`
+	MaxRate   string   `json:"maxrate,omitempty"`
+	BufSize   string   `json:"bufsize,omitempty"`
+	GOP       string   `json:"gop,omitempty"`
 	Extra     []string `json:"extra,omitempty"`
-	Remux     bool   `json:"remux,omitempty"` // -c copy
+	Remux     bool     `json:"remux,omitempty"` // -c copy
 }
 
 func (o *TranscodeOp) Type() string { return "transcode" }
@@ -94,7 +95,7 @@ func (o *TranscodeOp) Build(ctx *BuildContext) error {
 type AspectOp struct {
 	RatioW     int    `json:"ratio_w"`
 	RatioH     int    `json:"ratio_h"`
-	Mode       string `json:"mode"` // crop, letterbox, blur, stretch, rotate, flip
+	Mode       string `json:"mode"`                  // crop, letterbox, blur, stretch, rotate, flip
 	SizePreset string `json:"size_preset,omitempty"` // auto, 1080p, 720p, 4k
 	Width      int    `json:"width,omitempty"`
 	Height     int    `json:"height,omitempty"`
@@ -113,6 +114,18 @@ func (o *AspectOp) Describe() string {
 func (o *AspectOp) Validate(info *MediaInfo) error {
 	if o.RatioW <= 0 || o.RatioH <= 0 {
 		return fmt.Errorf("ratio must be positive")
+	}
+	if info != nil {
+		hasVideo := false
+		for _, stream := range info.Streams {
+			if stream.CodecType == "video" {
+				hasVideo = true
+				break
+			}
+		}
+		if !hasVideo {
+			return fmt.Errorf("aspect ratio requires a video stream")
+		}
 	}
 	switch o.Mode {
 	case "crop", "letterbox", "blur", "stretch", "rotate", "flip", "":
@@ -274,11 +287,11 @@ func (o *MuxOp) Build(ctx *BuildContext) error {
 	}
 	vc := o.VideoCodec
 	if vc == "" {
-		vc = "copy"
+		vc = ctx.VideoCodec
 	}
 	ac := o.AudioCodec
 	if ac == "" {
-		ac = "copy"
+		ac = ctx.AudioCodec
 	}
 	ctx.VideoCodec = vc
 	ctx.AudioCodec = ac
@@ -292,7 +305,7 @@ type DemuxOp struct {
 	Codec       string `json:"codec,omitempty"`
 }
 
-func (o *DemuxOp) Type() string { return "demux" }
+func (o *DemuxOp) Type() string     { return "demux" }
 func (o *DemuxOp) Describe() string { return fmt.Sprintf("Demux %s:%d", o.StreamType, o.StreamIndex) }
 func (o *DemuxOp) Validate(info *MediaInfo) error {
 	if o.StreamType != "audio" && o.StreamType != "video" && o.StreamType != "subtitle" {
@@ -335,7 +348,7 @@ type TrimOp struct {
 	Mode  string `json:"mode"`  // copy|reencode
 }
 
-func (o *TrimOp) Type() string { return "trim" }
+func (o *TrimOp) Type() string     { return "trim" }
 func (o *TrimOp) Describe() string { return fmt.Sprintf("Trim %s - %s (%s)", o.Start, o.End, o.Mode) }
 func (o *TrimOp) Validate(info *MediaInfo) error {
 	if strings.TrimSpace(o.Start) == "" && strings.TrimSpace(o.End) == "" {
@@ -344,45 +357,82 @@ func (o *TrimOp) Validate(info *MediaInfo) error {
 	if o.Mode != "" && o.Mode != "copy" && o.Mode != "reencode" {
 		return fmt.Errorf("unknown trim mode %q", o.Mode)
 	}
+	start, end := 0.0, 0.0
+	var err error
+	if strings.TrimSpace(o.Start) != "" {
+		start, err = parseMediaTime(o.Start)
+		if err != nil {
+			return fmt.Errorf("invalid start: %w", err)
+		}
+	}
+	if strings.TrimSpace(o.End) != "" {
+		end, err = parseMediaTime(o.End)
+		if err != nil {
+			return fmt.Errorf("invalid end: %w", err)
+		}
+		if end <= start {
+			return fmt.Errorf("end must be after start")
+		}
+	}
 	return nil
 }
 func (o *TrimOp) Build(ctx *BuildContext) error {
-	// For accurate seek we put -ss before -i and also after; simplified: use ctx.ExtraArgs for seek after
-	// We'll handle by prepending seek args via Inputs rewriting: use ExtraArgs with -ss/-to
-	// The BuildPipeline currently puts -i after global args. So we inject seek as extra input options?
-	// Simplest: add -ss/-to as global before output but after input — ffmpeg accepts post-input seek.
+	// Output-side seek is frame accurate when re-encoding. -t is duration,
+	// so End remains an absolute position even when Start is nonzero.
 	if s := strings.TrimSpace(o.Start); s != "" {
 		ctx.ExtraArgs = append(ctx.ExtraArgs, "-ss", s)
 	}
 	if e := strings.TrimSpace(o.End); e != "" {
-		// -to is absolute time from start, -t is duration; use -to for simplicity
-		ctx.ExtraArgs = append(ctx.ExtraArgs, "-to", e)
+		end, _ := parseMediaTime(e)
+		start := 0.0
+		if o.Start != "" {
+			start, _ = parseMediaTime(o.Start)
+		}
+		ctx.ExtraArgs = append(ctx.ExtraArgs, "-t", strconv.FormatFloat(end-start, 'f', 3, 64))
 	}
 	if o.Mode == "copy" {
 		ctx.VideoCodec = "copy"
 		ctx.AudioCodec = "copy"
 	} else {
-		if ctx.VideoCodec == "copy" {
+		if ctx.InputHasVideo && ctx.VideoCodec == "copy" {
 			ctx.VideoCodec = "libx264"
 			ctx.ExtraArgs = append(ctx.ExtraArgs, "-preset", "medium", "-crf", "20")
 		}
-		if ctx.AudioCodec == "copy" {
+		if ctx.InputHasAudio && ctx.AudioCodec == "copy" {
 			ctx.AudioCodec = "aac"
 		}
 	}
 	return nil
 }
 
+func parseMediaTime(raw string) (float64, error) {
+	parts := strings.Split(strings.TrimSpace(raw), ":")
+	if len(parts) < 1 || len(parts) > 3 {
+		return 0, fmt.Errorf("expected seconds or HH:MM:SS")
+	}
+	total := 0.0
+	for _, part := range parts {
+		value, err := strconv.ParseFloat(part, 64)
+		if err != nil || value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+			return 0, fmt.Errorf("expected nonnegative time")
+		}
+		total = total*60 + value
+	}
+	return total, nil
+}
+
 // ================= Concat =================
 
 type ConcatOp struct {
-	Inputs []string `json:"inputs"` // list of files to concat
-	Mode   string   `json:"mode"`   // demuxer|filter
+	Inputs []string `json:"inputs"`          // list of files to concat
+	Mode   string   `json:"mode"`            // demuxer|filter
 	Codec  string   `json:"codec,omitempty"` // for filter mode
 }
 
 func (o *ConcatOp) Type() string { return "concat" }
-func (o *ConcatOp) Describe() string { return fmt.Sprintf("Concat %d files (%s)", len(o.Inputs), o.Mode) }
+func (o *ConcatOp) Describe() string {
+	return fmt.Sprintf("Concat %d files (%s)", len(o.Inputs), o.Mode)
+}
 func (o *ConcatOp) Validate(info *MediaInfo) error {
 	if len(o.Inputs) < 2 {
 		return fmt.Errorf("concat requires at least 2 inputs")
@@ -431,8 +481,8 @@ func (o *ConcatOp) Build(ctx *BuildContext) error {
 // ================= Filter (generic) =================
 
 type FilterOp struct {
-	VF string `json:"vf,omitempty"` // comma-separated -vf
-	AF string `json:"af,omitempty"` // comma-separated -af
+	VF      string `json:"vf,omitempty"`      // comma-separated -vf
+	AF      string `json:"af,omitempty"`      // comma-separated -af
 	Complex string `json:"complex,omitempty"` // filter_complex
 }
 
@@ -479,20 +529,20 @@ func (o *FilterOp) Build(ctx *BuildContext) error {
 // ================= Audio =================
 
 type AudioOp struct {
-	Volume     *float64 `json:"volume,omitempty"`      // 0.5 = -6dB, 2.0 = +6dB
-	Normalize  bool     `json:"normalize,omitempty"`   // loudnorm
-	Tempo      string   `json:"tempo,omitempty"`       // atempo 0.5-2.0
-	SampleRate string   `json:"sample_rate,omitempty"` // 48000
-	Channels   string   `json:"channels,omitempty"`    // 1,2
-	RemoveSilence bool  `json:"remove_silence,omitempty"`
-	FadeIn     string   `json:"fade_in,omitempty"`  // 2s
-	FadeOut    string   `json:"fade_out,omitempty"`
-	Acodec     string   `json:"acodec,omitempty"`
-	Bitrate    string   `json:"bitrate,omitempty"`
+	Volume        *float64 `json:"volume,omitempty"`      // 0.5 = -6dB, 2.0 = +6dB
+	Normalize     bool     `json:"normalize,omitempty"`   // loudnorm
+	Tempo         string   `json:"tempo,omitempty"`       // atempo 0.5-2.0
+	SampleRate    string   `json:"sample_rate,omitempty"` // 48000
+	Channels      string   `json:"channels,omitempty"`    // 1,2
+	RemoveSilence bool     `json:"remove_silence,omitempty"`
+	FadeIn        string   `json:"fade_in,omitempty"` // 2s
+	FadeOut       string   `json:"fade_out,omitempty"`
+	Acodec        string   `json:"acodec,omitempty"`
+	Bitrate       string   `json:"bitrate,omitempty"`
 }
 
-func (o *AudioOp) Type() string { return "audio" }
-func (o *AudioOp) Describe() string { return "Audio processing" }
+func (o *AudioOp) Type() string                   { return "audio" }
+func (o *AudioOp) Describe() string               { return "Audio processing" }
 func (o *AudioOp) Validate(info *MediaInfo) error { return nil }
 func (o *AudioOp) Build(ctx *BuildContext) error {
 	if o.Volume != nil {
@@ -536,15 +586,15 @@ func (o *AudioOp) Build(ctx *BuildContext) error {
 // ================= Subtitle =================
 
 type SubtitleOp struct {
-	Mode      string `json:"mode"` // extract, embed, burn
-	Input     string `json:"input,omitempty"` // srt file for embed/burn
-	Language  string `json:"language,omitempty"`
-	Index     int    `json:"index,omitempty"`
-	Force     bool   `json:"force,omitempty"`
-	Style     string `json:"style,omitempty"` // ASS style for burn
+	Mode     string `json:"mode"`            // extract, embed, burn
+	Input    string `json:"input,omitempty"` // srt file for embed/burn
+	Language string `json:"language,omitempty"`
+	Index    int    `json:"index,omitempty"`
+	Force    bool   `json:"force,omitempty"`
+	Style    string `json:"style,omitempty"` // ASS style for burn
 }
 
-func (o *SubtitleOp) Type() string { return "subtitle" }
+func (o *SubtitleOp) Type() string     { return "subtitle" }
 func (o *SubtitleOp) Describe() string { return "Subtitle " + o.Mode }
 func (o *SubtitleOp) Validate(info *MediaInfo) error {
 	switch o.Mode {
@@ -602,8 +652,8 @@ type MetadataOp struct {
 	Cover    string            `json:"cover,omitempty"` // path to image
 }
 
-func (o *MetadataOp) Type() string { return "metadata" }
-func (o *MetadataOp) Describe() string { return "Metadata" }
+func (o *MetadataOp) Type() string                   { return "metadata" }
+func (o *MetadataOp) Describe() string               { return "Metadata" }
 func (o *MetadataOp) Validate(info *MediaInfo) error { return nil }
 func (o *MetadataOp) Build(ctx *BuildContext) error {
 	if o.StripAll {
@@ -644,7 +694,7 @@ type ScaleOp struct {
 	Algo   string `json:"algo,omitempty"` // lanczos, bilinear
 }
 
-func (o *ScaleOp) Type() string { return "scale" }
+func (o *ScaleOp) Type() string     { return "scale" }
 func (o *ScaleOp) Describe() string { return fmt.Sprintf("Scale %dx%d", o.Width, o.Height) }
 func (o *ScaleOp) Validate(info *MediaInfo) error {
 	if o.Width <= 0 && o.Height <= 0 {
@@ -674,12 +724,12 @@ func (o *ScaleOp) Build(ctx *BuildContext) error {
 // ================= FPS =================
 
 type FpsOp struct {
-	FPS          string `json:"fps"` // 30, 60
-	Mode         string `json:"mode,omitempty"` // fps filter vs -r
-	Interpolate  bool   `json:"interpolate,omitempty"` // minterpolate
+	FPS         string `json:"fps"`                   // 30, 60
+	Mode        string `json:"mode,omitempty"`        // fps filter vs -r
+	Interpolate bool   `json:"interpolate,omitempty"` // minterpolate
 }
 
-func (o *FpsOp) Type() string { return "fps" }
+func (o *FpsOp) Type() string     { return "fps" }
 func (o *FpsOp) Describe() string { return "FPS " + o.FPS }
 func (o *FpsOp) Validate(info *MediaInfo) error {
 	if o.FPS == "" {
@@ -710,8 +760,8 @@ type StabilizeOp struct {
 	Output    string `json:"output,omitempty"`
 }
 
-func (o *StabilizeOp) Type() string { return "stabilize" }
-func (o *StabilizeOp) Describe() string { return "Stabilize vidstab" }
+func (o *StabilizeOp) Type() string                   { return "stabilize" }
+func (o *StabilizeOp) Describe() string               { return "Stabilize vidstab" }
 func (o *StabilizeOp) Validate(info *MediaInfo) error { return nil }
 func (o *StabilizeOp) Build(ctx *BuildContext) error {
 	shakiness := o.Shakiness

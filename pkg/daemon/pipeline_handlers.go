@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,10 +70,10 @@ func (s *Server) handleToolsFfprobe(w http.ResponseWriter, r *http.Request) {
 
 // Pipeline request payload
 type pipelineReq struct {
-	Inputs     []string                `json:"inputs"`
+	Inputs     []string                 `json:"inputs"`
 	Operations []core.OperationEnvelope `json:"operations"`
-	Output     core.OutputSpec         `json:"output"`
-	Name       string                  `json:"name"`
+	Output     core.OutputSpec          `json:"output"`
+	Name       string                   `json:"name"`
 }
 
 func (s *Server) parsePipeline(r *http.Request) (core.Pipeline, error) {
@@ -151,12 +152,13 @@ func (s *Server) handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	groupID := fmt.Sprintf("pipeline_%d", time.Now().UnixNano())
-	tasks := core.GlobalQueue.EnqueueChain(cmds, "Pipeline: "+p.Name, strings.Join(p.Inputs, ","), p.Output.Path, groupID)
+	target := cmds[len(cmds)-1][len(cmds[len(cmds)-1])-1]
+	tasks := core.GlobalQueue.EnqueueChain(cmds, "Pipeline: "+p.Name, strings.Join(p.Inputs, ","), target, groupID)
 	var ids []int
 	for _, t := range tasks {
 		ids = append(ids, t.ID)
 	}
-	writeJSON(w, http.StatusAccepted, map[string]interface{}{"task_ids": ids, "group_id": groupID, "commands": cmds})
+	writeJSON(w, http.StatusAccepted, map[string]interface{}{"task_ids": ids, "group_id": groupID, "target": target, "commands": cmds})
 }
 
 // POST /api/pipeline/preview — сгенерить 5с превью (возвращает временный файл URL)
@@ -203,42 +205,21 @@ func (s *Server) handlePipelinePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := cmds[0]
-	// Convert last arg (output) to temp preview file
+	// Render a short browser-compatible result from the configured operations.
 	tmpDir := os.TempDir()
 	previewPath := filepath.Join(tmpDir, fmt.Sprintf("mediacli_preview_%d.mp4", time.Now().UnixNano()))
-	// Replace output with previewPath, add -t and -ss
-	// cmd = [ffmpeg -y -i in ... out] -> insert -ss/duration before -i or after
-	start := strings.TrimSpace(req.Start)
-	if start == "" {
-		start = "1"
-	}
 	dur := strings.TrimSpace(req.Duration)
 	if dur == "" {
 		dur = "5"
 	}
-	// Rebuild with preview tweaks: limit to 5s
-	// For simplicity, add -ss start -t dur after inputs but before filters is not trivial.
-	// Instead do: ffmpeg -y -ss start -t dur -i in ... preview
-	// Reconstruct: find first -i and prepend
-	newCmd := []string{cmd[0], "-y", "-ss", start, "-t", dur}
-	// copy rest from original cmd starting at first -i
-	found := false
-	for i, a := range cmd {
-		if a == "-i" && !found {
-			found = true
-			// include -i and following inputs, but we already have -y -ss -t, so append from -i
-			newCmd = append(newCmd, cmd[i:]...)
-			break
-		}
-	}
-	if !found {
-		writeErr(w, http.StatusInternalServerError, "cannot build preview command")
+	seconds, err := strconv.ParseFloat(dur, 64)
+	if err != nil || seconds < 0.1 || seconds > 15 {
+		writeErr(w, http.StatusBadRequest, "preview duration must be between 0.1 and 15 seconds")
 		return
 	}
-	// replace last arg with previewPath
-	newCmd[len(newCmd)-1] = previewPath
-	// add faststart flags for preview playback
-	newCmd = append(newCmd[:len(newCmd)-1], "-movflags", "frag_keyframe+empty_moov", previewPath)
+	newCmd := append([]string{}, cmd[:len(cmd)-1]...)
+	// Output-side -t limits the edited result, including trims starting after 5s.
+	newCmd = append(newCmd, "-t", dur, "-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p", "-movflags", "+faststart", previewPath)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -348,8 +329,8 @@ func (s *Server) handleOpAspect(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOpMux(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Inputs []string  `json:"inputs"`
-		Output string    `json:"output"`
+		Inputs []string   `json:"inputs"`
+		Output string     `json:"output"`
 		Mux    core.MuxOp `json:"mux"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -437,8 +418,8 @@ func (s *Server) handleOpTrim(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOpConcat(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Inputs []string     `json:"inputs"`
-		Output string       `json:"output"`
+		Inputs []string      `json:"inputs"`
+		Output string        `json:"output"`
 		Concat core.ConcatOp `json:"concat"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -474,8 +455,8 @@ func (s *Server) handleOpConcat(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOpTranscode(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Input     string          `json:"input"`
-		Output    string          `json:"output"`
+		Input     string           `json:"input"`
+		Output    string           `json:"output"`
 		Transcode core.TranscodeOp `json:"transcode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

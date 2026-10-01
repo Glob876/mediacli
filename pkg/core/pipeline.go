@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -51,6 +52,8 @@ type BuildContext struct {
 	HasVideoFilter bool
 	HasAudioFilter bool
 	NeedsReencode  bool
+	InputHasVideo  bool
+	InputHasAudio  bool
 }
 
 func NewBuildContext(cfg Config, inputs []string, output string) *BuildContext {
@@ -81,10 +84,10 @@ func MarshalPipeline(p Pipeline) ([]byte, error) {
 		ops = append(ops, rawOp{Type: op.Type(), Config: op})
 	}
 	aux := struct {
-		ID         string  `json:"id"`
-		Name       string  `json:"name"`
-		Inputs     []string `json:"inputs"`
-		Operations []rawOp `json:"operations"`
+		ID         string     `json:"id"`
+		Name       string     `json:"name"`
+		Inputs     []string   `json:"inputs"`
+		Operations []rawOp    `json:"operations"`
 		Output     OutputSpec `json:"output"`
 	}{ID: p.ID, Name: p.Name, Inputs: p.Inputs, Operations: ops, Output: p.Output}
 	return json.Marshal(aux)
@@ -203,6 +206,18 @@ func BuildPipeline(p Pipeline, cfg Config) ([][]string, error) {
 	if len(p.Inputs) == 0 {
 		return nil, fmt.Errorf("no inputs")
 	}
+	probe, _ := ProbeMediaInfoWithConfig(p.Inputs[0], cfg)
+	hasVideo, hasAudio := false, false
+	if probe != nil {
+		for _, stream := range probe.Streams {
+			if stream.CodecType == "video" {
+				hasVideo = true
+			}
+			if stream.CodecType == "audio" {
+				hasAudio = true
+			}
+		}
+	}
 	output := p.Output.Path
 	if output == "" {
 		// дефолт: первый инпут + _out
@@ -214,8 +229,21 @@ func BuildPipeline(p Pipeline, cfg Config) ([][]string, error) {
 				break
 			}
 		}
-		plan := PrepareFFmpegOutput(p.Inputs[0], ext, "_pipelined", cfg)
-		output = plan.FinalPath
+		if probe != nil && hasAudio && !hasVideo && ext == ".mp4" {
+			ext = ".m4a"
+		}
+		base := strings.TrimSuffix(p.Inputs[0], filepath.Ext(p.Inputs[0])) + "_pipelined"
+		output = base + ext
+		for n := 2; ; n++ {
+			_, err := os.Stat(output)
+			if os.IsNotExist(err) {
+				break
+			}
+			if err != nil {
+				return nil, fmt.Errorf("check output %q: %w", output, err)
+			}
+			output = fmt.Sprintf("%s_%d%s", base, n, ext)
+		}
 	}
 	// Безопасность: output не должен совпадать с input
 	for _, inp := range p.Inputs {
@@ -223,14 +251,14 @@ func BuildPipeline(p Pipeline, cfg Config) ([][]string, error) {
 			return nil, fmt.Errorf("output %q overwrites input", output)
 		}
 	}
-	ctx := NewBuildContext(cfg, p.Inputs, output)
-	// Валидация + build каждой операции
-	var probe *MediaInfo
-	if len(p.Inputs) > 0 {
-		if info, err := ProbeMediaInfoWithConfig(p.Inputs[0], cfg); err == nil {
-			probe = info
+	if !p.Output.Overwrite {
+		if _, err := os.Stat(output); err == nil {
+			return nil, fmt.Errorf("output %q already exists", output)
 		}
 	}
+	ctx := NewBuildContext(cfg, p.Inputs, output)
+	ctx.InputHasVideo, ctx.InputHasAudio = probe == nil || hasVideo, probe == nil || hasAudio
+	// Валидация + build каждой операции
 	for _, op := range p.Operations {
 		if err := op.Validate(probe); err != nil {
 			return nil, fmt.Errorf("%s: %w", op.Type(), err)
@@ -239,11 +267,17 @@ func BuildPipeline(p Pipeline, cfg Config) ([][]string, error) {
 			return nil, fmt.Errorf("%s build: %w", op.Type(), err)
 		}
 	}
+	if probe != nil && !hasVideo {
+		ctx.VideoCodec = ""
+	}
+	if probe != nil && !hasAudio {
+		ctx.AudioCodec = ""
+	}
 	// Проверка совместимости фильтров с copy
 	if err := ValidateFilterCompat(ctx.VideoCodec, ctx.AudioCodec, ctx.FilterGraph); err != nil {
 		return nil, err
 	}
-	cmd := buildFFmpegArgs(ctx)
+	cmd := buildFFmpegArgs(ctx, p.Output.Overwrite)
 	if len(ctx.Passes) > 0 {
 		// многопроходные (напр. vidstab) — возвращаем все проходы + финальный
 		all := append([][]string{}, ctx.Passes...)
@@ -253,9 +287,13 @@ func BuildPipeline(p Pipeline, cfg Config) ([][]string, error) {
 	return [][]string{cmd}, nil
 }
 
-func buildFFmpegArgs(ctx *BuildContext) []string {
+func buildFFmpegArgs(ctx *BuildContext, overwrite bool) []string {
 	bin := FfmpegBin(ctx.Config)
-	args := []string{bin, "-y"}
+	mode := "-n"
+	if overwrite {
+		mode = "-y"
+	}
+	args := []string{bin, mode}
 	// seek / trim докидывают -ss/-to до -i сами; здесь базовые инпуты
 	for _, inp := range ctx.Inputs {
 		args = append(args, "-i", inp)
