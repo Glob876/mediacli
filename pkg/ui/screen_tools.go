@@ -2,10 +2,11 @@ package ui
 
 import (
 	"fmt"
-	"mediacli/pkg/core"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"mediacli/pkg/core"
 
 	"github.com/gdamore/tcell/v2"
 )

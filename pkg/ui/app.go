@@ -11,7 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-var AsciiLogos = map[string][]string{
+var ASCIILogos = map[string][]string{
 	"standard": {
 		` _____ ______   _______   ________  ___  ________  ________  ___       ___     `,
 		`|\   _ \  _   \|\  ___ \ |\   ___ \|\  \|\   __  \|\   ____\|\  \     |\  \    `,
@@ -167,16 +167,16 @@ func RunApp() error {
 		w, h := s.Size()
 		s.Clear()
 
-		DrawHeader(s, T(cfg, "app_title"), w, cfg)
+		DrawHeader(s, T(cfg, "app_title")+" "+core.Version, w, cfg)
 		row := 2
 
 		if h >= 24 && w >= 82 {
 			if cfg.LogoMode == "image" && cfg.LogoImagePath != "" {
 				row += 13
 			} else {
-				art := AsciiLogos[cfg.LogoAsciiPreset]
+				art := ASCIILogos[cfg.LogoAsciiPreset]
 				if len(art) == 0 {
-					art = AsciiLogos["standard"]
+					art = ASCIILogos["standard"]
 				}
 				artStyle := GetAccentStyle(cfg)
 				for _, line := range art {
@@ -195,7 +195,7 @@ func RunApp() error {
 				style = GetHighlightStyle(cfg)
 			}
 			DrawString(s, tabX, row, tName, w-tabX, style)
-			tabX += len(tName) + 2
+			tabX += len([]rune(tName)) + 2
 		}
 		row += 2
 
@@ -204,10 +204,14 @@ func RunApp() error {
 			curItem = 0
 		}
 
+		row = min(row, max(0, h-4))
+		visibleRows := max(1, h-row-3)
+		firstVisible := max(0, curItem-visibleRows+1)
 		hlStyle := GetHighlightStyle(cfg)
 		baseStyle := GetBaseStyle(cfg)
-		for idx, itm := range activeItems {
-			y := row + idx
+		for idx := firstVisible; idx < len(activeItems); idx++ {
+			itm := activeItems[idx]
+			y := row + idx - firstVisible
 			if y >= h-3 {
 				break
 			}
@@ -219,7 +223,7 @@ func RunApp() error {
 		}
 
 		DrawFooter(s, T(cfg, "footer_nav"), w, h)
-		
+
 		s.Show()
 
 		if h >= 24 && w >= 82 && cfg.LogoMode == "image" && cfg.LogoImagePath != "" {
@@ -237,9 +241,9 @@ func RunApp() error {
 		ev := s.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			if CheckTerminalHotkey(ev) {
+			if CheckPaletteHotkey(ev) {
 				clearTerminalImages()
-				GlobalTerminal.Open(s, &cfg)
+				GlobalPalette.Open(s, &cfg)
 				continue
 			}
 			// Alt+3 — отдельный универсальный редактор (пусто → выбор файла, иначе единый редактор всего)

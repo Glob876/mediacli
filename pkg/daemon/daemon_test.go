@@ -217,12 +217,12 @@ func TestFfmpegLocationArg(t *testing.T) {
 	if !containsArg(args, "--ffmpeg-location", "/opt/ffmpeg/bin/ffmpeg") {
 		t.Fatalf("--ffmpeg-location missing: %v", args)
 	}
-	if got := core.FfmpegBin(cfg); got != "/opt/ffmpeg/bin/ffmpeg" {
-		t.Fatalf("FfmpegBin: got %q", got)
+	if got := core.FFmpegBin(cfg); got != "/opt/ffmpeg/bin/ffmpeg" {
+		t.Fatalf("FFmpegBin: got %q", got)
 	}
 	cfg.FfmpegPath = ""
-	if got := core.FfmpegBin(cfg); got != "ffmpeg" {
-		t.Fatalf("FfmpegBin default: got %q", got)
+	if got := core.FFmpegBin(cfg); got != "ffmpeg" {
+		t.Fatalf("FFmpegBin default: got %q", got)
 	}
 }
 

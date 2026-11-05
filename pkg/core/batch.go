@@ -9,11 +9,11 @@ import (
 
 // BatchJob — пакетное применение пайплайна к списку файлов.
 type BatchJob struct {
-	Inputs       []string    `json:"inputs"`
-	Pipeline     Pipeline    `json:"pipeline"`
-	OutputDir    string      `json:"output_dir,omitempty"`
-	OutputTemplate string    `json:"output_template,omitempty"` // e.g. "%(basename)s_converted.%(ext)s"
-	Overwrite    bool        `json:"overwrite,omitempty"`
+	Inputs         []string `json:"inputs"`
+	Pipeline       Pipeline `json:"pipeline"`
+	OutputDir      string   `json:"output_dir,omitempty"`
+	OutputTemplate string   `json:"output_template,omitempty"` // e.g. "%(basename)s_converted.%(ext)s"
+	Overwrite      bool     `json:"overwrite,omitempty"`
 }
 
 // ExpandBatch создаёт N задач из BatchJob (по одной на файл).
@@ -91,8 +91,8 @@ func EnqueueBatch(job BatchJob, cfg Config) ([]int, error) {
 		if err != nil {
 			continue
 		}
-		for _, cmd := range cmds {
-			task := GlobalQueue.Enqueue(cmd, "Batch: "+p.Name, strings.Join(p.Inputs, ","), p.Output.Path)
+		tasks := GlobalQueue.EnqueueChain(cmds, "Batch: "+p.Name, strings.Join(p.Inputs, ","), p.Output.Path, "")
+		for _, task := range tasks {
 			ids = append(ids, task.ID)
 		}
 	}

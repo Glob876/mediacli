@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// FfprobeBin возвращает бинарник ffprobe (аналог FfmpegBin).
-func FfprobeBin(cfg Config) string {
+// FFprobeBin возвращает бинарник ffprobe (аналог FFmpegBin).
+func FFprobeBin(cfg Config) string {
 	if bin := strings.TrimSpace(cfg.FfmpegPath); bin != "" {
 		// Если задан явный ffmpeg, пробуем ffprobe рядом с ним.
 		p := ParseUserPath(bin)
@@ -44,7 +44,7 @@ func FfprobeBin(cfg Config) string {
 
 // ResolveFfprobe проверяет доступность ffprobe.
 func ResolveFfprobe(cfg Config, candidate string) (bin, version string, err error) {
-	bin = FfprobeBin(cfg)
+	bin = FFprobeBin(cfg)
 	if c := strings.TrimSpace(candidate); c != "" {
 		bin = ParseUserPath(c)
 	}
@@ -85,14 +85,14 @@ type MediaInfo struct {
 }
 
 type FormatInfo struct {
-	FormatName   string            `json:"format_name,omitempty"`
-	FormatLong   string            `json:"format_long_name,omitempty"`
-	Duration     string            `json:"duration,omitempty"`
-	DurationSec  float64           `json:"duration_sec,omitempty"`
-	Size         string            `json:"size,omitempty"`
-	BitRate      string            `json:"bit_rate,omitempty"`
-	Tags         map[string]string `json:"tags,omitempty"`
-	ProbeScore   int               `json:"probe_score,omitempty"`
+	FormatName  string            `json:"format_name,omitempty"`
+	FormatLong  string            `json:"format_long_name,omitempty"`
+	Duration    string            `json:"duration,omitempty"`
+	DurationSec float64           `json:"duration_sec,omitempty"`
+	Size        string            `json:"size,omitempty"`
+	BitRate     string            `json:"bit_rate,omitempty"`
+	Tags        map[string]string `json:"tags,omitempty"`
+	ProbeScore  int               `json:"probe_score,omitempty"`
 }
 
 type Disposition struct {
@@ -152,13 +152,13 @@ type ChapterInfo struct {
 // rawProbe — сырой JSON ffprobe.
 type rawProbe struct {
 	Format struct {
-		FormatName   string            `json:"format_name"`
-		FormatLong   string            `json:"format_long_name"`
-		Duration     string            `json:"duration"`
-		Size         string            `json:"size"`
-		BitRate      string            `json:"bit_rate"`
-		Tags         map[string]string `json:"tags"`
-		ProbeScore   int               `json:"probe_score"`
+		FormatName string            `json:"format_name"`
+		FormatLong string            `json:"format_long_name"`
+		Duration   string            `json:"duration"`
+		Size       string            `json:"size"`
+		BitRate    string            `json:"bit_rate"`
+		Tags       map[string]string `json:"tags"`
+		ProbeScore int               `json:"probe_score"`
 	} `json:"format"`
 	Streams []struct {
 		Index              int               `json:"index"`
@@ -206,7 +206,7 @@ func ProbeMediaInfo(filePath string) (*MediaInfo, error) {
 }
 
 func ProbeMediaInfoWithConfig(filePath string, cfg Config) (*MediaInfo, error) {
-	bin := FfprobeBin(cfg)
+	bin := FFprobeBin(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", "-show_chapters", filePath)

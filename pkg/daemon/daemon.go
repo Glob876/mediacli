@@ -30,7 +30,7 @@ import (
 )
 
 // Version is reported by GET /api/status.
-const Version = "0.1.0-dev"
+const Version = core.Version
 
 // Server is a loopback HTTP API over core.GlobalQueue.
 type Server struct {
@@ -509,7 +509,7 @@ func (s *Server) handleCreateConvert(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "input and output are the same file")
 		return
 	}
-	cmdList := []string{core.FfmpegBin(cfg), "-y", "-i", inputAbs}
+	cmdList := []string{core.FFmpegBin(cfg), "-y", "-i", inputAbs}
 	cmdList = append(cmdList, preset.FFmpegFlags...)
 	cmdList = append(cmdList, finalPath)
 
@@ -650,7 +650,7 @@ func (s *Server) handleLibraryThumb(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 	defer cancel()
 	//nolint:gosec // candidate и cached построены из проверенных путей выше.
-	cmd := exec.CommandContext(ctx, core.FfmpegBin(cfg), "-y", "-v", "error",
+	cmd := exec.CommandContext(ctx, core.FFmpegBin(cfg), "-y", "-v", "error",
 		"-ss", "1", "-i", candidate,
 		"-vframes", "1", "-vf", "scale=320:-1", "-q:v", "4", cached)
 	if out, err := cmd.CombinedOutput(); err != nil {

@@ -2,11 +2,12 @@ package ui
 
 import (
 	"fmt"
-	"mediacli/pkg/core"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"mediacli/pkg/core"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -195,8 +196,8 @@ func ScreenAspectRatio(s tcell.Screen, cfg *core.Config) {
 		ev := s.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			if CheckTerminalHotkey(ev) {
-				GlobalTerminal.Open(s, cfg)
+			if CheckPaletteHotkey(ev) {
+				GlobalPalette.Open(s, cfg)
 				continue
 			}
 			switch ev.Key() {
@@ -252,11 +253,11 @@ func drawAspectRatioVisualizer(s tcell.Screen, cfg core.Config, startX, startY, 
 	maxBoxH := min(availH-9, 11)
 
 	boxH := maxBoxH
-	boxW := int(float64(boxH) * 2.0 * targetRatio + 0.5)
+	boxW := int(float64(boxH)*2.0*targetRatio + 0.5)
 
 	if boxW > maxBoxW {
 		boxW = maxBoxW
-		boxH = int(float64(boxW) / (2.0 * targetRatio) + 0.5)
+		boxH = int(float64(boxW)/(2.0*targetRatio) + 0.5)
 	}
 
 	if boxW < 6 {

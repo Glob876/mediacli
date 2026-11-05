@@ -11,11 +11,11 @@ import (
 
 // MediaPreset — сохранённый Pipeline как пресет.
 type MediaPreset struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description,omitempty"`
+	ID          string              `json:"id"`
+	Name        string              `json:"name"`
+	Description string              `json:"description,omitempty"`
 	Operations  []OperationEnvelope `json:"operations"`
-	CreatedAt   string          `json:"created_at"`
+	CreatedAt   string              `json:"created_at"`
 }
 
 // MediaPresets хранятся в Config (аналог DownloadPresets).

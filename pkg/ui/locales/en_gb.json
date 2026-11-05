@@ -91,7 +91,7 @@
   "ffmpegSuffix": "FFmpeg filename suffixes",
   "footer_input": "Enter - confirm   Esc - cancel",
   "footer_message": "Enter/Esc - continue",
-  "footer_nav": "↑/↓ or j/k - navigate   Enter - select   Esc/q - back   [Alt+Shift+P / F12] - Terminal",
+  "footer_nav": "Ctrl+P/F12 - commands   ↑↓/jk - move   Enter - select   Esc/q - back",
   "footer_vertical_items": "↑/↓ - Select option   Enter - Change/Toggle   Esc/← - Back to categories",
   "footer_vertical_tabs": "↑/↓ - Switch category   Enter/→ - Edit options   Esc - Back / Cancel",
   "frags": "Concurrent fragments:",

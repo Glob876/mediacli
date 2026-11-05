@@ -4,11 +4,12 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"mediacli/pkg/core"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"mediacli/pkg/core"
 )
 
 //go:embed locales/*.json

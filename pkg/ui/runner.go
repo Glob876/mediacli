@@ -2,11 +2,10 @@ package ui
 
 import (
 	"fmt"
-	"io"
-	"mediacli/pkg/core"
-	"os/exec"
 	"strings"
 	"time"
+
+	"mediacli/pkg/core"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -15,180 +14,78 @@ func RunWithLog(s tcell.Screen, cfg *core.Config, cmdList []string, opType, sour
 	RunWithLogHook(s, cfg, cmdList, opType, source, target, nil)
 }
 
-func RunWithLogHook(s tcell.Screen, cfg *core.Config, cmdList []string, opType, source, target string, onComplete func(exitCode int)) {
+func RunWithLogHook(s tcell.Screen, cfg *core.Config, cmdList []string, opType, source, target string, onComplete func(exitCode int) error) {
 	s.HideCursor()
-
-	cmd := exec.Command(cmdList[0], cmdList[1:]...)
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		ShowMessage(s, cfg, T(*cfg, "log_title"), []string{fmt.Sprintf("Failed to spawn process: %v", err)}, T(*cfg, "footer_message"))
-		return
-	}
-	cmd.Stderr = cmd.Stdout
-
-	if err := cmd.Start(); err != nil {
-		ShowMessage(s, cfg, T(*cfg, "log_title"), []string{fmt.Sprintf("Start error: %v", err)}, T(*cfg, "footer_message"))
-		return
-	}
-
-	logChan := make(chan string, 1024)
-	doneChan := make(chan struct{})
-
-	go func() {
-		defer close(doneChan)
-		buf := make([]byte, 4096)
-		leftover := ""
-		for {
-			n, err := stdout.Read(buf)
-			if n > 0 {
-				chunk := leftover + string(buf[:n])
-				// yt-dlp пишет прогресс через \r без \n — нормализуем оба как разделители
-				chunk = strings.ReplaceAll(chunk, "\r", "\n")
-				parts := strings.Split(chunk, "\n")
-				// последняя часть может быть неполной — сохраняем на следующую итерацию
-				leftover = parts[len(parts)-1]
-				for _, p := range parts[:len(parts)-1] {
-					p = strings.TrimSpace(p)
-					if p != "" {
-						logChan <- p
-					}
-				}
-				if err != nil {
-					// EOF одновременно с данными — флашим остаток
-					leftover = strings.TrimSpace(leftover)
-					if leftover != "" {
-						logChan <- leftover
-					}
-					break
-				}
-			}
-			if err != nil {
-				if err != io.EOF {
-					// не EOF — всё равно флашим
-					leftover = strings.TrimSpace(leftover)
-					if leftover != "" {
-						logChan <- leftover
-					}
-				} else if leftover != "" {
-					leftover = strings.TrimSpace(leftover)
-					if leftover != "" {
-						logChan <- leftover
-					}
-				}
-				break
-			}
-		}
-	}()
-
-	lines := []string{"[cmd] " + strings.Join(core.MaskCmdForLog(cmdList), " "), ""}
-	currentStage := "Initializing process..."
-	var pct float64
-	var speedStr string
+	task := core.GlobalQueue.EnqueueWithHook(cmdList, opType, source, target, onComplete)
+	taskID := task.ID
+	commandLine := "[cmd] " + strings.Join(core.MaskCmdForLog(cmdList), " ")
 	showRawLogs := false
-	eventChan := make(chan tcell.Event)
-
-	go func() {
-		for {
-			eventChan <- s.PollEvent()
-		}
-	}()
-
+	completionAnnounced := false
 	ticker := time.NewTicker(40 * time.Millisecond)
 	defer ticker.Stop()
 
-	completed := false
-	exitCode := 0
-
-	for !completed {
-		select {
-		case ev := <-eventChan:
-			if kEv, ok := ev.(*tcell.EventKey); ok {
-				if CheckTerminalHotkey(kEv) {
-					GlobalTerminal.Open(s, cfg)
-					continue
-				}
-				if kEv.Key() == tcell.KeyF10 {
-					showRawLogs = !showRawLogs
-				} else if kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
-					core.GlobalQueue.AdoptLiveTask(cmd, cmdList, opType, source, target, append([]string{}, lines...), logChan, doneChan)
-					ShowMessage(s, cfg, T(*cfg, "log_title"), []string{T(*cfg, "bg_transferred")}, T(*cfg, "footer_message"))
-					return
-				} else if kEv.Key() == tcell.KeyCtrlC {
-					_ = cmd.Process.Kill()
-					completed = true
-				}
-			}
-		case text := <-logChan:
-			lines = append(lines, text)
-			currentStage = core.DetectStage(text, currentStage)
-			if p, sp, ok := core.ExtractProgress(text); ok {
-				pct = p
-				if sp != "" {
-					speedStr = sp
-				}
-			}
-		case <-doneChan:
-			if err := cmd.Wait(); err != nil {
-				if exErr, ok := err.(*exec.ExitError); ok {
-					exitCode = exErr.ExitCode()
-				} else {
-					exitCode = 1
-				}
-			}
-			completed = true
-		case <-ticker.C:
-			renderRunnerUI(s, cfg, lines, currentStage, opType, source, pct, speedStr, showRawLogs)
-		}
-	}
-
-	if onComplete != nil {
-		onComplete(exitCode)
-	}
-
-	statusMsg := T(*cfg, "log_finished_ok")
-	if exitCode != 0 {
-		statusMsg = T(*cfg, "log_finished_err", exitCode)
-	}
-	lines = append(lines, statusMsg)
-
-	if cfg.NotifyBell {
-		print("\a")
-	}
-
-	_ = core.AddHistoryEntry(opType, source, target, func() string {
-		if exitCode == 0 {
-			return "Success"
-		}
-		return fmt.Sprintf("Failed (%d)", exitCode)
-	}())
-
 	for {
-		w, h := s.Size()
-		s.Clear()
-		DrawHeader(s, T(*cfg, "log_title"), w, *cfg)
-
-		maxRows := h - 4
-		visible := lines
-		if len(visible) > maxRows {
-			visible = visible[len(visible)-maxRows:]
+		snapshot, exists := core.GlobalQueue.Snapshot(taskID)
+		if !exists {
+			return
 		}
-		for i, line := range visible {
-			DrawString(s, 2, 3+i, line, w-4, tcell.StyleDefault)
-		}
-
-		DrawFooter(s, T(*cfg, "log_footer_done"), w, h)
-		s.Show()
-
-		ev := s.PollEvent()
-		if kEv, ok := ev.(*tcell.EventKey); ok {
-			if CheckTerminalHotkey(kEv) {
-				GlobalTerminal.Open(s, cfg)
-				continue
-			}
-			if kEv.Key() == tcell.KeyEnter || kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
+		completed := snapshot.Status == core.StatusDone || snapshot.Status == core.StatusFailed || snapshot.Status == core.StatusCancelled
+		lines := []string{commandLine, ""}
+		taskLogs := core.GlobalQueue.TaskLogs(taskID)
+		lines = append(lines, taskLogs...)
+		transferSpeed := ""
+		for index := len(taskLogs) - 1; index >= 0; index-- {
+			_, speed, hasProgress := core.ExtractProgress(taskLogs[index])
+			if hasProgress && speed != "" {
+				transferSpeed = speed
 				break
 			}
 		}
+		if completed {
+			statusMessage := T(*cfg, "log_finished_ok")
+			if snapshot.Status == core.StatusCancelled {
+				statusMessage = "Cancelled"
+			} else if snapshot.Status == core.StatusFailed {
+				statusMessage = T(*cfg, "log_finished_err", snapshot.ExitCode)
+			}
+			lines = append(lines, statusMessage)
+			if !completionAnnounced && cfg.NotifyBell {
+				print("\a")
+			}
+			completionAnnounced = true
+		}
+		renderRunnerUI(s, cfg, lines, snapshot.Stage, opType, source, snapshot.Progress, transferSpeed, showRawLogs || completed)
+		if completed {
+			width, height := s.Size()
+			DrawFooter(s, T(*cfg, "log_footer_done"), width, height)
+			s.Show()
+		}
+		// Only the UI goroutine consumes keyboard events, including in nested dialogs.
+		if s.HasPendingEvent() {
+			event := s.PollEvent()
+			if keyEvent, ok := event.(*tcell.EventKey); ok {
+				if CheckPaletteHotkey(keyEvent) {
+					GlobalPalette.Open(s, cfg)
+					continue
+				}
+				if keyEvent.Key() == tcell.KeyF10 {
+					showRawLogs = !showRawLogs
+				}
+				leaveScreen := keyEvent.Key() == tcell.KeyEscape || keyEvent.Rune() == 'q'
+				if completed && (leaveScreen || keyEvent.Key() == tcell.KeyEnter) {
+					return
+				}
+				if !completed && leaveScreen {
+					ShowMessage(s, cfg, T(*cfg, "log_title"), []string{T(*cfg, "bg_transferred")}, T(*cfg, "footer_message"))
+					return
+				}
+				if !completed && keyEvent.Key() == tcell.KeyCtrlC {
+					core.GlobalQueue.CancelTask(taskID)
+				}
+			}
+			continue
+		}
+		<-ticker.C
 	}
 }
 
@@ -199,7 +96,7 @@ func renderRunnerUI(s tcell.Screen, cfg *core.Config, lines []string, stage, opT
 	DrawHeader(s, T(*cfg, "log_title"), w, *cfg)
 
 	if rawLogs {
-		maxRows := h - 4
+		maxRows := max(0, h-4)
 		visible := lines
 		if len(visible) > maxRows {
 			visible = visible[len(visible)-maxRows:]
@@ -210,7 +107,7 @@ func renderRunnerUI(s tcell.Screen, cfg *core.Config, lines []string, stage, opT
 	} else {
 		stageStyle := tcell.StyleDefault.Foreground(tcell.ColorGreen).Bold(true)
 		DrawString(s, 4, 3, "Active Stage: "+stage, w-8, stageStyle)
-		DrawString(s, 4, 4, strings.Repeat("─", w-8), w-8, tcell.StyleDefault.Dim(true))
+		DrawString(s, 4, 4, strings.Repeat("─", max(0, w-8)), w-8, tcell.StyleDefault.Dim(true))
 
 		DrawString(s, 4, 6, "Operation : "+opType, w-8, tcell.StyleDefault)
 		if source != "" {

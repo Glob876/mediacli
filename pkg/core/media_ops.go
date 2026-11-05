@@ -773,7 +773,7 @@ func (o *StabilizeOp) Build(ctx *BuildContext) error {
 		accuracy = 15
 	}
 	trf := "/tmp/vidstab_" + filepath.Base(ctx.Inputs[0]) + ".trf"
-	pass1 := []string{FfmpegBin(ctx.Config), "-y", "-i", ctx.Inputs[0], "-vf", fmt.Sprintf("vidstabdetect=shakiness=%d:accuracy=%d:result=%s", shakiness, accuracy, trf), "-f", "null", "-"}
+	pass1 := []string{FFmpegBin(ctx.Config), "-y", "-i", ctx.Inputs[0], "-vf", fmt.Sprintf("vidstabdetect=shakiness=%d:accuracy=%d:result=%s", shakiness, accuracy, trf), "-f", "null", "-"}
 	ctx.Passes = append(ctx.Passes, pass1)
 	ctx.FilterGraph.AddVideoFilter(fmt.Sprintf("vidstabtransform=input=%s", trf))
 	if ctx.VideoCodec == "copy" {

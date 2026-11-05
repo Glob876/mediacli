@@ -1,6 +1,6 @@
 {
   "name": "@glob876/mediacli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keyboard-driven terminal media suite powered by yt-dlp and FFmpeg",
   "license": "MIT",
   "author": "Glob876",

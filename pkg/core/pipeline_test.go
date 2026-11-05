@@ -210,22 +210,22 @@ func TestOperationMarshalUnmarshal(t *testing.T) {
 	}
 }
 
-func TestFfmpegBinFallback(t *testing.T) {
+func TestFFmpegBinFallback(t *testing.T) {
 	cfg := GetDefaultConfig()
 	cfg.FfmpegPath = ""
-	if got := FfmpegBin(cfg); got != "ffmpeg" {
+	if got := FFmpegBin(cfg); got != "ffmpeg" {
 		t.Fatalf("fallback: got %q", got)
 	}
 	cfg.FfmpegPath = "/opt/ffmpeg/bin/ffmpeg"
-	if got := FfmpegBin(cfg); got != "/opt/ffmpeg/bin/ffmpeg" {
+	if got := FFmpegBin(cfg); got != "/opt/ffmpeg/bin/ffmpeg" {
 		t.Fatalf("custom: got %q", got)
 	}
 }
 
-func TestFfprobeBinFallback(t *testing.T) {
+func TestFFprobeBinFallback(t *testing.T) {
 	cfg := GetDefaultConfig()
 	cfg.FfmpegPath = ""
-	if got := FfprobeBin(cfg); got != "ffprobe" {
+	if got := FFprobeBin(cfg); got != "ffprobe" {
 		t.Fatalf("fallback: got %q", got)
 	}
 }

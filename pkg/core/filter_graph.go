@@ -127,8 +127,8 @@ func EqFilter(brightness, contrast, saturation float64) string {
 // Часто используемые фильтры как константы-фабрики
 
 var (
-	FilterHFlip     = "hflip"
-	FilterVFlip     = "vflip"
+	FilterHFlip            = "hflip"
+	FilterVFlip            = "vflip"
 	FilterDeinterlaceBwdif = "bwdif=mode=send_frame"
 	FilterDeinterlaceYadif = "yadif"
 	FilterDenoiseHQDN3D    = "hqdn3d"

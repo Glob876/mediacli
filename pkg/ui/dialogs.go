@@ -1,14 +1,19 @@
 package ui
 
 import (
-	"mediacli/pkg/core"
 	"strings"
+
+	"mediacli/pkg/core"
 
 	"github.com/gdamore/tcell/v2"
 )
 
 func RunMenu(s tcell.Screen, cfg *core.Config, title string, items []string, subtitle string, footer string) int {
+	if len(items) == 0 {
+		return -1
+	}
 	idx := 0
+	firstVisible := 0
 	s.HideCursor()
 
 	for {
@@ -25,10 +30,21 @@ func RunMenu(s tcell.Screen, cfg *core.Config, title string, items []string, sub
 			row++
 		}
 
+		if row >= h-3 {
+			row = max(0, h-4)
+		}
+		visibleRows := max(1, h-row-3)
+		if idx < firstVisible {
+			firstVisible = idx
+		}
+		if idx >= firstVisible+visibleRows {
+			firstVisible = idx - visibleRows + 1
+		}
 		hlStyle := GetHighlightStyle(*cfg)
 		baseStyle := GetBaseStyle(*cfg)
-		for i, item := range items {
-			y := row + i
+		for i := firstVisible; i < len(items); i++ {
+			item := items[i]
+			y := row + i - firstVisible
 			if y >= h-3 {
 				break
 			}
@@ -45,8 +61,8 @@ func RunMenu(s tcell.Screen, cfg *core.Config, title string, items []string, sub
 		ev := s.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			if CheckTerminalHotkey(ev) {
-				GlobalTerminal.Open(s, cfg)
+			if CheckPaletteHotkey(ev) {
+				GlobalPalette.Open(s, cfg)
 				continue
 			}
 			switch ev.Key() {
@@ -102,8 +118,8 @@ func TextInput(s tcell.Screen, cfg *core.Config, title, prompt, defaultVal, foot
 		ev := s.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			if CheckTerminalHotkey(ev) {
-				GlobalTerminal.Open(s, cfg)
+			if CheckPaletteHotkey(ev) {
+				GlobalPalette.Open(s, cfg)
 				continue
 			}
 			switch ev.Key() {
@@ -156,8 +172,8 @@ func ShowMessage(s tcell.Screen, cfg *core.Config, title string, lines []string,
 		ev := s.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			if CheckTerminalHotkey(ev) {
-				GlobalTerminal.Open(s, cfg)
+			if CheckPaletteHotkey(ev) {
+				GlobalPalette.Open(s, cfg)
 				continue
 			}
 			if ev.Key() == tcell.KeyEnter || ev.Key() == tcell.KeyEscape || ev.Rune() == 'q' {

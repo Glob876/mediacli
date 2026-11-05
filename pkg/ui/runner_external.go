@@ -3,12 +3,13 @@ package ui
 import (
 	"fmt"
 	"io"
-	"mediacli/pkg/core"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"mediacli/pkg/core"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -43,17 +44,11 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	showRawLogs := false
 
 	// общие каналы и тикер для обеих фаз
-	eventChan := make(chan tcell.Event)
-	go func() {
-		for {
-			eventChan <- s.PollEvent()
-		}
-	}()
+	eventChan := make(chan tcell.Event, 1)
 	ticker := time.NewTicker(40 * time.Millisecond)
 	defer ticker.Stop()
 
 	// ---------- Фаза 1: yt-dlp ----------
-	core.CleanZeroByteFiles(outDir, core.GetString(preset.Fields, "output_template"))
 	ytdlpCmd := exec.Command(ytdlpCmdList[0], ytdlpCmdList[1:]...)
 	ytdlpOut, err := ytdlpCmd.StdoutPipe()
 	if err != nil {
@@ -117,8 +112,8 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 		select {
 		case ev := <-eventChan:
 			if kEv, ok := ev.(*tcell.EventKey); ok {
-				if CheckTerminalHotkey(kEv) {
-					GlobalTerminal.Open(s, cfg)
+				if CheckPaletteHotkey(kEv) {
+					GlobalPalette.Open(s, cfg)
 					continue
 				}
 				if kEv.Key() == tcell.KeyF10 {
@@ -126,11 +121,9 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 				} else if kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
 					// в external режиме не поддерживаем фон для первой фазы — просто Kill
 					_ = ytdlpCmd.Process.Kill()
-					ytdlpCompleted = true
 					ytdlpExit = 1
 				} else if kEv.Key() == tcell.KeyCtrlC {
 					_ = ytdlpCmd.Process.Kill()
-					ytdlpCompleted = true
 					ytdlpExit = 1
 				}
 			}
@@ -153,6 +146,9 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			}
 			ytdlpCompleted = true
 		case <-ticker.C:
+			if s.HasPendingEvent() && len(eventChan) == 0 {
+				eventChan <- s.PollEvent()
+			}
 			renderRunnerUI(s, cfg, lines, currentStage, "Download Video", url, pct, speedStr, showRawLogs)
 		}
 	}
@@ -166,7 +162,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			w, h := s.Size()
 			s.Clear()
 			DrawHeader(s, T(*cfg, "log_title"), w, *cfg)
-			maxRows := h - 4
+			maxRows := max(0, h-4)
 			visible := lines
 			if len(visible) > maxRows {
 				visible = visible[len(visible)-maxRows:]
@@ -178,8 +174,8 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			s.Show()
 			ev := s.PollEvent()
 			if kEv, ok := ev.(*tcell.EventKey); ok {
-				if CheckTerminalHotkey(kEv) {
-					GlobalTerminal.Open(s, cfg)
+				if CheckPaletteHotkey(kEv) {
+					GlobalPalette.Open(s, cfg)
 					continue
 				}
 				if kEv.Key() == tcell.KeyEnter || kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
@@ -213,7 +209,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			w, h := s.Size()
 			s.Clear()
 			DrawHeader(s, T(*cfg, "log_title"), w, *cfg)
-			maxRows := h - 4
+			maxRows := max(0, h-4)
 			visible := lines
 			if len(visible) > maxRows {
 				visible = visible[len(visible)-maxRows:]
@@ -264,7 +260,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			w, h := s.Size()
 			s.Clear()
 			DrawHeader(s, T(*cfg, "log_title"), w, *cfg)
-			maxRows := h - 4
+			maxRows := max(0, h-4)
 			visible := lines
 			if len(visible) > maxRows {
 				visible = visible[len(visible)-maxRows:]
@@ -293,7 +289,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			w, h := s.Size()
 			s.Clear()
 			DrawHeader(s, T(*cfg, "log_title"), w, *cfg)
-			maxRows := h - 4
+			maxRows := max(0, h-4)
 			visible := lines
 			if len(visible) > maxRows {
 				visible = visible[len(visible)-maxRows:]
@@ -363,19 +359,17 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 		select {
 		case ev := <-eventChan:
 			if kEv, ok := ev.(*tcell.EventKey); ok {
-				if CheckTerminalHotkey(kEv) {
-					GlobalTerminal.Open(s, cfg)
+				if CheckPaletteHotkey(kEv) {
+					GlobalPalette.Open(s, cfg)
 					continue
 				}
 				if kEv.Key() == tcell.KeyF10 {
 					showRawLogs = !showRawLogs
 				} else if kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
 					_ = ffCmd.Process.Kill()
-					ffCompleted = true
 					ffExit = 1
 				} else if kEv.Key() == tcell.KeyCtrlC {
 					_ = ffCmd.Process.Kill()
-					ffCompleted = true
 					ffExit = 1
 				}
 			}
@@ -398,12 +392,18 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			}
 			ffCompleted = true
 		case <-ticker.C:
+			if s.HasPendingEvent() && len(eventChan) == 0 {
+				eventChan <- s.PollEvent()
+			}
 			renderRunnerUI(s, cfg, lines, currentStage, "Download Video", url, pct, speedStr, showRawLogs)
 		}
 	}
 
 	if plan.OnComplete != nil {
-		plan.OnComplete(ffExit)
+		if err := plan.OnComplete(ffExit); err != nil {
+			ffExit = 1
+			lines = append(lines, "[Error] "+err.Error())
+		}
 	} else if ffExit == 0 {
 		// если план без OnComplete (обычный случай без OverwriteOriginal), но candidate != finalPath, нужно удалить исходник?
 		// Для external ожидаем удаление исходного merge-файла после успешного ffmpeg (как yt-dlp --recode удаляет .temp) ?
@@ -449,7 +449,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 		w, h := s.Size()
 		s.Clear()
 		DrawHeader(s, T(*cfg, "log_title"), w, *cfg)
-		maxRows := h - 4
+		maxRows := max(0, h-4)
 		visible := lines
 		if len(visible) > maxRows {
 			visible = visible[len(visible)-maxRows:]
@@ -461,8 +461,8 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 		s.Show()
 		ev := s.PollEvent()
 		if kEv, ok := ev.(*tcell.EventKey); ok {
-			if CheckTerminalHotkey(kEv) {
-				GlobalTerminal.Open(s, cfg)
+			if CheckPaletteHotkey(kEv) {
+				GlobalPalette.Open(s, cfg)
 				continue
 			}
 			if kEv.Key() == tcell.KeyEnter || kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"mediacli/pkg/core"
 
@@ -159,7 +160,7 @@ func ScreenUniversal(s tcell.Screen, cfg *core.Config, initialPath string) {
 				if len(commands) == 1 {
 					RunWithLogHook(s, cfg, commands[0], "Editor", filepath.Base(path), filepath.Base(target), nil)
 				} else {
-					core.GlobalQueue.EnqueueChain(commands, "Editor", path, target, fmt.Sprintf("editor_%s", filepath.Base(path)))
+					core.GlobalQueue.EnqueueChain(commands, "Editor", path, target, fmt.Sprintf("editor_%d", time.Now().UnixNano()))
 					ShowMessage(s, cfg, "Editor", []string{tr("Экспорт поставлен в очередь", "Export queued")}, T(*cfg, "footer_message"))
 				}
 			}

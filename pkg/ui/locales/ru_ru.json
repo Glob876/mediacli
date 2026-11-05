@@ -91,7 +91,7 @@
   "ffmpegSuffix": "Суффиксы в именах FFmpeg",
   "footer_input": "Enter — подтвердить   Esc — отмена",
   "footer_message": "Enter/Esc — продолжить",
-  "footer_nav": "↑/↓ или j/k — выбор   Enter — подтвердить   Esc/q — назад   [Alt+Shift+P / F12] — Терминал",
+  "footer_nav": "Ctrl+P/F12 — команды   ↑↓/jk — выбор   Enter — открыть   Esc/q — назад",
   "footer_vertical_items": "↑/↓ — Параметр   Enter — Изменить/Вкл   Esc/← — К категориям",
   "footer_vertical_tabs": "↑/↓ — Категория   Enter/→ — К параметрам   Esc — Назад / Отмена",
   "frags": "Параллельных фрагментов:",

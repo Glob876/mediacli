@@ -3,8 +3,10 @@
 
 # MediaCLI
 
+Version: **0.1.1** · `mediacli --version`
+
 **An ultra-fast, keyboard-driven terminal media suite wrapping `yt-dlp` and `FFmpeg`.**  
-*Engineered in Go with zero runtime overhead, dual-pane TUI, background task engine, and an interactive overlay terminal.*
+*Engineered in Go with zero runtime overhead, dual-pane TUI, background task engine, and a searchable command palette.*
 
 ---
 
@@ -27,7 +29,7 @@
 ## ⚡ Key Features
 
 - [x] **Tabbed TUI Architecture** — Instant keyboard navigation across online downloads, local conversions, and system tools.
-- [x] **Global Floating Terminal (`F12` / `Alt+Shift+P`)** — Drop-down command console accessible from any screen without interrupting active tasks.
+- [x] **Command Palette (`Ctrl+P` / `F12`)** — Search actions, open tools, inspect the queue, and change themes from any screen without interrupting active tasks.
 - [x] **Non-Blocking Background Queue** — Send running downloads to the background at any time (`q` / `Esc`) and keep browsing.
 - [x] **Top-Tier Codec Priority** — Standard MP4 (`H.264+AAC`) and Modern MKV (`AV1/H.265`) always placed first, followed by professional NLE formats (*DaVinci Resolve DNxHR HQ* & *Apple ProRes 422* with uncompressed 16-bit PCM audio).
 - [x] **Step-by-Step Manual Wizard** — Granular configuration for resolution limits, custom timecode cuts, dual-audio tracks, and subtitles.
@@ -81,7 +83,7 @@ chmod +x build.sh
 
 | Key | Context | Action |
 | :--- | :--- | :--- |
-| <kbd>F12</kbd> / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> | **Global** | Toggle floating interactive terminal overlay |
+| <kbd>Ctrl</kbd>+<kbd>P</kbd> / <kbd>F12</kbd> | **Global** | Open the command palette |
 | <kbd>←</kbd> <kbd>→</kbd> or <kbd>h</kbd> <kbd>l</kbd> | **Main Menu** | Switch horizontal category tabs |
 | <kbd>↑</kbd> <kbd>↓</kbd> or <kbd>k</kbd> <kbd>j</kbd> | **Navigation** | Move cursor selection up / down |
 | <kbd>Enter</kbd> | **Dialogs** | Confirm selection / Open sub-menu |
@@ -91,21 +93,16 @@ chmod +x build.sh
 
 ---
 
-## 💻 Floating Terminal Commands
+## Command Palette
 
-Access via <kbd>F12</kbd> to control the engine directly:
+Press **Ctrl+P** or **F12** from any TUI screen. Type a command name or keyword
+in Russian or English, move with **↑/↓**, and press **Enter** to run it.
+**Esc**, **Ctrl+P**, or **F12** closes the palette; **Ctrl+U** clears the search.
 
-```ansi
-mediacli> help
-  config [list | get <k> | set <k> <v>]  - Inspect and modify runtime parameters
-  preset [list | delete <id>]            - Manage saved download profiles
-  queue  [list | cancel <id>]            - Inspect/terminate background workers
-  history [list | clear]                 - View operation log history
-  cookies [list | add <dom> <k> <v>]     - Manage Netscape cookie file
-  theme  <name>                          - Switch UI color palette on the fly
-  doctor                                 - Diagnose local binary dependencies
-  dl     <url>                           - Dispatch immediate background download
-```
+Actions include downloads, conversion, trimming, pipelines, the universal
+editor, the task queue, history, settings, themes, and dependency diagnostics.
+Queue actions show logs and cancel active tasks. Clearing history requires
+confirmation and retains media files. The previous text console is removed.
 
 ---
 
@@ -201,7 +198,7 @@ Shell UI: пустая главная с полупрозрачным полем
 (размер — Ctrl+колесо, группировка — очередь строго по одной, состояние
 переживает перезапуск, клик по слоту разворачивает живые логи,
 двойной клик — логи на весь экран);
-настройки — вкладки слева как в TUI (все опции консоли + путь к ffmpeg
+настройки — вкладки слева как в TUI (настройки TUI + путь к ffmpeg
 с проверкой); при активных загрузках/конвертациях окно не закроется молча —
 появится «Вы уверены?» с числом задач; `Shift+H` — история, `Shift+I` — настройки,
 `Esc` — закрыть. Языки `ru` / `en` / `en-US`,

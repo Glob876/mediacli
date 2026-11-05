@@ -298,7 +298,7 @@ func BuildPipeline(p Pipeline, cfg Config) ([][]string, error) {
 }
 
 func buildFFmpegArgs(ctx *BuildContext, overwrite bool) []string {
-	bin := FfmpegBin(ctx.Config)
+	bin := FFmpegBin(ctx.Config)
 	mode := "-n"
 	if overwrite {
 		mode = "-y"

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"mediacli/pkg/core"
 
@@ -259,13 +260,15 @@ func ScreenPipeline(s tcell.Screen, cfg *core.Config) {
 				ShowMessage(s, cfg, "Build Error", []string{err.Error()}, T(*cfg, "footer_message"))
 				continue
 			}
-			// For simplicity run first command via log hook; chain via queue for rest
+			// Multi-pass operations use the queue to preserve dependencies.
 			if len(cmds) == 1 {
 				output := cmds[0][len(cmds[0])-1]
 				RunWithLogHook(s, cfg, cmds[0], "Pipeline", filepath.Base(p), filepath.Base(output), nil)
 			} else {
-				groupID := fmt.Sprintf("tui_pipe_%d", len(cmds))
-				tasks := core.GlobalQueue.EnqueueChain(cmds, "Pipeline (TUI)", p, p+".out.mp4", groupID)
+				groupID := fmt.Sprintf("tui_pipe_%d", time.Now().UnixNano())
+				lastCommand := cmds[len(cmds)-1]
+				outputPath := lastCommand[len(lastCommand)-1]
+				tasks := core.GlobalQueue.EnqueueChain(cmds, "Pipeline (TUI)", p, outputPath, groupID)
 				ShowMessage(s, cfg, "Pipeline Queued", []string{fmt.Sprintf("Enqueued %d tasks (group %s). See BG queue.", len(tasks), groupID)}, T(*cfg, "footer_message"))
 			}
 			return

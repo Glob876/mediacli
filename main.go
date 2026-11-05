@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+
 	"mediacli/pkg/core"
 	"mediacli/pkg/daemon"
 	"mediacli/pkg/ui"
-	"os"
 
 	"golang.org/x/term"
 )
@@ -19,9 +20,16 @@ func main() {
 	}
 
 	var isGUI bool
+	var showVersion bool
+	flag.BoolVar(&showVersion, "version", false, "Print application version")
+	flag.BoolVar(&showVersion, "v", false, "Print application version")
 	flag.BoolVar(&isGUI, "gui", false, "Launch graphical user interface")
 	flag.BoolVar(&isGUI, "g", false, "Launch graphical user interface (shorthand)")
 	flag.Parse()
+	if showVersion {
+		fmt.Println(core.Version)
+		return
+	}
 
 	// Совместимость: `mediacli gui` (позиционный аргумент).
 	if !isGUI {

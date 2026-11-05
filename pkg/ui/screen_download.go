@@ -2,11 +2,12 @@ package ui
 
 import (
 	"fmt"
-	"mediacli/pkg/core"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"mediacli/pkg/core"
 
 	"github.com/gdamore/tcell/v2"
 )
@@ -64,10 +65,8 @@ func ScreenVideo(s tcell.Screen, cfg *core.Config) {
 	}
 
 	if core.IsExternalTranscodeEnabled(*cfg, preset.Fields) {
-		core.CleanZeroByteFiles(outDir, core.GetString(preset.Fields, "output_template"))
 		RunDownloadExternal(s, cfg, preset, outDir, url)
 	} else {
-		core.CleanZeroByteFiles(outDir, core.GetString(preset.Fields, "output_template"))
 		cmdList := append([]string{"yt-dlp"}, core.BuildYtDlpArgs(preset, *cfg, outDir, false)...)
 		cmdList = append(cmdList, url)
 		RunWithLog(s, cfg, cmdList, "Download Video", url, outDir)
@@ -345,8 +344,8 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 		ev := s.PollEvent()
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
-			if CheckTerminalHotkey(ev) {
-				GlobalTerminal.Open(s, cfg)
+			if CheckPaletteHotkey(ev) {
+				GlobalPalette.Open(s, cfg)
 				continue
 			}
 			if !inRightPane {
