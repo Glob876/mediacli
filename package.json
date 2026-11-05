@@ -1,0 +1,29 @@
+{
+  "name": "@glob876/mediacli",
+  "version": "0.1.0",
+  "description": "Keyboard-driven terminal media suite powered by yt-dlp and FFmpeg",
+  "license": "MIT",
+  "author": "Glob876",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Glob876/mediacli.git"
+  },
+  "homepage": "https://github.com/Glob876/mediacli#readme",
+  "bugs": "https://github.com/Glob876/mediacli/issues",
+  "bin": {
+    "mediacli": "npm/cli.cjs"
+  },
+  "files": ["npm/cli.cjs", "npm/platforms.cjs", "npm/bin/", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "os": ["linux", "darwin", "win32"],
+  "cpu": ["x64", "arm64"],
+  "scripts": {
+    "build": "node scripts/build-npm.cjs",
+    "test": "node --test npm/*.test.cjs scripts/*.test.cjs",
+    "prepack": "node scripts/verify-npm.cjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
