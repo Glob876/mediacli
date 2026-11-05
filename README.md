@@ -39,6 +39,20 @@
 
 ## 🚀 Installation
 
+### npm CLI
+
+The repository includes an npm package for the Go CLI, with prebuilt binaries
+for Linux, macOS and Windows (x64/arm64). Once the first npm release is published:
+
+```bash
+npm install -g @glob876/mediacli
+mediacli
+```
+
+Node.js 18+, `yt-dlp`, `ffmpeg` and `ffprobe` are required. The Electron shell is
+distributed separately. See [npm releases](docs/npm-release.md) for Actions
+artifacts, publishing setup and versioning.
+
 ### Arch Linux (AUR)
 
 ```bash

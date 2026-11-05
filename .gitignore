@@ -231,3 +231,8 @@ electron/node_modules/
 electron/dist/
 electron/release/
 electron/bin/
+
+# npm CLI package (generated binaries and archives)
+/npm/bin/
+/node_modules/
+/*.tgz
