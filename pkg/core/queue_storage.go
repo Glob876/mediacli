@@ -44,6 +44,7 @@ func (qm *BackgroundQueueManager) EnablePersistence(path string) error {
 	}
 	for _, record := range records {
 		task := record.Task
+		task.finalized = true
 		task.previousTaskID = record.Previous
 		task.unrecoverableHook = record.HasHook && task.Replacement == nil
 		if task.Replacement != nil && (task.Status == StatusRunning || task.Status == StatusQueued || task.Status == StatusInterrupted) {

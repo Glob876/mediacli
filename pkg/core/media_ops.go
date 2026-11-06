@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -448,26 +449,61 @@ func (o *ConcatOp) Build(ctx *BuildContext) error {
 		mode = "demuxer"
 	}
 	if mode == "demuxer" {
-		// Use concat demuxer: need to create list file; but for pipeline we just append inputs and use filter?
-		// Simplified: use filter_complex concat for both modes, demuxer would be separate task.
-		// For demuxer we enqueue a single ffmpeg with -f concat -safe 0 -i list.txt -c copy
-		// Here we just set inputs and copy codecs.
-		ctx.Inputs = append([]string{}, o.Inputs...)
+		content := "ffconcat version 1.0\n"
+		for _, input := range o.Inputs {
+			path, err := filepath.Abs(ParseUserPath(input))
+			if err != nil {
+				return err
+			}
+			if strings.ContainsAny(path, "\r\n") {
+				return fmt.Errorf("concat paths cannot contain newlines")
+			}
+			content += "file '" + strings.ReplaceAll(path, "'", "'\\''") + "'\n"
+		}
+		hash := sha256.Sum256([]byte(content))
+		name := filepath.Join(GetConfigDir(), "concat", fmt.Sprintf("%x.ffconcat", hash))
+		if err := WritePrivateFile(name, []byte(content)); err != nil {
+			return err
+		}
+		ctx.Args = append(ctx.Args, "-f", "concat", "-safe", "0")
+		ctx.Inputs = []string{name}
 		ctx.VideoCodec = "copy"
 		ctx.AudioCodec = "copy"
-		// Caller (daemon) will generate list file and use concat demuxer; for generic pipeline fallback to filter
 	} else {
 		// filter mode: concat=n=N:v=1:a=1
 		ctx.Inputs = append([]string{}, o.Inputs...)
 		n := len(ctx.Inputs)
 		var parts []string
-		for i := 0; i < n; i++ {
-			parts = append(parts, fmt.Sprintf("[%d:v][%d:a]", i, i))
+		video, audio := 0, 0
+		if ctx.InputHasVideo {
+			video = 1
 		}
-		fc := fmt.Sprintf("%sconcat=n=%d:v=1:a=1[v][a]", strings.Join(parts, ""), n)
+		if ctx.InputHasAudio {
+			audio = 1
+		}
+		for i := 0; i < n; i++ {
+			if video == 1 {
+				parts = append(parts, fmt.Sprintf("[%d:v]", i))
+			}
+			if audio == 1 {
+				parts = append(parts, fmt.Sprintf("[%d:a]", i))
+			}
+		}
+		labels := ""
+		if video == 1 {
+			labels += "[v]"
+		}
+		if audio == 1 {
+			labels += "[a]"
+		}
+		fc := fmt.Sprintf("%sconcat=n=%d:v=%d:a=%d%s", strings.Join(parts, ""), n, video, audio, labels)
 		ctx.FilterGraph.AddComplex(fc)
-		ctx.FilterGraph.SetComplexOutput("[v]")
-		ctx.ExtraArgs = append(ctx.ExtraArgs, "-map", "[a]")
+		if video == 1 {
+			ctx.FilterGraph.SetComplexOutput("[v]")
+		}
+		if audio == 1 {
+			ctx.ExtraArgs = append(ctx.ExtraArgs, "-map", "[a]")
+		}
 		if o.Codec != "" {
 			ctx.VideoCodec = o.Codec
 		} else {

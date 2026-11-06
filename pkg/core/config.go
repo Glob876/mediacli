@@ -264,5 +264,5 @@ func SaveConfig(cfg Config) error {
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(dir, "config.json"), data, 0644)
+	return WritePrivateFile(filepath.Join(dir, "config.json"), data)
 }

@@ -156,3 +156,6 @@ func CleanupPassLogs(command []string) {
 		_ = os.Remove(prefix + suffix)
 	}
 }
+
+// ParseMediaTime accepts seconds or colon-separated timecodes.
+func ParseMediaTime(value string) (float64, error) { return parseMediaTime(value) }

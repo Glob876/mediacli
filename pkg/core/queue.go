@@ -40,6 +40,7 @@ type BackgroundTask struct {
 	ChainIndex  int    `json:"chain_index,omitempty"`
 	ChainTotal  int    `json:"chain_total,omitempty"`
 
+	finalized         bool
 	unrecoverableHook bool
 	cmdObj            *exec.Cmd
 	onComplete        func(int) error
@@ -212,6 +213,7 @@ func (qm *BackgroundQueueManager) EnqueueChain(cmds [][]string, title, source, t
 // TaskSnapshot — потокобезопасная копия состояния задачи для TUI и daemon API. Поля BackgroundTask
 // мутируют под мьютексом очереди, поэтому читать их напрямую нельзя.
 type TaskSnapshot struct {
+	Finalized  bool       `json:"finalized"`
 	ID         int        `json:"id"`
 	Title      string     `json:"title"`
 	Source     string     `json:"source"`
@@ -230,6 +232,7 @@ type TaskSnapshot struct {
 
 func snapshotTask(t *BackgroundTask) TaskSnapshot {
 	snap := TaskSnapshot{
+		Finalized:  t.finalized,
 		ID:         t.ID,
 		Title:      t.Title,
 		Source:     t.Source,
@@ -325,6 +328,7 @@ func (qm *BackgroundQueueManager) workerLoop() {
 						if previous.Status == StatusFailed || previous.Status == StatusCancelled {
 							t.Status = StatusCancelled
 							t.Stage = "Previous step did not succeed"
+							t.finalized = true
 							t.FinishedAt = time.Now()
 						}
 						break
@@ -460,6 +464,7 @@ func (qm *BackgroundQueueManager) finishTask(task *BackgroundTask, exitCode int,
 	defer qm.persistLocked()
 
 	CleanupPassLogs(task.Cmd)
+	task.finalized = true
 	cancelled := task.Status == StatusCancelled
 	if cancelled && exitCode == 0 {
 		exitCode = -1

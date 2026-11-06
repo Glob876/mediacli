@@ -257,10 +257,38 @@ func BuildPipeline(p Pipeline, cfg Config) ([][]string, error) {
 			output = fmt.Sprintf("%s_%d%s", base, n, ext)
 		}
 	}
-	// Безопасность: output не должен совпадать с input
-	for _, inp := range p.Inputs {
-		if strings.EqualFold(filepath.Clean(inp), filepath.Clean(output)) {
-			return nil, fmt.Errorf("output %q overwrites input", output)
+	// Every operation input participates in the overwrite guard, including auxiliary media.
+	sources := append([]string(nil), p.Inputs...)
+	for _, operation := range p.Operations {
+		switch op := operation.(type) {
+		case *ConcatOp:
+			sources = append(sources, op.Inputs...)
+		case *MuxOp:
+			sources = append(sources, op.ExtraInputs...)
+		case *SubtitleOp:
+			if op.Input != "" {
+				sources = append(sources, op.Input)
+			}
+		case *MetadataOp:
+			if op.Cover != "" {
+				sources = append(sources, op.Cover)
+			}
+		}
+	}
+	absoluteOutput, err := filepath.Abs(output)
+	if err != nil {
+		return nil, err
+	}
+	destination, _ := os.Stat(absoluteOutput)
+	for _, input := range sources {
+		source, err := filepath.Abs(ParseUserPath(input))
+		if err != nil {
+			return nil, err
+		}
+		original, _ := os.Stat(source)
+		sameFile := original != nil && destination != nil && os.SameFile(original, destination)
+		if source == absoluteOutput || sameFile {
+			return nil, fmt.Errorf("output %q overwrites input %q", output, input)
 		}
 	}
 	if !p.Output.Overwrite {
@@ -306,6 +334,7 @@ func buildFFmpegArgs(ctx *BuildContext, overwrite bool) []string {
 		mode = "-y"
 	}
 	args := []string{bin, mode}
+	args = append(args, ctx.Args...)
 	// seek / trim докидывают -ss/-to до -i сами; здесь базовые инпуты
 	for _, inp := range ctx.Inputs {
 		args = append(args, "-i", inp)
@@ -352,6 +381,7 @@ func DryRunPipeline(p Pipeline, cfg Config) ([]string, error) {
 // SupportedContainers — валидные контейнеры для транскодинга.
 var SupportedContainers = map[string]bool{
 	"mp4": true, "mkv": true, "mov": true, "webm": true,
+	"gif": true,
 	"avi": true, "m4v": true, "mp3": true, "flac": true,
 	"wav": true, "m4a": true, "opus": true, "ogg": true,
 }
