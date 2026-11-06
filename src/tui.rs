@@ -43,6 +43,18 @@ struct Action {
 fn actions() -> Vec<Action> {
     vec![
         Action {
+            command: "theme",
+            ru: "Сменить тему",
+            en: "Change theme",
+            category: 2,
+        },
+        Action {
+            command: "clear-history",
+            ru: "Очистить историю",
+            en: "Clear history",
+            category: 2,
+        },
+        Action {
             command: "download",
             ru: "Скачать видео",
             en: "Download video",
@@ -295,6 +307,29 @@ impl Ranges {
         self.redo.clear();
     }
 }
+struct Picker {
+    directory: PathBuf,
+    entries: Vec<PathBuf>,
+    selected: usize,
+}
+impl Picker {
+    fn read(directory: PathBuf) -> Result<Self> {
+        let mut entries = std::fs::read_dir(&directory)?
+            .map(|entry| entry.map(|e| e.path()))
+            .collect::<std::io::Result<Vec<_>>>()?;
+        entries.sort_by_key(|path| {
+            (
+                !path.is_dir(),
+                path.file_name().unwrap_or_default().to_os_string(),
+            )
+        });
+        Ok(Self {
+            directory,
+            entries,
+            selected: 0,
+        })
+    }
+}
 struct App {
     cfg: Value,
     queue: Queue,
@@ -312,8 +347,35 @@ struct App {
     scroll: u16,
     quit: bool,
     confirm: Option<String>,
+    picker: Option<Picker>,
+    error: Option<String>,
+    history_query: String,
 }
 impl App {
+    fn new(cfg: Value, queue: Queue) -> Self {
+        Self {
+            cfg,
+            queue,
+            tab: 0,
+            selected: 0,
+            screen: "home".into(),
+            text: String::new(),
+            title: String::new(),
+            form: None,
+            palette: None,
+            palette_selected: 0,
+            editor: Editor::default(),
+            ranges: None,
+            task: None,
+            scroll: 0,
+            quit: false,
+            confirm: None,
+            picker: None,
+            error: None,
+            history_query: String::new(),
+        }
+    }
+
     fn ru(&self) -> bool {
         string(&self.cfg, "language") == "ru"
     }
@@ -353,6 +415,12 @@ impl App {
         self.task = None;
         match command {
             "queue" | "history" => self.screen = command.into(),
+            "theme" => self.form(
+                "Theme",
+                "theme",
+                vec![Self::field("theme", "string", self.cfg["theme"].clone())],
+            ),
+            "clear-history" => self.confirm = Some("clear-history".into()),
             "doctor" => self.message(
                 "Dependencies",
                 serde_json::to_string_pretty(&crate::cli::dependencies(&self.cfg))?,
@@ -548,6 +616,17 @@ impl App {
         }
         let value = |key: &str| string(&values, key);
         match form.action.as_str() {
+            "theme" => {
+                let mut updated = self.cfg.clone();
+                updated["theme"] = values["theme"].clone();
+                config::save(&updated)?;
+                self.cfg = updated;
+            }
+            "history-search" => {
+                self.history_query = value("query");
+                self.selected = 0;
+                self.screen = "history".into();
+            }
             "settings" => {
                 let mut updated = self.cfg.clone();
                 config::merge(&mut updated, &values)?;
@@ -766,6 +845,9 @@ impl App {
         Ok(())
     }
     fn key(&mut self, key: KeyEvent) -> Result<()> {
+        if self.error.take().is_some() {
+            return Ok(());
+        }
         if key.kind == KeyEventKind::Release {
             return Ok(());
         }
@@ -794,10 +876,74 @@ impl App {
             }
             return Ok(());
         }
+        if let Some(mut picker) = self.picker.take() {
+            match key.code {
+                KeyCode::Esc => return Ok(()),
+                KeyCode::Up => picker.selected = picker.selected.saturating_sub(1),
+                KeyCode::Down => {
+                    picker.selected =
+                        (picker.selected + 1).min(picker.entries.len().saturating_sub(1))
+                }
+                KeyCode::Backspace => {
+                    if let Some(parent) = picker.directory.parent() {
+                        picker = Picker::read(parent.into())?;
+                    }
+                }
+                KeyCode::Enter => {
+                    let selected = if key.modifiers.contains(KeyModifiers::ALT) {
+                        Some(picker.directory.clone())
+                    } else {
+                        picker.entries.get(picker.selected).cloned()
+                    };
+                    if let Some(path) = selected {
+                        if path.is_dir() && !key.modifiers.contains(KeyModifiers::ALT) {
+                            self.picker = Some(Picker::read(path)?);
+                            return Ok(());
+                        }
+                        if let Some(form) = self.form.as_mut() {
+                            form.fields[form.selected].value = media::text_path(&path);
+                        }
+                        return Ok(());
+                    }
+                }
+                _ => {}
+            }
+            self.picker = Some(picker);
+            return Ok(());
+        }
         if let Some(mut form) = self.form.take() {
             let last = form.fields.len().saturating_sub(1);
             match key.code {
                 KeyCode::Esc => return Ok(()),
+                KeyCode::F(2) => {
+                    let current = config::user_path(&form.fields[form.selected].value);
+                    let directory = if current.is_dir() {
+                        current
+                    } else {
+                        current
+                            .parent()
+                            .filter(|p| p.is_dir())
+                            .map(PathBuf::from)
+                            .unwrap_or(std::env::current_dir()?)
+                    };
+                    self.picker = Some(Picker::read(directory)?);
+                }
+                KeyCode::Left | KeyCode::Right => {
+                    let field = &mut form.fields[form.selected];
+                    let choices = field_choices(&form.action, &field.key, &self.cfg);
+                    if !choices.is_empty() {
+                        let index = choices
+                            .iter()
+                            .position(|value| value == &field.value)
+                            .unwrap_or(0);
+                        let next = if key.code == KeyCode::Right {
+                            (index + 1) % choices.len()
+                        } else {
+                            (index + choices.len() - 1) % choices.len()
+                        };
+                        field.value = choices[next].clone();
+                    }
+                }
                 KeyCode::Char('s') if control => {
                     let backup = Form {
                         title: form.title.clone(),
@@ -958,25 +1104,30 @@ impl App {
                 _ => {}
             },
             "history" => match key.code {
+                KeyCode::Char('/') => self.form(
+                    "Search history",
+                    "history-search",
+                    vec![Self::field("query", "string", json!(self.history_query))],
+                ),
                 KeyCode::Esc | KeyCode::Char('q') => self.screen = "home".into(),
                 KeyCode::Up => self.selected = self.selected.saturating_sub(1),
                 KeyCode::Down => self.selected += 1,
                 KeyCode::Char('c') => self.confirm = Some("clear-history".into()),
                 KeyCode::Delete => {
-                    let history = config::history()?;
-                    if let Some(entry) = history.as_array().unwrap().get(self.selected) {
+                    let history = self.history_entries()?;
+                    if let Some(entry) = history.get(self.selected) {
                         crate::daemon::delete_history(entry, false, &self.cfg)?;
                     }
                 }
                 KeyCode::Enter => {
-                    let history = config::history()?;
-                    if let Some(entry) = history.as_array().unwrap().get(self.selected) {
+                    let history = self.history_entries()?;
+                    if let Some(entry) = history.get(self.selected) {
                         self.message("History", serde_json::to_string_pretty(entry)?);
                     }
                 }
                 KeyCode::Char('r') => {
-                    let history = config::history()?;
-                    if let Some(entry) = history.as_array().unwrap().get(self.selected) {
+                    let history = self.history_entries()?;
+                    if let Some(entry) = history.get(self.selected) {
                         let commands = serde_json::from_value(entry["commands"].clone())
                             .context("no saved command")?;
                         self.queue.replay(
@@ -1160,14 +1311,25 @@ impl App {
         }
         Ok(())
     }
+    fn history_entries(&self) -> Result<Vec<Value>> {
+        let query = self.history_query.to_lowercase();
+        Ok(config::history()?
+            .as_array()
+            .context("invalid history")?
+            .iter()
+            .filter(|entry| entry.to_string().to_lowercase().contains(&query))
+            .cloned()
+            .collect())
+    }
     fn filtered(&self, search: &str) -> Vec<Action> {
         let query = search.to_lowercase();
+        let terms: Vec<_> = query.split_whitespace().collect();
         actions()
             .into_iter()
             .filter(|action| {
-                format!("{} {} {}", action.command, action.ru, action.en)
-                    .to_lowercase()
-                    .contains(&query)
+                let searchable =
+                    format!("{} {} {}", action.command, action.ru, action.en).to_lowercase();
+                terms.iter().all(|term| searchable.contains(term))
             })
             .collect()
     }
@@ -1349,8 +1511,7 @@ impl App {
                     .into();
             }
             "history" => {
-                let history = config::history().unwrap_or(json!([]));
-                let entries = history.as_array().unwrap();
+                let entries = self.history_entries().unwrap_or_default();
                 self.selected = self.selected.min(entries.len().saturating_sub(1));
                 let items: Vec<_> = entries
                     .iter()
@@ -1377,8 +1538,8 @@ impl App {
                 );
                 footer = self
                     .tr(
-                        "R Повторить  Delete Удалить запись  C Очистить  Esc Назад",
-                        "R Retry  Delete Remove entry  C Clear  Esc Back",
+                        "/ Поиск  R Повторить  Delete Удалить запись  C Очистить  Esc Назад",
+                        "/ Search  R Retry  Delete Remove entry  C Clear  Esc Back",
                     )
                     .into();
             }
@@ -1507,8 +1668,8 @@ impl App {
             );
             frame.render_widget(
                 Paragraph::new(self.tr(
-                    "↑↓ / Tab Поле  Ctrl+U Очистить  Space Флаг  Ctrl+S Применить  Esc Отмена",
-                    "↑↓ / Tab Field  Ctrl+U Clear  Space Toggle  Ctrl+S Apply  Esc Cancel",
+                    "↑↓ Поле  ←→ Вариант  F2 Файлы  Ctrl+U Очистить  Ctrl+S Применить  Esc Отмена",
+                    "↑↓ Field  ←→ Choice  F2 Files  Ctrl+U Clear  Ctrl+S Apply  Esc Cancel",
                 ))
                 .style(style),
                 layout[2],
@@ -1540,6 +1701,53 @@ impl App {
                     .highlight_style(highlight),
                 regions[1],
                 &mut ListState::default().with_selected(Some(self.palette_selected)),
+            );
+        }
+        if let Some(picker) = &self.picker {
+            frame.render_widget(Clear, body);
+            let items: Vec<_> = picker
+                .entries
+                .iter()
+                .map(|path| {
+                    ListItem::new(format!(
+                        "{} {}",
+                        if path.is_dir() { "▸" } else { " " },
+                        path.file_name().unwrap_or_default().to_string_lossy()
+                    ))
+                })
+                .collect();
+            frame.render_stateful_widget(
+                List::new(items)
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(media::text_path(&picker.directory)),
+                    )
+                    .highlight_style(highlight),
+                body,
+                &mut ListState::default().with_selected(Some(picker.selected)),
+            );
+            frame.render_widget(
+                Paragraph::new(self.tr(
+                    "Enter Открыть/выбрать  Alt+Enter Выбрать папку  Backspace Вверх  Esc Назад",
+                    "Enter Open/select  Alt+Enter Select folder  Backspace Parent  Esc Back",
+                ))
+                .style(style),
+                layout[2],
+            );
+        }
+        if let Some(error) = &self.error {
+            let popup = centered(area, 85, 65);
+            frame.render_widget(Clear, popup);
+            frame.render_widget(
+                Paragraph::new(format!("{error}\n\nEnter / Esc"))
+                    .wrap(Wrap { trim: false })
+                    .block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(self.tr(" Ошибка ", " Error ")),
+                    ),
+                popup,
             );
         }
         if let Some(confirm) = &self.confirm {
@@ -1603,24 +1811,7 @@ pub async fn run() -> Result<()> {
     let _guard = TerminalGuard;
     execute!(io::stdout(), EnterAlternateScreen, crossterm::cursor::Hide)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let mut app = App {
-        cfg,
-        queue: queue.clone(),
-        tab: 0,
-        selected: 0,
-        screen: "home".into(),
-        text: String::new(),
-        title: String::new(),
-        form: None,
-        palette: None,
-        palette_selected: 0,
-        editor: Editor::default(),
-        ranges: None,
-        task: None,
-        scroll: 0,
-        quit: false,
-        confirm: None,
-    };
+    let mut app = App::new(cfg, queue.clone());
     let result = (|| -> Result<()> {
         while !app.quit {
             terminal.draw(|frame| app.draw(frame))?;
@@ -1628,11 +1819,140 @@ pub async fn run() -> Result<()> {
                 && let Event::Key(key) = event::read()?
                 && let Err(error) = app.key(key)
             {
-                app.message("Error", format!("{error:#}"));
+                app.error = Some(format!("{error:#}"));
             }
         }
         Ok(())
     })();
     queue.shutdown().await;
     result
+}
+
+fn field_choices(action: &str, key: &str, cfg: &Value) -> Vec<String> {
+    let metadata = config::metadata();
+    let group = match key {
+        "theme" => "themes",
+        "audio_format" => "audio_formats",
+        "thumbnail_format" => "thumbnail_format",
+        "cookies_browser" => "browsers",
+        "progress_style" => "progress_styles",
+        "user_goal" => "user_goals",
+        "logo_protocol" => "logo_protocols",
+        "logo_ascii_preset" => "logo_ascii",
+        _ => "",
+    };
+    if let Some(values) = metadata[group].as_array() {
+        return values
+            .iter()
+            .filter_map(|v| v.as_str().or_else(|| v["id"].as_str()))
+            .map(str::to_string)
+            .collect();
+    }
+    if key == "preset" && action == "convert" {
+        return config::convert_presets()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| string(p, "id"))
+            .collect();
+    }
+    if key == "video_preset" {
+        return config::video_presets()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| string(p, "id"))
+            .collect();
+    }
+    let values: Vec<&str> = match key {
+        "language" => vec!["ru", "en", "en-US"],
+        "cookies_mode" => vec!["none", "file", "browser"],
+        "proxy_mode" => vec!["system", "none", "custom"],
+        "transcode_mode" => vec!["embedded", "external"],
+        "logo_mode" => vec!["ascii", "image", "none"],
+        "vcodec" => vec![
+            "copy",
+            "libx264",
+            "libx265",
+            "libsvtav1",
+            "prores_ks",
+            "dnxhd",
+        ],
+        "acodec" => vec!["copy", "aac", "libopus", "flac", "pcm_s16le"],
+        "container" => vec!["mp4", "mkv", "mov", "webm", "mp3", "flac", "wav"],
+        "mode" if action.ends_with("aspect") => {
+            vec!["crop", "letterbox", "blur", "stretch", "rotate", "flip"]
+        }
+        "mode" if action.ends_with("trim") => vec!["reencode", "copy"],
+        "mode" if action.ends_with("subtitle") => vec!["burn", "embed", "extract"],
+        "mode" if action.ends_with("concat") => vec!["filter", "demuxer"],
+        "stream_type" => vec!["audio", "video", "subtitle"],
+        _ => vec![],
+    };
+    let _ = cfg;
+    values.into_iter().map(str::to_string).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn app() -> App {
+        App::new(config::defaults(), Queue::new(3, None).unwrap())
+    }
+    #[test]
+    fn every_screen_and_modal_fits_small_terminals() {
+        for (width, height) in [(1, 1), (23, 7), (24, 8), (40, 12), (80, 24), (160, 50)] {
+            for screen in ["home", "queue", "editor", "add-operation", "text"] {
+                let mut app = app();
+                app.screen = screen.into();
+                app.selected = usize::MAX;
+                app.palette_selected = usize::MAX;
+                let mut terminal =
+                    Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+                terminal.draw(|frame| app.draw(frame)).unwrap();
+                app.palette = Some("не найдено".into());
+                terminal.draw(|frame| app.draw(frame)).unwrap();
+                app.palette = None;
+                app.open("settings").unwrap();
+                terminal.draw(|frame| app.draw(frame)).unwrap();
+                app.error = Some("Invalid value".into());
+                terminal.draw(|frame| app.draw(frame)).unwrap();
+                app.confirm = Some("quit".into());
+                terminal.draw(|frame| app.draw(frame)).unwrap();
+            }
+        }
+    }
+    #[test]
+    fn palette_searches_russian_english_and_multiple_terms() {
+        let app = app();
+        assert!(
+            app.filtered("video")
+                .iter()
+                .any(|a| a.command == "download")
+        );
+        assert!(
+            app.filtered("скачать видео")
+                .iter()
+                .any(|a| a.command == "download")
+        );
+        assert!(app.filtered("QUEUE").iter().any(|a| a.command == "queue"));
+        assert!(app.filtered("nonexistent").is_empty());
+    }
+    #[test]
+    fn keyboard_forms_support_choices_and_preserve_validation_errors() {
+        let mut app = app();
+        app.open("theme").unwrap();
+        let before = app.form.as_ref().unwrap().fields[0].value.clone();
+        app.key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .unwrap();
+        assert_ne!(app.form.as_ref().unwrap().fields[0].value, before);
+        app.error = Some("invalid input".into());
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+        assert!(app.error.is_none());
+        assert!(app.form.is_some());
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+        assert!(app.form.is_none());
+    }
 }
