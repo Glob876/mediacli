@@ -3,7 +3,7 @@ use crate::{
     download,
     media::{self, Pipeline},
     queue::Queue,
-    storage,
+    settings, storage,
 };
 use anyhow::{Context, Result, ensure};
 use crossterm::{
@@ -376,6 +376,7 @@ struct App {
     choice: Option<Choice>,
     error: Option<String>,
     history_query: String,
+    settings: settings::Navigation,
 }
 impl App {
     fn new(cfg: Value, queue: Queue) -> Self {
@@ -400,9 +401,51 @@ impl App {
             choice: None,
             error: None,
             history_query: String::new(),
+            settings: settings::Navigation::default(),
         }
     }
 
+    fn select_tab(&mut self, tab: usize) {
+        self.tab = tab;
+        self.selected = 0;
+        self.screen = if tab == 2 { "settings" } else { "home" }.into();
+    }
+    fn edit_setting(&mut self, key: &str) -> Result<()> {
+        if key == "reset" {
+            self.confirm = Some("reset-settings".into());
+            return Ok(());
+        }
+        if self.cfg[key].is_boolean() {
+            let mut updated = self.cfg.clone();
+            updated[key] = json!(!config::boolean(&self.cfg, key));
+            config::save(&updated)?;
+            self.cfg = updated;
+            return Ok(());
+        }
+        let fields = settings::edit_keys(key)
+            .into_iter()
+            .map(|key| {
+                Self::field(
+                    key,
+                    if self.cfg[key].is_number() {
+                        "int"
+                    } else {
+                        "string"
+                    },
+                    self.cfg[key].clone(),
+                )
+            })
+            .collect();
+        self.form(&settings::label(&self.cfg, key), "setting", fields);
+        if let Some(form) = &self.form {
+            let field = &form.fields[0];
+            let choices = field_choices("setting", &field.key, &self.cfg);
+            if !choices.is_empty() {
+                self.choice = Some(Choice::new(choices, &field.value));
+            }
+        }
+        Ok(())
+    }
     fn ru(&self) -> bool {
         string(&self.cfg, "language") == "ru"
     }
@@ -458,28 +501,9 @@ impl App {
             ),
             "presets" => self.screen = "presets".into(),
             "settings" => {
-                let defaults = config::defaults();
-                let fields = self
-                    .cfg
-                    .as_object()
-                    .unwrap()
-                    .iter()
-                    .filter(|(key, _)| !key.contains("presets") && *key != "preset_defaults")
-                    .map(|(key, value)| {
-                        Self::field(
-                            key,
-                            if defaults[key].is_boolean() {
-                                "bool"
-                            } else if defaults[key].is_number() {
-                                "int"
-                            } else {
-                                "string"
-                            },
-                            value.clone(),
-                        )
-                    })
-                    .collect();
-                self.form("Settings", "settings", fields);
+                self.tab = 2;
+                self.screen = "settings".into();
+                self.form = None;
             }
             "download" | "playlist" | "audio-download" | "thumbnail" => {
                 let mut fields = vec![
@@ -679,7 +703,7 @@ impl App {
                 self.selected = 0;
                 self.screen = "history".into();
             }
-            "settings" => {
+            "settings" | "setting" => {
                 let mut updated = self.cfg.clone();
                 config::merge(&mut updated, &values)?;
                 config::save(&updated)?;
@@ -949,6 +973,11 @@ impl App {
             ) {
                 if confirm == "quit" {
                     self.quit = true;
+                } else if confirm == "reset-settings" {
+                    let defaults = config::defaults();
+                    config::save(&defaults)?;
+                    self.cfg = defaults;
+                    self.queue.set_maximum(3);
                 } else if confirm == "clear-history" {
                     storage::write_json(&config::directory().join("history.json"), &json!([]))?;
                 } else if confirm == "restore-editor" {
@@ -1034,6 +1063,14 @@ impl App {
                 KeyCode::Enter => {
                     if let Some(form) = self.form.as_mut() {
                         form.fields[form.selected].value = choice.values[choice.selected].clone();
+                    }
+                    if self
+                        .form
+                        .as_ref()
+                        .is_some_and(|form| form.action == "setting" && form.fields.len() == 1)
+                    {
+                        let form = self.form.take().unwrap();
+                        self.submit(form)?;
                     }
                     return Ok(());
                 }
@@ -1128,6 +1165,10 @@ impl App {
                         values = vec!["false".into(), "true".into()];
                     }
                     if values.is_empty() {
+                        if form.action == "setting" && form.selected == last {
+                            self.submit(form)?;
+                            return Ok(());
+                        }
                         form.selected = (form.selected + 1).min(last);
                     } else {
                         self.choice = Some(Choice::new(values, &field.value));
@@ -1212,15 +1253,61 @@ impl App {
         {
             return self.editor.move_history(key.code == KeyCode::Char('y'));
         }
+        if ["home", "settings"].contains(&self.screen.as_str())
+            && matches!(key.code, KeyCode::Tab | KeyCode::BackTab)
+        {
+            let step = if key.code == KeyCode::BackTab { 2 } else { 1 };
+            self.select_tab((self.tab + step) % 3);
+            return Ok(());
+        }
         match self.screen.as_str() {
+            "settings" => {
+                let rows = settings::rows(self.settings.category, &self.cfg);
+                match key.code {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        if self.settings.in_values {
+                            self.settings.selected =
+                                (self.settings.selected + rows.len() - 1) % rows.len();
+                        } else {
+                            self.settings.category = (self.settings.category + 3) % 4;
+                            self.settings.selected = 0;
+                        }
+                    }
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        if self.settings.in_values {
+                            self.settings.selected = (self.settings.selected + 1) % rows.len();
+                        } else {
+                            self.settings.category = (self.settings.category + 1) % 4;
+                            self.settings.selected = 0;
+                        }
+                    }
+                    KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
+                        if self.settings.in_values {
+                            if key.code == KeyCode::Enter {
+                                let key = rows[self.settings.selected.min(rows.len() - 1)].key;
+                                self.edit_setting(key)?;
+                            }
+                        } else {
+                            self.settings.in_values = true;
+                        }
+                    }
+                    KeyCode::Esc | KeyCode::Left | KeyCode::Char('h') => {
+                        if self.settings.in_values {
+                            self.settings.in_values = false;
+                        } else {
+                            self.select_tab(1);
+                        }
+                    }
+                    KeyCode::Char('q') => self.select_tab(1),
+                    _ => {}
+                }
+            }
             "home" => match key.code {
                 KeyCode::Left | KeyCode::Char('h') => {
-                    self.tab = (self.tab + 2) % 3;
-                    self.selected = 0;
+                    self.select_tab((self.tab + 2) % 3);
                 }
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Tab => {
-                    self.tab = (self.tab + 1) % 3;
-                    self.selected = 0;
+                    self.select_tab((self.tab + 1) % 3);
                 }
                 KeyCode::Up | KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
                 KeyCode::Down | KeyCode::Char('j') => self.selected += 1,
@@ -1700,9 +1787,9 @@ impl App {
             ])
             .split(area);
         let tabs = if self.ru() {
-            vec!["Загрузки", "Медиа", "Система"]
+            vec!["Загрузки", "Медиа", "Настройки"]
         } else {
-            vec!["Downloads", "Media", "System"]
+            vec!["Downloads", "Media", "Settings"]
         };
         frame.render_widget(
             Tabs::new(tabs)
@@ -1723,10 +1810,22 @@ impl App {
             )
             .to_string();
         match self.screen.as_str() {
+            "settings" => {
+                settings::draw(frame, body, &self.cfg, &mut self.settings);
+                footer = self
+                    .tr(
+                        "↑↓ Выбор  → / Enter Открыть  ← Назад  Tab Вкладки",
+                        "↑↓ Select  → / Enter Open  ← Back  Tab Tabs",
+                    )
+                    .into();
+            }
             "home" => {
                 let columns = Layout::default()
                     .direction(Direction::Horizontal)
-                    .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
+                    .constraints([
+                        Constraint::Length(tools_width(body.width, self.ru())),
+                        Constraint::Min(1),
+                    ])
                     .split(body);
                 let items: Vec<_> = actions()
                     .into_iter()
@@ -1734,6 +1833,12 @@ impl App {
                     .map(|a| ListItem::new(if self.ru() { a.ru } else { a.en }))
                     .collect();
                 self.selected = self.selected.min(items.len().saturating_sub(1));
+                let tools_area = Rect::new(
+                    columns[0].x,
+                    columns[0].y,
+                    columns[0].width,
+                    columns[0].height.min(items.len() as u16 + 2),
+                );
                 frame.render_stateful_widget(
                     List::new(items)
                         .block(
@@ -1743,7 +1848,7 @@ impl App {
                         )
                         .highlight_style(highlight)
                         .highlight_symbol("› "),
-                    columns[0],
+                    tools_area,
                     &mut ListState::default().with_selected(Some(self.selected)),
                 );
                 let tasks = self.queue.list();
@@ -1995,6 +2100,20 @@ impl App {
             frame.render_widget(Block::default().style(base_style), body);
             let visible = body.height.saturating_sub(4) as usize;
             let first = form.selected.saturating_sub(visible.saturating_sub(1));
+            let label_width = form
+                .fields
+                .iter()
+                .map(|field| {
+                    let label = if form.action == "setting" {
+                        settings::label(&self.cfg, &field.key)
+                    } else {
+                        setting_label(&field.key, self.ru()).into()
+                    };
+                    label.chars().count()
+                })
+                .max()
+                .unwrap_or(0)
+                .min((body.width.saturating_sub(8) / 2) as usize);
             let lines: Vec<_> = form
                 .fields
                 .iter()
@@ -2007,14 +2126,21 @@ impl App {
                     } else {
                         field.value.clone()
                     };
+                    let label = if form.action == "setting" {
+                        settings::label(&self.cfg, &field.key)
+                    } else {
+                        setting_label(&field.key, self.ru()).into()
+                    };
+                    let label: String = label.chars().take(label_width).collect();
+                    let padded = format!(" {:width$} │ ", label, width = label_width);
                     Line::from(vec![
-                        Span::styled(format!("{}: ", setting_label(&field.key, self.ru())), style),
+                        Span::styled(padded, style),
                         Span::styled(
                             value,
                             if index == form.selected {
                                 highlight
                             } else {
-                                Style::default()
+                                base_style
                             },
                         ),
                     ])
@@ -2056,11 +2182,33 @@ impl App {
             let items: Vec<_> = choice
                 .values
                 .iter()
-                .map(|value| ListItem::new(value.clone()))
+                .map(|value| {
+                    let mut config = self.cfg.clone();
+                    config[title] = if value == "true" {
+                        json!(true)
+                    } else if value == "false" {
+                        json!(false)
+                    } else {
+                        json!(value)
+                    };
+                    ListItem::new(settings::value(&config, title))
+                })
                 .collect();
             frame.render_stateful_widget(
                 List::new(items)
-                    .block(Block::default().borders(Borders::ALL).title(title))
+                    .block(
+                        Block::default().borders(Borders::ALL).title(
+                            if self
+                                .form
+                                .as_ref()
+                                .is_some_and(|form| form.action == "setting")
+                            {
+                                settings::label(&self.cfg, title)
+                            } else {
+                                title.into()
+                            },
+                        ),
+                    )
                     .highlight_style(highlight)
                     .highlight_symbol("› "),
                 popup,
@@ -2146,7 +2294,12 @@ impl App {
             );
         }
         if let Some(confirm) = &self.confirm {
-            let text = if confirm == "restore-editor" {
+            let text = if confirm == "reset-settings" {
+                self.tr(
+                    "Сбросить все настройки к заводским?",
+                    "Reset all settings to defaults?",
+                )
+            } else if confirm == "restore-editor" {
                 self.tr("Восстановить сохранённый проект?", "Restore saved project?")
             } else if confirm.starts_with("batch:") {
                 self.tr("Запустить проверенные файлы?", "Start validated files?")
@@ -2325,6 +2478,8 @@ fn field_choices(action: &str, key: &str, cfg: &Value) -> Vec<String> {
             .collect();
     }
     let values: Vec<&str> = match key {
+        "bg_queue_max" => vec!["1", "2", "3", "4"],
+        "concurrent_fragments" => vec!["2", "4", "8", "16"],
         "language" => vec!["ru", "en", "en-US", "en-GB"],
         "cookies_mode" => vec!["none", "file", "browser"],
         "proxy_mode" => vec!["system", "none", "custom"],
@@ -2366,7 +2521,7 @@ fn terminal_image(cfg: &Value, width: u16, height: u16) -> Result<Option<(String
     );
     let bytes = std::fs::read(&path)?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
-    let column = width * 45 / 100 + 2;
+    let column = tools_width(width, string(cfg, "language").starts_with("ru")) + 2;
     let mut escape = format!("\x1b7\x1b[5;{column}H");
     if string(cfg, "logo_protocol") == "iterm2" {
         escape.push_str(&format!(
@@ -2399,6 +2554,17 @@ fn terminal_image(cfg: &Value, width: u16, height: u16) -> Result<Option<(String
     Ok(Some((stamp, escape)))
 }
 
+fn tools_width(width: u16, russian: bool) -> u16 {
+    let longest = actions()
+        .iter()
+        .filter(|action| action.category < 2)
+        .map(|action| if russian { action.ru } else { action.en })
+        .map(|label| label.chars().count() as u16)
+        .max()
+        .unwrap_or(20);
+    (longest + 4).clamp(24, 34).min((width * 2 / 5).max(10))
+}
+
 fn setting_label(key: &str, russian: bool) -> &str {
     match (key, russian) {
         ("use_terminal_palette", true) => "Палитра цветов терминала",
@@ -2423,21 +2589,30 @@ mod tests {
         app.cfg["language"] = json!("en-US");
         app.cfg["theme"] = json!("rose_pine");
         app.open("settings").unwrap();
-        let fields = app.form.as_ref().unwrap().fields.clone();
-        for (index, field) in fields.iter().enumerate() {
-            if field.kind != "bool" && field_choices("settings", &field.key, &app.cfg).is_empty() {
-                continue;
-            }
-            app.form.as_mut().unwrap().selected = index;
-            app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
-                .unwrap();
+        for key in [
+            "theme",
+            "language",
+            "audio_format",
+            "video_preset",
+            "thumbnail_format",
+            "transcode_mode",
+            "logo_mode",
+            "progress_style",
+            "bg_queue_max",
+            "concurrent_fragments",
+        ] {
+            let saved = string(&app.cfg, key);
+            app.edit_setting(key).unwrap();
             let choice = app.choice.as_ref().unwrap();
-            assert_eq!(choice.values[choice.selected], field.value, "{}", field.key);
+            assert_eq!(choice.values[choice.selected], saved, "{key}");
             app.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
                 .unwrap();
             app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
                 .unwrap();
-            assert_eq!(app.form.as_ref().unwrap().fields[index].value, field.value);
+            assert_eq!(app.form.as_ref().unwrap().fields[0].value, saved);
+            app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+                .unwrap();
+            assert_eq!(string(&app.cfg, key), saved);
         }
         let choice = Choice::new(vec!["one".into(), "two".into()], "custom");
         assert_eq!(choice.values[choice.selected], "custom");
@@ -2448,8 +2623,9 @@ mod tests {
         let mut app = app();
         app.open("settings").unwrap();
         let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
-        for selected in [0, app.form.as_ref().unwrap().fields.len() - 1] {
-            app.form.as_mut().unwrap().selected = selected;
+        for category in 0..4 {
+            app.settings.category = category;
+            app.settings.selected = settings::rows(category, &app.cfg).len() - 1;
             terminal.draw(|frame| app.draw(frame)).unwrap();
             let buffer = terminal.backend().buffer();
             for (offset, character) in crate::VERSION.chars().enumerate() {
@@ -2461,9 +2637,85 @@ mod tests {
     }
 
     #[test]
+    fn settings_is_a_direct_tab_with_the_original_four_sections() {
+        let mut app = app();
+        app.cfg["language"] = json!("ru");
+        app.key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .unwrap();
+        app.key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(app.screen, "settings");
+        assert_eq!(app.tab, 2);
+        assert!(app.form.is_none());
+        assert_eq!(
+            settings::categories(&app.cfg),
+            vec![
+                "Основные и Вывод",
+                "Видео и Аудио (Кодеки)",
+                "Сеть и Ускорение",
+                "Интерфейс и Система"
+            ]
+        );
+        assert_eq!(
+            settings::rows(0, &app.cfg)
+                .iter()
+                .map(|row| row.key)
+                .collect::<Vec<_>>(),
+            vec![
+                "download_dir",
+                "language",
+                "cookies",
+                "proxy",
+                "use_archive"
+            ]
+        );
+        app.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(app.settings.category, 1);
+        app.key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .unwrap();
+        assert!(app.settings.in_values);
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(app.form.as_ref().unwrap().fields[0].key, "video_preset");
+        assert!(app.choice.is_some());
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+        app.key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(app.screen, "home");
+        assert_eq!(app.tab, 0);
+    }
+
+    #[test]
+    fn settings_columns_align_values_and_tools_are_compact() {
+        let mut app = app();
+        app.cfg["language"] = json!("ru");
+        app.open("settings").unwrap();
+        let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(140, 30)).unwrap();
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let value_column = (0..140).find(|x| buffer[(*x, 7)].symbol() == "Р").unwrap();
+        assert_eq!(buffer[(value_column, 6)].symbol(), "/");
+        assert_eq!(tools_width(140, true), 30);
+        app.select_tab(0);
+        terminal.draw(|frame| app.draw(frame)).unwrap();
+        assert_eq!(terminal.backend().buffer()[(0, 8)].symbol(), "└");
+    }
+
+    #[test]
     fn every_screen_and_modal_fits_small_terminals() {
         for (width, height) in [(1, 1), (23, 7), (24, 8), (40, 12), (80, 24), (160, 50)] {
-            for screen in ["home", "queue", "editor", "add-operation", "text"] {
+            for screen in [
+                "home",
+                "settings",
+                "queue",
+                "editor",
+                "add-operation",
+                "text",
+            ] {
                 let mut app = app();
                 app.screen = screen.into();
                 app.selected = usize::MAX;

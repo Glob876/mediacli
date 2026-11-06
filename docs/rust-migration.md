@@ -68,7 +68,14 @@ as well. Windows uses `taskkill /T` for the child tree.
 
 ## Terminal controls
 
-- Left/right switch categories; up/down and Enter select a tool.
+- Left/right or Tab switch the Downloads, Media and Settings tabs.
+  Settings opens directly as the four sections from the previous TUI:
+  General & Output, Video & Audio (Codecs), Network & Acceleration,
+  Interface & System. Up/down selects a section, Right/Enter enters its
+  setting table, Left returns to sections, Tab switches the main tab.
+  Boolean settings toggle immediately; choices open at the saved value.
+  The Tools sidebar uses its content width, capped at 34 columns,
+  and its height follows the number of tools.
 - Ctrl+P or F12 searches actions in Russian or English.
 - Forms: up/down or Tab selects a field, Enter opens choices at the current value, left/right cycles known choices,
   Space toggles booleans, Ctrl+U clears, F2 opens the file picker, Ctrl+S applies.

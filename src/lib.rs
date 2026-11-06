@@ -5,6 +5,7 @@ pub mod download;
 pub mod media;
 pub mod queue;
 pub mod remote;
+mod settings;
 pub mod storage;
 pub mod theme;
 pub mod tui;
