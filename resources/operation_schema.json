@@ -1,0 +1,105 @@
+{
+  "aspect": {
+    "codec": "string",
+    "flip_h": "bool",
+    "flip_v": "bool",
+    "height": "int",
+    "mode": "string",
+    "pad_color": "string",
+    "ratio_h": "int",
+    "ratio_w": "int",
+    "rotate": "int",
+    "scale_algo": "string",
+    "size_preset": "string",
+    "width": "int"
+  },
+  "audio": {
+    "acodec": "string",
+    "bitrate": "string",
+    "channels": "string",
+    "fade_in": "string",
+    "fade_out": "string",
+    "normalize": "bool",
+    "remove_silence": "bool",
+    "sample_rate": "string",
+    "tempo": "string",
+    "volume": "*float64"
+  },
+  "concat": {
+    "codec": "string",
+    "inputs": "[]string",
+    "mode": "string"
+  },
+  "demux": {
+    "codec": "string",
+    "output_ext": "string",
+    "stream_index": "int",
+    "stream_type": "string"
+  },
+  "filter": {
+    "af": "string",
+    "complex": "string",
+    "vf": "string"
+  },
+  "fps": {
+    "fps": "string",
+    "interpolate": "bool",
+    "mode": "string"
+  },
+  "metadata": {
+    "album": "string",
+    "artist": "string",
+    "comment": "string",
+    "cover": "string",
+    "extra": "map[string]string",
+    "strip_all": "bool",
+    "title": "string"
+  },
+  "mux": {
+    "acodec": "string",
+    "extra_inputs": "[]string",
+    "maps": "[]string",
+    "mix_audio": "bool",
+    "shortest": "bool",
+    "vcodec": "string"
+  },
+  "scale": {
+    "algo": "string",
+    "height": "int",
+    "width": "int"
+  },
+  "stabilize": {
+    "accuracy": "int",
+    "output": "string",
+    "shakiness": "int"
+  },
+  "subtitle": {
+    "force": "bool",
+    "index": "int",
+    "input": "string",
+    "language": "string",
+    "mode": "string",
+    "style": "string"
+  },
+  "transcode": {
+    "acodec": "string",
+    "bitrate_a": "string",
+    "bitrate_v": "string",
+    "bufsize": "string",
+    "container": "string",
+    "crf": "string",
+    "extra": "[]string",
+    "gop": "string",
+    "maxrate": "string",
+    "pix_fmt": "string",
+    "preset": "string",
+    "profile": "string",
+    "remux": "bool",
+    "vcodec": "string"
+  },
+  "trim": {
+    "end": "string",
+    "mode": "string",
+    "start": "string"
+  }
+}

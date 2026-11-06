@@ -1,0 +1,36 @@
+[package]
+name = "mediacli"
+version = "0.1.2"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/Glob876/mediacli"
+description = "Terminal media tools powered by FFmpeg and yt-dlp"
+
+[dependencies]
+anyhow = "1"
+async-stream = "0.3"
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+crossterm = "0.29"
+dirs = "6"
+fs2 = "0.4"
+ratatui = "0.29"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+same-file = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+shell-words = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tower-http = { version = "0.6", features = ["cors"] }
+unicode-width = "0.2"
+uuid = { version = "1", features = ["v4", "serde"] }
+which = "8"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+lto = "thin"
+strip = true

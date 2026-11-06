@@ -1,0 +1,179 @@
+{
+  "convert_presets": [
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "mp4",
+      "flags": [
+        "-c:v",
+        "libx264",
+        "-crf",
+        "18",
+        "-preset",
+        "medium",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k"
+      ],
+      "id": "standard_mp4",
+      "name_en": "1. Standard MP4 (H.264 + AAC)",
+      "name_ru": "1. Стандартный MP4 (H.264 + AAC)",
+      "suffix": "_mp4"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "mkv",
+      "flags": [
+        "-c:v",
+        "libsvtav1",
+        "-crf",
+        "24",
+        "-preset",
+        "5",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k"
+      ],
+      "id": "modern_mkv",
+      "name_en": "2. Modern MKV (AV1 / High-Efficiency)",
+      "name_ru": "2. Современный MKV (AV1 / Высокое сжатие)",
+      "suffix": "_av1"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "mp4",
+      "flags": [
+        "-c:v",
+        "libx265",
+        "-crf",
+        "22",
+        "-preset",
+        "medium",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k"
+      ],
+      "id": "hevc_mp4",
+      "name_en": "3. High Efficiency MP4 (H.265 / HEVC)",
+      "name_ru": "3. Высокоэффективный MP4 (H.265 / HEVC)",
+      "suffix": "_hevc"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "mov",
+      "flags": [
+        "-c:v",
+        "dnxhd",
+        "-profile:v",
+        "dnxhr_hq",
+        "-c:a",
+        "pcm_s16le"
+      ],
+      "id": "davinci_dnxhr_hq",
+      "name_en": "4. DaVinci Resolve: DNxHR HQ + PCM (.mov)",
+      "name_ru": "4. DaVinci Resolve: DNxHR HQ + PCM (.mov)",
+      "suffix": "_dnxhr"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "mov",
+      "flags": [
+        "-c:v",
+        "prores_ks",
+        "-profile:v",
+        "3",
+        "-c:a",
+        "pcm_s16le"
+      ],
+      "id": "davinci_prores",
+      "name_en": "5. DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
+      "name_ru": "5. DaVinci Resolve: Apple ProRes 422 + PCM (.mov)",
+      "suffix": "_prores"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "mp4",
+      "flags": [
+        "-c:v",
+        "libx264",
+        "-crf",
+        "28",
+        "-preset",
+        "faster",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k"
+      ],
+      "id": "fast_compress",
+      "name_en": "6. Fast Video Compress (H.264 CRF 28)",
+      "name_ru": "6. Быстрое сжатие видео (H.264 CRF 28)",
+      "suffix": "_compressed"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "gif",
+      "flags": [
+        "-vf",
+        "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse"
+      ],
+      "id": "gif_anim",
+      "name_en": "7. High-Quality Animated GIF (.gif)",
+      "name_ru": "7. Высококачественная GIF-анимация (.gif)",
+      "suffix": "_anim"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "mp3",
+      "flags": [
+        "-vn",
+        "-ab",
+        "320k"
+      ],
+      "id": "audio_mp3",
+      "name_en": "8. Extract Audio: MP3 320 kbps (.mp3)",
+      "name_ru": "8. Извлечь аудио: MP3 320 кбит/с (.mp3)",
+      "suffix": "_audio"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "flac",
+      "flags": [
+        "-vn",
+        "-c:a",
+        "flac"
+      ],
+      "id": "audio_flac",
+      "name_en": "9. Extract Audio: FLAC Lossless (.flac)",
+      "name_ru": "9. Извлечь аудио: FLAC без потерь (.flac)",
+      "suffix": "_lossless"
+    },
+    {
+      "desc_en": "",
+      "desc_ru": "",
+      "ext": "wav",
+      "flags": [
+        "-vn",
+        "-acodec",
+        "pcm_s16le"
+      ],
+      "id": "audio_wav",
+      "name_en": "10. Extract Audio: Uncompressed WAV (.wav)",
+      "name_ru": "10. Извлечь аудио: WAV без сжатия (.wav)",
+      "suffix": "_audio"
+    }
+  ]
+}

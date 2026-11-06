@@ -1,0 +1,132 @@
+{
+  "video_presets": [
+    {
+      "args": [
+        "--merge-output-format",
+        "mp4"
+      ],
+      "desc_en": "Directly merges highest bitrate source video and audio into MP4 without generation loss.",
+      "desc_ru": "Объединяет наилучшие видео и аудио потоки в MP4 без потери качества и перекодирования.",
+      "id": "default",
+      "name_en": "Original / Lossless Merge (.mp4) [Best Quality]",
+      "name_ru": "Исходное качество без пережатия (.mp4) [Максимальное]"
+    },
+    {
+      "args": [
+        "--recode-video",
+        "mp4",
+        "--postprocessor-args",
+        "ffmpeg:-c:v libx264 -crf 18 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k"
+      ],
+      "desc_en": "Universal MP4 container re-encoded with H.264 (CRF 18) and AAC audio.",
+      "desc_ru": "Перекодирует в универсальный MP4 (H.264 с высоким качеством CRF 18 и AAC 192k).",
+      "id": "standard_mp4",
+      "name_en": "Re-encode MP4 (H.264 High Quality + AAC)",
+      "name_ru": "Перекодировать в MP4 (H.264 HQ + AAC)"
+    },
+    {
+      "args": [
+        "--recode-video",
+        "mkv",
+        "--postprocessor-args",
+        "ffmpeg:-c:v libsvtav1 -crf 24 -preset 5 -c:a copy"
+      ],
+      "desc_en": "Next-generation AV1 video codec in Matroska MKV container. Ultra high efficiency.",
+      "desc_ru": "Видеокодек нового поколения AV1 в контейнере MKV. Высочайшая эффективность сжатия.",
+      "id": "mkv_av1",
+      "name_en": "Modern MKV (AV1 + Opus/AAC) [Next-Gen]",
+      "name_ru": "Современный MKV (AV1 + Opus/AAC) [Новое поколение]"
+    },
+    {
+      "args": [
+        "--recode-video",
+        "mp4",
+        "--postprocessor-args",
+        "ffmpeg:-c:v libx265 -crf 22 -preset medium -c:a aac -b:a 192k"
+      ],
+      "desc_en": "H.265/HEVC video codec for smaller file sizes with high quality.",
+      "desc_ru": "Видеокодек H.265/HEVC (CRF 22) для компактного размера при высоком качестве.",
+      "id": "hevc_mp4",
+      "name_en": "High Efficiency MP4 (H.265 / HEVC + AAC)",
+      "name_ru": "Высокоэффективный MP4 (H.265 / HEVC + AAC)"
+    },
+    {
+      "args": [
+        "--recode-video",
+        "mov",
+        "--postprocessor-args",
+        "ffmpeg:-c:v dnxhd -profile:v dnxhr_hq -c:a pcm_s16le"
+      ],
+      "desc_en": "Converts video to Avid DNxHR HQ with PCM 16-bit audio.",
+      "desc_ru": "Конвертирует в Avid DNxHR HQ с PCM 16-бит аудио для монтажа без задержек.",
+      "id": "davinci_dnxhr",
+      "name_en": "DaVinci Resolve: DNxHR HQ + PCM Audio (.mov)",
+      "name_ru": "DaVinci Resolve: DNxHR HQ + PCM Аудио (.mov)"
+    },
+    {
+      "args": [
+        "--recode-video",
+        "mov",
+        "--postprocessor-args",
+        "ffmpeg:-c:v prores_ks -profile:v 3 -c:a pcm_s16le"
+      ],
+      "desc_en": "Apple ProRes HQ video codec with uncompressed PCM audio in MOV container.",
+      "desc_ru": "Видеокодек Apple ProRes HQ с несжатым PCM аудио в MOV контейнере.",
+      "id": "davinci_prores",
+      "name_en": "DaVinci Resolve: Apple ProRes 422 + PCM Audio (.mov)",
+      "name_ru": "DaVinci Resolve: Apple ProRes 422 + PCM Аудио (.mov)"
+    },
+    {
+      "args": [
+        "--recode-video",
+        "mov",
+        "--postprocessor-args",
+        "ffmpeg:-c:v libx264 -crf 18 -pix_fmt yuv420p -c:a pcm_s16le"
+      ],
+      "desc_en": "H.264 video with PCM audio in MOV container.",
+      "desc_ru": "Видео H.264 с PCM аудио в MOV контейнере.",
+      "id": "davinci_h264",
+      "name_en": "DaVinci Resolve: H.264 + PCM Audio (.mov)",
+      "name_ru": "DaVinci Resolve: H.264 + PCM Аудио (.mov)"
+    },
+    {
+      "args": [
+        "--recode-video",
+        "webm",
+        "--postprocessor-args",
+        "ffmpeg:-c:v libvpx-vp9 -crf 24 -b:v 0 -c:a libopus"
+      ],
+      "desc_en": "Open WebM media format with VP9 video and Opus audio.",
+      "desc_ru": "Открытый веб-формат WebM с видео VP9 и аудио Opus.",
+      "id": "webm_vp9",
+      "name_en": "WebM (VP9 + Opus)",
+      "name_ru": "WebM (VP9 + Opus)"
+    },
+    {
+      "args": [
+        "-x",
+        "--audio-format",
+        "mp3",
+        "--audio-quality",
+        "0"
+      ],
+      "desc_en": "Extracts audio stream into high quality 320 kbps MP3 format.",
+      "desc_ru": "Извлекает звуковую дорожку в MP3 320 кбит/с.",
+      "id": "audio_mp3",
+      "name_en": "Audio Only: MP3 320 kbps",
+      "name_ru": "Только аудио: MP3 320 кбит/с"
+    },
+    {
+      "args": [
+        "-x",
+        "--audio-format",
+        "flac"
+      ],
+      "desc_en": "Extracts audio stream into lossless FLAC audio format.",
+      "desc_ru": "Извлекает звуковую дорожку в сжатый формат без потерь FLAC.",
+      "id": "audio_flac",
+      "name_en": "Audio Only: FLAC Lossless",
+      "name_ru": "Только аудио: FLAC без потерь"
+    }
+  ]
+}
