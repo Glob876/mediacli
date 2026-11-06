@@ -1,6 +1,6 @@
 # Windows installer
 
-The installer is built with electron-builder's assisted NSIS target. It offers a directory choice, creates shortcuts and contains the Go daemon; yt-dlp and FFmpeg remain separate dependencies.
+The installer is built with electron-builder's assisted NSIS target. It offers a directory choice, creates shortcuts and contains the Rust daemon; yt-dlp and FFmpeg remain separate dependencies.
 
 On Windows, build the Windows binary and place it in the packaging resources before building the installer:
 

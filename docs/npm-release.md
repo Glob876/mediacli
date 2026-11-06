@@ -1,21 +1,20 @@
 # npm releases
 
 The root package is `@glob876/mediacli`; its executable is `mediacli`.
-It includes the Go CLI/daemon for Linux, macOS and Windows on x64 and arm64.
+It includes the Rust CLI/daemon for Linux, macOS and Windows on x64 and arm64.
 The Electron application is separate and is not part of this npm package.
-Node.js 18+ is required to launch the CLI. Go is only needed to build it.
+Node.js 18+ is required to launch the CLI. Rust is only needed to build it.
 `yt-dlp`, `ffmpeg` and `ffprobe` remain external dependencies in `PATH`.
 
 All six binaries are included in one archive, so installation does not need
-postinstall scripts, Go, or additional downloads from GitHub. npm binaries use
-`CGO_ENABLED=0` for portable cross-compilation; `build.sh` retains its existing
-native build behavior. Unsupported platforms must build from source.
+postinstall scripts, Rust, or additional downloads from GitHub. Rust binaries are built with Cargo using the target platform
+linker; `build.sh` retains its native installation flow. Unsupported platforms must build from source.
 
 ## Workflow
 
 `.github/workflows/npm.yml` runs on pushes to `dev` and `main`, pull requests
-targeting `main`, and manual dispatch. It runs Go tests (including the FFmpeg
-integration tests), `go vet`, and launcher tests, builds six binaries, packs the
+targeting `main`, and manual dispatch. It runs Rust tests (including FFmpeg/yt-dlp
+integration tests), Clippy, formatting, TypeScript checks and launcher tests, builds six binaries, packs the
 archive, and tests an installation on Linux x64. Other platforms are compiled
 but are not runtime-tested. Download the archive from the `npm-package` Actions
 artifact even before npm publishing is configured:
@@ -99,13 +98,16 @@ npx @glob876/mediacli --help
 
 ```bash
 npm ci --ignore-scripts
-go test ./...
-go vet ./...
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo fmt --all --check
+npm run build --prefix electron
 npm test
 npm run build
+# Build all other target triples on their native runners before packing.
 npm pack
 ```
 
 `npm pack` refuses to package an incomplete build. Build outputs are ignored by
-Git. The npm `files` allowlist excludes Go sources, tests, release scripts, and
+Git. The npm `files` allowlist excludes Rust sources, tests, release scripts, and
 the Electron app from the published archive.

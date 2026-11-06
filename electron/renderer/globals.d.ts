@@ -6,3 +6,6 @@ interface Window {
   };
   mediacliPreset: { onOpenPresetSettings(callback: () => void): void };
 }
+
+type TaskSnapshot = import("../types").TaskSnapshot;
+type MediaPipeline = import("../types").Pipeline;

@@ -920,9 +920,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
- "tower",
- "tower-http",
- "unicode-width 0.2.0",
  "uuid",
  "which",
 ]

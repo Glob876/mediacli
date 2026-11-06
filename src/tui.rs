@@ -772,6 +772,28 @@ impl App {
                     ranges.ranges =
                         serde_json::from_value(saved["ranges"].clone()).unwrap_or_default();
                 }
+                if ranges.ranges.is_empty() {
+                    let legacy = storage::read_json(
+                        &config::directory().join("ranges_draft.json"),
+                        json!({}),
+                    )?;
+                    if legacy["Path"] == ranges.input {
+                        ranges.ranges = legacy["Ranges"]
+                            .as_array()
+                            .map(|items| {
+                                items
+                                    .iter()
+                                    .filter_map(|item| {
+                                        Some((item["start"].as_f64()?, item["end"].as_f64()?))
+                                    })
+                                    .filter(|(start, end)| {
+                                        *start >= 0.0 && *end > *start && *end <= ranges.duration
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                    }
+                }
                 ranges.wave =
                     media::waveform(&ranges.input, 0.0, 80, &self.cfg).unwrap_or_default();
                 self.ranges = Some(ranges);
@@ -1340,6 +1362,23 @@ impl App {
             self.quit = true;
         }
     }
+    fn ascii_logo(&self) -> String {
+        if string(&self.cfg, "logo_mode") == "none" {
+            return String::new();
+        }
+        let logos: Value = serde_json::from_str(include_str!("../resources/logos.json")).unwrap();
+        let preset = string(&self.cfg, "logo_ascii_preset");
+        logos[&preset]
+            .as_array()
+            .map(|lines| {
+                lines
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .unwrap_or("MediaCLI".into())
+    }
     fn accent(&self) -> Color {
         match string(&self.cfg, "theme").as_str() {
             "nord" => Color::Rgb(136, 192, 208),
@@ -1360,6 +1399,12 @@ impl App {
             return;
         }
         let accent = self.accent();
+        if !config::boolean(&self.cfg, "use_terminal_bg") {
+            frame.render_widget(
+                Block::default().style(Style::default().bg(Color::Rgb(16, 18, 24))),
+                area,
+            );
+        }
         let style = Style::default().fg(accent);
         let highlight = style.add_modifier(Modifier::BOLD | Modifier::REVERSED);
         let layout = Layout::default()
@@ -1420,7 +1465,8 @@ impl App {
                 let tasks = self.queue.list();
                 let running = tasks.iter().filter(|t| t.active()).count();
                 let description = format!(
-                    "MediaCLI\n\n{}: {running}\n\n{}\n\nyt-dlp · FFmpeg\n\n{}",
+                    "{}\n\n{}: {running}\n\n{}\n\nyt-dlp · FFmpeg\n\n{}",
+                    self.ascii_logo(),
                     self.tr("Активных задач", "Active tasks"),
                     self.tr(
                         "Выберите инструмент слева.\nAlt+3 — универсальный редактор.",

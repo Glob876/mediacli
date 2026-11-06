@@ -6,11 +6,11 @@
 Version: **0.1.2** · `mediacli --version`
 
 **An ultra-fast, keyboard-driven terminal media suite wrapping `yt-dlp` and `FFmpeg`.**  
-*Engineered in Go with zero runtime overhead, dual-pane TUI, background task engine, and a searchable command palette.*
+*Implemented in Rust, dual-pane TUI, background task engine, and a searchable command palette.*
 
 ---
 
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat-square&logo=go)](https://golang.org)
+[![Rust](https://img.shields.io/badge/Rust-stable-dea584?style=flat-square&logo=rust)](https://www.rust-lang.org)
 [![AUR Version](https://img.shields.io/aur/version/mediacli-git?color=1793D1&logo=arch-linux&style=flat-square)](https://aur.archlinux.org/packages/mediacli-git)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue?style=flat-square)]()
@@ -52,7 +52,7 @@ mediacli
 
 Node.js 18 or newer starts the program. `yt-dlp`, `ffmpeg`, and `ffprobe` must
 be available on `PATH`. The package already contains the prebuilt binaries, so
-Go is not required to install it. The Electron application is distributed
+Rust is not required to install it. The Electron application is distributed
 separately.
 
 A build from GitHub Actions can be installed from the saved archive before it
@@ -160,7 +160,9 @@ available as commands. [Full CLI reference and examples (Russian)](docs/cli.md).
   concurrent history updates within the app are serialized. History is no longer
   truncated to 50 entries.
 
-These features use the existing terminal menus. Electron is unchanged.
+The Rust TUI exposes these operations through terminal forms and a file picker.
+Electron retains its HTML/CSS interface and compiles from TypeScript.
+See [Rust migration](docs/rust-migration.md) for current terminal controls.
 
 ---
 
@@ -185,12 +187,12 @@ These features use the existing terminal menus. Electron is unchanged.
 +-------------------------------------------------------------+
    │                     │                       │
    ▼                     ▼                       ▼
-[ tcell TUI ]    [ Dynamic Parser ]    [ Background Queue ]
-(Double-Buffer)   (Regex Stream)        (Goroutine Worker Pool)
+[ ratatui TUI ]    [ Dynamic Parser ]    [ Background Queue ]
+(Double-Buffer)   (Regex Stream)        (Tokio Worker Tasks)
    │                     │                       │
    └───────────────┬─────┴───────────────────────┘
                    ▼
-     [ os/exec Stream Pipeline ]
+     [ Tokio Process Pipeline ]
                    │
          ┌─────────┴─────────┐
          ▼                   ▼
@@ -198,9 +200,9 @@ These features use the existing terminal menus. Electron is unchanged.
 ```
 
 > [!NOTE]
-> MediaCLI TUI собирается как обычный динамический бинарник (`CGO_ENABLED=1`,
-> см. `build.sh`). Отдельный GUI на Fyne удалён — актуальный графический
-> интерфейс это Electron-оболочка (`electron/`, см. ниже).
+> CLI, TUI и HTTP-бэкенд написаны на Rust. Electron-оболочка использует
+> TypeScript. Сборка: `cargo build --release --locked`. Подробности переноса,
+> совместимость данных и управление TUI: [Rust migration](docs/rust-migration.md).
 
 ---
 
@@ -234,12 +236,12 @@ Endpoints: `GET /api/status`, `POST /api/downloads`, `GET /api/tasks`,
 ## 🖥️ Desktop Shell (Electron, experimental)
 
 `electron/` is a Chromium shell over the daemon API above — no engine logic
-is duplicated there; presets/history/config all come from Go.
+is duplicated there; presets/history/config all come from Rust.
 
 ```bash
 cd electron && npm install
 npm start            # needs dist/mediacli built via ./build.sh
-npm run dev          # UI-only mock mode, no Go binary needed
+npm run dev          # UI-only mock mode, no Rust binary needed
 ./build.sh --package # AppImage/deb into electron/release/ (--win/--mac on their OS)
 ```
 
