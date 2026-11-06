@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"mediacli/pkg/core"
 
@@ -74,27 +75,53 @@ func filterPaletteCommands(commands []PaletteCommand, query string) []PaletteCom
 }
 
 func (palette *CommandPalette) Open(screen tcell.Screen, config *core.Config) {
+	palette.OpenOver(screen, config, nil)
+}
+
+func (palette *CommandPalette) OpenOver(screen tcell.Screen, config *core.Config, underlay func(tcell.Screen)) {
 	commands := paletteCommands(*config)
-	selectedCommand, confirmed := choosePaletteCommand(screen, config, commands)
+	selectedCommand, confirmed := choosePaletteCommand(screen, config, commands, underlay)
 	screen.HideCursor()
 	if confirmed && selectedCommand.Action != nil {
 		selectedCommand.Action(screen, config)
 	}
 }
 
-func choosePaletteCommand(screen tcell.Screen, config *core.Config, commands []PaletteCommand) (PaletteCommand, bool) {
+func choosePaletteCommand(screen tcell.Screen, config *core.Config, commands []PaletteCommand, underlay func(tcell.Screen)) (PaletteCommand, bool) {
 	query := []rune{}
 	selected := 0
+	if underlay != nil {
+		stopRefresh := make(chan struct{})
+		defer close(stopRefresh)
+		go func() {
+			ticker := time.NewTicker(80 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-stopRefresh:
+					return
+				case <-ticker.C:
+					screen.PostEvent(tcell.NewEventInterrupt(nil))
+				}
+			}
+		}()
+	}
 	for {
 		matches := filterPaletteCommands(commands, string(query))
 		if selected >= len(matches) {
 			selected = max(0, len(matches)-1)
 		}
+		if underlay != nil {
+			underlay(screen)
+		}
 		renderCommandPalette(screen, *config, query, matches, selected)
 		event := screen.PollEvent()
 		switch event := event.(type) {
+		case *tcell.EventInterrupt:
+			continue
 		case *tcell.EventResize:
 			screen.Sync()
+			invalidateLogo()
 		case *tcell.EventKey:
 			if event.Key() == tcell.KeyEscape || CheckPaletteHotkey(event) {
 				return PaletteCommand{}, false
@@ -163,7 +190,7 @@ func renderCommandPalette(screen tcell.Screen, config core.Config, query []rune,
 		}
 		prompt := "> " + string(visibleQuery)
 		DrawString(screen, left+2, top+1, prompt, contentWidth, baseStyle)
-		cursorX := left + 2 + min(len([]rune(prompt)), max(0, contentWidth-1))
+		cursorX := left + 2 + min(StringWidth(prompt), max(0, contentWidth-1))
 		if contentWidth > 0 {
 			screen.ShowCursor(cursorX, top+1)
 		} else {

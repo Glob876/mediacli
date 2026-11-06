@@ -16,7 +16,7 @@ import (
 // ScreenUniversal is the keyboard editor opened with Alt+3.
 func ScreenUniversal(s tcell.Screen, cfg *core.Config, initialPath string) {
 	tr := func(ru, en string) string {
-		if strings.HasPrefix(cfg.Language, "ru") {
+		if IsRussian(*cfg) {
 			return ru
 		}
 		return en

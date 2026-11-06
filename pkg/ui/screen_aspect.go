@@ -140,7 +140,7 @@ func ScreenAspectRatio(s tcell.Screen, cfg *core.Config) {
 		rightH := h - 6
 		drawAspectRatioVisualizer(s, *cfg, rightX, 3, rightW, rightH, srcW, srcH, rW, rH, ratioVal, modeIdx, resIdx, activePreset.ID)
 
-		DrawFooter(s, T(*cfg, "aspect_footer_nav"), w, h)
+		DrawFooter(s, T(*cfg, "aspect_footer_nav"), w, h, *cfg)
 		s.Show()
 
 		triggerAction := func() bool {
@@ -193,7 +193,10 @@ func ScreenAspectRatio(s tcell.Screen, cfg *core.Config) {
 			return false
 		}
 
-		ev := s.PollEvent()
+		ev, resized := pollUI(s)
+		if resized {
+			continue
+		}
 		switch ev := ev.(type) {
 		case *tcell.EventKey:
 			if CheckPaletteHotkey(ev) {
@@ -202,17 +205,9 @@ func ScreenAspectRatio(s tcell.Screen, cfg *core.Config) {
 			}
 			switch ev.Key() {
 			case tcell.KeyUp:
-				if curSel > 0 {
-					curSel--
-				} else {
-					curSel = totalOptions - 1
-				}
+				curSel = wrapIndex(curSel, -1, totalOptions)
 			case tcell.KeyDown:
-				if curSel < totalOptions-1 {
-					curSel++
-				} else {
-					curSel = 0
-				}
+				curSel = wrapIndex(curSel, 1, totalOptions)
 			case tcell.KeyEscape:
 				return
 			case tcell.KeyEnter, tcell.KeyRight:
@@ -223,13 +218,9 @@ func ScreenAspectRatio(s tcell.Screen, cfg *core.Config) {
 				if ev.Rune() == 'q' {
 					return
 				} else if ev.Rune() == 'k' {
-					if curSel > 0 {
-						curSel--
-					}
+					curSel = wrapIndex(curSel, -1, totalOptions)
 				} else if ev.Rune() == 'j' {
-					if curSel < totalOptions-1 {
-						curSel++
-					}
+					curSel = wrapIndex(curSel, 1, totalOptions)
 				} else if ev.Rune() == ' ' || ev.Rune() == 'l' {
 					if triggerAction() {
 						return
@@ -395,33 +386,20 @@ func drawAspectRatioVisualizer(s tcell.Screen, cfg core.Config, startX, startY, 
 	infoY := boxY + boxH + 1
 	outW, outH := calcTargetDimensions(srcW, srcH, rW, rH, resIdx)
 
-	DrawString(s, startX, infoY, fmt.Sprintf("Ratio  : %d:%d (%.2f:1)", rW, rH, targetRatio), availW, GetAccentStyle(cfg))
-	DrawString(s, startX, infoY+1, fmt.Sprintf("Source : %dx%d (%.2f:1)", srcW, srcH, srcRatio), availW, GetDimStyle(cfg))
-	DrawString(s, startX, infoY+2, fmt.Sprintf("Target : %dx%d (Canvas)", outW, outH), availW, GetHighlightStyle(cfg))
+	DrawString(s, startX, infoY, T(cfg, "aspect_info_ratio", rW, rH, targetRatio), availW, GetAccentStyle(cfg))
+	DrawString(s, startX, infoY+1, T(cfg, "aspect_info_source", srcW, srcH, srcRatio), availW, GetDimStyle(cfg))
+	DrawString(s, startX, infoY+2, T(cfg, "aspect_info_target", outW, outH), availW, GetHighlightStyle(cfg))
 
-	modeDesc := ""
+	modeKey := "aspect_desc_crop"
 	switch modeIdx {
-	case 0:
-		modeDesc = "[Crop] Fills frame. Content outside ratio is cut."
-		if cfg.Language == "ru" {
-			modeDesc = "[Обрезка] Полный кадр без черных полос (края срезаются)."
-		}
 	case 1:
-		modeDesc = "[Letterbox] 100% video kept. Clean black bars added."
-		if cfg.Language == "ru" {
-			modeDesc = "[Черные полосы] 100% видео без потерь (с аккуратными полями)."
-		}
+		modeKey = "aspect_desc_letterbox"
 	case 2:
-		modeDesc = "[Blur BG] 100% video kept. Padded with blurred video."
-		if cfg.Language == "ru" {
-			modeDesc = "[Размытие] 100% видео без потерь с красивым размытым фоном."
-		}
+		modeKey = "aspect_desc_blur"
 	case 3:
-		modeDesc = "[Stretch] Stretches geometry to match target proportion."
-		if cfg.Language == "ru" {
-			modeDesc = "[Растяжение] Заполняет экран без полей с искажением геометрии."
-		}
+		modeKey = "aspect_desc_stretch"
 	}
+	modeDesc := T(cfg, modeKey)
 
 	DrawString(s, startX, infoY+4, modeDesc, availW, GetDimStyle(cfg))
 }

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -25,47 +24,34 @@ func RunWithLogHook(s tcell.Screen, cfg *core.Config, cmdList []string, opType, 
 	defer ticker.Stop()
 
 	for {
-		snapshot, exists := core.GlobalQueue.Snapshot(taskID)
+		lines, stage, progress, transferSpeed, completed, exists := loadRunnerView(cfg, taskID, commandLine)
 		if !exists {
 			return
 		}
-		completed := snapshot.Status == core.StatusDone || snapshot.Status == core.StatusFailed || snapshot.Status == core.StatusCancelled
-		lines := []string{commandLine, ""}
-		taskLogs := core.GlobalQueue.TaskLogs(taskID)
-		lines = append(lines, taskLogs...)
-		transferSpeed := ""
-		for index := len(taskLogs) - 1; index >= 0; index-- {
-			_, speed, hasProgress := core.ExtractProgress(taskLogs[index])
-			if hasProgress && speed != "" {
-				transferSpeed = speed
-				break
-			}
-		}
 		if completed {
-			statusMessage := T(*cfg, "log_finished_ok")
-			if snapshot.Status == core.StatusCancelled {
-				statusMessage = "Cancelled"
-			} else if snapshot.Status == core.StatusFailed {
-				statusMessage = T(*cfg, "log_finished_err", snapshot.ExitCode)
-			}
-			lines = append(lines, statusMessage)
 			if !completionAnnounced && cfg.NotifyBell {
 				print("\a")
 			}
 			completionAnnounced = true
 		}
-		renderRunnerUI(s, cfg, lines, snapshot.Stage, opType, source, snapshot.Progress, transferSpeed, showRawLogs || completed)
-		if completed {
-			width, height := s.Size()
-			DrawFooter(s, T(*cfg, "log_footer_done"), width, height)
-			s.Show()
-		}
+		renderRunnerUI(s, cfg, lines, stage, opType, source, progress, transferSpeed, showRawLogs || completed, completed)
 		// Only the UI goroutine consumes keyboard events, including in nested dialogs.
 		if s.HasPendingEvent() {
 			event := s.PollEvent()
+			if _, ok := event.(*tcell.EventResize); ok {
+				s.Sync()
+				invalidateLogo()
+				continue
+			}
 			if keyEvent, ok := event.(*tcell.EventKey); ok {
 				if CheckPaletteHotkey(keyEvent) {
-					GlobalPalette.Open(s, cfg)
+					GlobalPalette.OpenOver(s, cfg, func(screen tcell.Screen) {
+						freshLines, freshStage, freshProgress, freshSpeed, freshDone, ok := loadRunnerView(cfg, taskID, commandLine)
+						if !ok {
+							return
+						}
+						drawRunnerFrame(screen, cfg, freshLines, freshStage, opType, source, freshProgress, freshSpeed, showRawLogs || freshDone, freshDone)
+					})
 					continue
 				}
 				if keyEvent.Key() == tcell.KeyF10 {
@@ -89,7 +75,40 @@ func RunWithLogHook(s tcell.Screen, cfg *core.Config, cmdList []string, opType, 
 	}
 }
 
-func renderRunnerUI(s tcell.Screen, cfg *core.Config, lines []string, stage, opType, source string, pct float64, speed string, rawLogs bool) {
+func loadRunnerView(cfg *core.Config, taskID int, commandLine string) (lines []string, stage string, progress float64, speed string, completed bool, ok bool) {
+	snapshot, exists := core.GlobalQueue.Snapshot(taskID)
+	if !exists {
+		return nil, "", 0, "", false, false
+	}
+	completed = snapshot.Status == core.StatusDone || snapshot.Status == core.StatusFailed || snapshot.Status == core.StatusCancelled
+	lines = []string{commandLine, ""}
+	taskLogs := core.GlobalQueue.TaskLogs(taskID)
+	lines = append(lines, taskLogs...)
+	for index := len(taskLogs) - 1; index >= 0; index-- {
+		_, foundSpeed, hasProgress := core.ExtractProgress(taskLogs[index])
+		if hasProgress && foundSpeed != "" {
+			speed = foundSpeed
+			break
+		}
+	}
+	if completed {
+		statusMessage := T(*cfg, "log_finished_ok")
+		if snapshot.Status == core.StatusCancelled {
+			statusMessage = T(*cfg, "log_cancelled")
+		} else if snapshot.Status == core.StatusFailed {
+			statusMessage = T(*cfg, "log_finished_err", snapshot.ExitCode)
+		}
+		lines = append(lines, statusMessage)
+	}
+	return lines, snapshot.Stage, snapshot.Progress, speed, completed, true
+}
+
+func renderRunnerUI(s tcell.Screen, cfg *core.Config, lines []string, stage, opType, source string, pct float64, speed string, rawLogs bool, completed bool) {
+	drawRunnerFrame(s, cfg, lines, stage, opType, source, pct, speed, rawLogs, completed)
+	s.Show()
+}
+
+func drawRunnerFrame(s tcell.Screen, cfg *core.Config, lines []string, stage, opType, source string, pct float64, speed string, rawLogs bool, completed bool) {
 	w, h := s.Size()
 	s.Clear()
 
@@ -102,29 +121,31 @@ func renderRunnerUI(s tcell.Screen, cfg *core.Config, lines []string, stage, opT
 			visible = visible[len(visible)-maxRows:]
 		}
 		for i, line := range visible {
-			DrawString(s, 2, 3+i, line, w-4, tcell.StyleDefault)
+			DrawString(s, 2, 3+i, line, w-4, GetBaseStyle(*cfg))
 		}
 	} else {
-		stageStyle := tcell.StyleDefault.Foreground(tcell.ColorGreen).Bold(true)
-		DrawString(s, 4, 3, "Active Stage: "+stage, w-8, stageStyle)
-		DrawString(s, 4, 4, strings.Repeat("─", max(0, w-8)), w-8, tcell.StyleDefault.Dim(true))
+		DrawString(s, 4, 3, T(*cfg, "log_stage", stage), w-8, GetAccentStyle(*cfg))
+		DrawString(s, 4, 4, strings.Repeat("─", max(0, w-8)), w-8, GetDimStyle(*cfg))
 
-		DrawString(s, 4, 6, "Operation : "+opType, w-8, tcell.StyleDefault)
+		DrawString(s, 4, 6, T(*cfg, "log_operation", opType), w-8, GetBaseStyle(*cfg))
 		if source != "" {
-			DrawString(s, 4, 7, "Source    : "+source, w-8, tcell.StyleDefault.Dim(true))
+			DrawString(s, 4, 7, T(*cfg, "log_source", source), w-8, GetDimStyle(*cfg))
 		}
 
 		barStr := RenderProgressBar(pct, min(44, max(20, w-24)), cfg.ProgressStyle)
-		progressText := fmt.Sprintf("Progress  : %s %5.1f%%", barStr, pct)
+		progressText := T(*cfg, "log_progress", barStr, pct)
 		if speed != "" {
-			progressText += " (" + speed + ")"
+			progressText += T(*cfg, "log_speed", speed)
 		}
-		DrawString(s, 4, 9, progressText, w-8, tcell.StyleDefault.Bold(true))
-		DrawString(s, 4, 12, "[Press F10 for raw logs | 'q' to move to background queue]", w-8, tcell.StyleDefault.Dim(true))
+		DrawString(s, 4, 9, progressText, w-8, GetBaseStyle(*cfg).Bold(true))
+		DrawString(s, 4, 12, T(*cfg, "log_hint"), w-8, GetDimStyle(*cfg))
 	}
 
-	DrawFooter(s, T(*cfg, "log_footer_running"), w, h)
-	s.Show()
+	footerKey := "log_footer_running"
+	if completed {
+		footerKey = "log_footer_done"
+	}
+	DrawFooter(s, T(*cfg, footerKey), w, h, *cfg)
 }
 
 func min(a, b int) int {

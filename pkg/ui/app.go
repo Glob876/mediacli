@@ -104,8 +104,8 @@ func renderIterm2Image(path string, x, y, rows int) string {
 }
 
 func clearTerminalImages() {
-	// Kitty очистка всех изображений
 	fmt.Print("\033_Ga=d,d=A;\033\\")
+	logoStamp = ""
 }
 
 func RunApp() error {
@@ -124,6 +124,8 @@ func RunApp() error {
 	}
 	defer s.Fini()
 	s.HideCursor()
+	s.EnablePaste()
+	s.EnableMouse()
 
 	tabs := []Tab{
 		{
@@ -180,7 +182,8 @@ func RunApp() error {
 				}
 				artStyle := GetAccentStyle(cfg)
 				for _, line := range art {
-					DrawString(s, max(2, (w-len(line))/2), row, line, w-4, artStyle)
+					lineWidth := StringWidth(line)
+					DrawString(s, max(2, (w-lineWidth)/2), row, line, w-4, artStyle)
 					row++
 				}
 				row++
@@ -188,14 +191,18 @@ func RunApp() error {
 		}
 
 		tabX := 4
+		tabRow := row
+		tabHits := make([]menuHit, 0, len(tabs))
 		for idx, tab := range tabs {
 			tName := " [ " + T(cfg, tab.TitleKey) + " ] "
 			style := GetDimStyle(cfg)
 			if idx == curTab {
 				style = GetHighlightStyle(cfg)
 			}
-			DrawString(s, tabX, row, tName, w-tabX, style)
-			tabX += len([]rune(tName)) + 2
+			DrawString(s, tabX, row, tName, max(0, w-tabX), style)
+			nameWidth := StringWidth(tName)
+			tabHits = append(tabHits, menuHit{minX: tabX, maxX: tabX + nameWidth, y: tabRow, index: idx})
+			tabX += nameWidth + 2
 		}
 		row += 2
 
@@ -206,110 +213,110 @@ func RunApp() error {
 
 		row = min(row, max(0, h-4))
 		visibleRows := max(1, h-row-3)
-		firstVisible := max(0, curItem-visibleRows+1)
+		firstVisible := windowStart(curItem, max(0, curItem-visibleRows+1), visibleRows)
 		hlStyle := GetHighlightStyle(cfg)
 		baseStyle := GetBaseStyle(cfg)
+		itemHits := make([]menuHit, 0, visibleRows)
 		for idx := firstVisible; idx < len(activeItems); idx++ {
 			itm := activeItems[idx]
 			y := row + idx - firstVisible
 			if y >= h-3 {
 				break
 			}
+			label := "  " + T(cfg, itm.LabelKey)
+			style := baseStyle
 			if idx == curItem {
-				DrawString(s, 6, y, "> "+T(cfg, itm.LabelKey), w-12, hlStyle)
-			} else {
-				DrawString(s, 6, y, "  "+T(cfg, itm.LabelKey), w-12, baseStyle)
+				label = "> " + T(cfg, itm.LabelKey)
+				style = hlStyle
 			}
+			DrawSpan(s, 6, y, max(0, w-12), label, style)
+			itemHits = append(itemHits, menuHit{minX: 6, maxX: max(6, w-6), y: y, index: idx})
 		}
 
-		DrawFooter(s, T(cfg, "footer_nav"), w, h)
+		DrawFooter(s, T(cfg, "footer_nav"), w, h, cfg)
 
 		s.Show()
 
 		if h >= 24 && w >= 82 && cfg.LogoMode == "image" && cfg.LogoImagePath != "" {
-			ix := max(2, (w-40)/2)
-			iy := 2
-			ir := 11
-			switch cfg.LogoProtocol {
-			case "iterm2":
-				fmt.Print(renderIterm2Image(cfg.LogoImagePath, ix, iy, ir))
-			default:
-				fmt.Print(renderKittyImage(cfg.LogoImagePath, ix, iy, ir))
-			}
+			placeLogo(cfg.LogoImagePath, cfg.LogoProtocol, max(2, (w-40)/2), 2, 11)
+		} else {
+			invalidateLogo()
 		}
 
-		ev := s.PollEvent()
+		ev, resized := pollUI(s)
+		if resized {
+			continue
+		}
+		activate := func() bool {
+			itm := activeItems[curItem]
+			invalidateLogo()
+			if itm.Action == nil {
+				return true
+			}
+			itm.Action(s, &cfg)
+			return false
+		}
 		switch ev := ev.(type) {
+		case *tcell.EventMouse:
+			x, y := ev.Position()
+			if ev.Buttons()&tcell.WheelUp != 0 {
+				curItem = wrapIndex(curItem, -1, len(activeItems))
+			} else if ev.Buttons()&tcell.WheelDown != 0 {
+				curItem = wrapIndex(curItem, 1, len(activeItems))
+			} else if ev.Buttons()&tcell.Button1 != 0 {
+				if hit, ok := hitIndex(tabHits, x, y); ok {
+					curTab = hit
+					curItem = 0
+				} else if hit, ok := hitIndex(itemHits, x, y); ok {
+					curItem = hit
+					if activate() {
+						return nil
+					}
+				}
+			}
 		case *tcell.EventKey:
 			if CheckPaletteHotkey(ev) {
-				clearTerminalImages()
+				invalidateLogo()
 				GlobalPalette.Open(s, &cfg)
 				continue
 			}
-			// Alt+3 — отдельный универсальный редактор (пусто → выбор файла, иначе единый редактор всего)
 			if ev.Modifiers()&tcell.ModAlt != 0 && ev.Key() == tcell.KeyRune && ev.Rune() == '3' {
-				clearTerminalImages()
+				invalidateLogo()
 				ScreenUniversal(s, &cfg, "")
 				continue
 			}
 			switch ev.Key() {
 			case tcell.KeyLeft:
-				if curTab > 0 {
-					curTab--
-				} else {
-					curTab = len(tabs) - 1
-				}
+				curTab = wrapIndex(curTab, -1, len(tabs))
 				curItem = 0
 			case tcell.KeyRight:
-				if curTab < len(tabs)-1 {
-					curTab++
-				} else {
-					curTab = 0
-				}
+				curTab = wrapIndex(curTab, 1, len(tabs))
 				curItem = 0
 			case tcell.KeyUp:
-				if curItem > 0 {
-					curItem--
-				} else {
-					curItem = len(activeItems) - 1
-				}
+				curItem = wrapIndex(curItem, -1, len(activeItems))
 			case tcell.KeyDown:
-				if curItem < len(activeItems)-1 {
-					curItem++
-				} else {
-					curItem = 0
-				}
+				curItem = wrapIndex(curItem, 1, len(activeItems))
 			case tcell.KeyEnter:
-				itm := activeItems[curItem]
-				clearTerminalImages()
-				if itm.Action == nil {
+				if activate() {
 					return nil
 				}
-				itm.Action(s, &cfg)
 			case tcell.KeyEscape:
-				clearTerminalImages()
+				invalidateLogo()
 				return nil
 			case tcell.KeyRune:
-				if ev.Rune() == 'h' {
-					if curTab > 0 {
-						curTab--
-					}
+				switch ev.Rune() {
+				case 'h':
+					curTab = wrapIndex(curTab, -1, len(tabs))
 					curItem = 0
-				} else if ev.Rune() == 'l' {
-					if curTab < len(tabs)-1 {
-						curTab++
-					}
+				case 'l':
+					curTab = wrapIndex(curTab, 1, len(tabs))
 					curItem = 0
-				} else if ev.Rune() == 'k' {
-					if curItem > 0 {
-						curItem--
-					}
-				} else if ev.Rune() == 'j' {
-					if curItem < len(activeItems)-1 {
-						curItem++
-					}
-				} else if ev.Rune() == 'q' {
-					clearTerminalImages()
+				case 'k':
+					curItem = wrapIndex(curItem, -1, len(activeItems))
+				case 'j':
+					curItem = wrapIndex(curItem, 1, len(activeItems))
+				case 'q':
+					invalidateLogo()
 					return nil
 				}
 			}

@@ -53,7 +53,7 @@ func TestPaletteSelectsCommandAndExecutesAction(t *testing.T) {
 	screen.PostEvent(tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone))
 	screen.PostEvent(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 	config := core.GetDefaultConfig()
-	selected, confirmed := choosePaletteCommand(screen, &config, commands)
+	selected, confirmed := choosePaletteCommand(screen, &config, commands, nil)
 	if !confirmed || selected.ID != "two" {
 		t.Fatalf("wrong selection: %+v, %v", selected, confirmed)
 	}
@@ -117,7 +117,7 @@ func TestPaletteEmptyResultsDoNotExecute(t *testing.T) {
 	screen.PostEvent(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
 	screen.PostEvent(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
 	config := core.GetDefaultConfig()
-	_, confirmed := choosePaletteCommand(screen, &config, []PaletteCommand{{ID: "one", Title: "First"}})
+	_, confirmed := choosePaletteCommand(screen, &config, []PaletteCommand{{ID: "one", Title: "First"}}, nil)
 	if confirmed {
 		t.Fatal("empty search executed an action")
 	}

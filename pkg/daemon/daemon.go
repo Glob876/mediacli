@@ -811,10 +811,10 @@ func (s *Server) handleToolsFfmpeg(w http.ResponseWriter, r *http.Request) {
 // Паритет enforced тестом TestMetaThemesMatchUI.
 var metaThemes = []map[string]string{
 	{"id": "cyan", "name_en": "Arch Cyan (Default)", "name_ru": "Arch Cyan (По умолчанию)"},
-	{"id": "nord", "name_en": "Nord Blue", "name_ru": "Nord Blue"},
+	{"id": "nord", "name_en": "Nord", "name_ru": "Nord"},
 	{"id": "matrix", "name_en": "Matrix Green", "name_ru": "Matrix Green"},
-	{"id": "dracula", "name_en": "Dracula Magenta", "name_ru": "Dracula Magenta"},
-	{"id": "gruvbox", "name_en": "Gruvbox Yellow", "name_ru": "Gruvbox Yellow"},
+	{"id": "dracula", "name_en": "Dracula", "name_ru": "Dracula"},
+	{"id": "gruvbox", "name_en": "Gruvbox", "name_ru": "Gruvbox"},
 	{"id": "fire", "name_en": "Fire Red", "name_ru": "Fire Red"},
 	{"id": "classic", "name_en": "Classic White", "name_ru": "Классический (Белый)"},
 }

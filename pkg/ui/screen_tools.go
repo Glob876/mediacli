@@ -25,14 +25,14 @@ func ScreenConvert(s tcell.Screen, cfg *core.Config) {
 
 	names := make([]string, len(core.ConvertPresets))
 	for i, pr := range core.ConvertPresets {
-		if cfg.Language == "ru" {
+		if IsRussian(*cfg) {
 			names[i] = pr.NameRU
 		} else {
 			names[i] = pr.NameEN
 		}
 	}
 
-	pi := RunMenu(s, cfg, T(*cfg, "convert_title"), names, "Choose target conversion preset (1. MP4 / 2. MKV):", T(*cfg, "footer_nav"))
+	pi := RunMenu(s, cfg, T(*cfg, "convert_title"), names, T(*cfg, "convert_choose_preset"), T(*cfg, "footer_nav"))
 	if pi < 0 {
 		return
 	}

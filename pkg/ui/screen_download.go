@@ -83,6 +83,8 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 
 	leftIdx := 0
 	rightIdx := 0
+	leftFirst := 0
+	rightFirst := 0
 	inRightPane := false
 
 	categories := []string{
@@ -108,9 +110,16 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 		leftW := 26
 		divX := leftW + 2
 
-		for i, cat := range categories {
-			y := 3 + i
-			isSel := (i == leftIdx)
+		leftHits := make([]menuHit, 0, len(categories))
+		visibleLeft := max(1, h-7)
+		leftFirst = windowStart(leftIdx, leftFirst, visibleLeft)
+		for i := leftFirst; i < len(categories); i++ {
+			cat := categories[i]
+			y := 3 + i - leftFirst
+			if y >= h-4 {
+				break
+			}
+			isSel := i == leftIdx
 			style := GetBaseStyle(*cfg)
 			marker := "  "
 			if isSel && !inRightPane {
@@ -120,7 +129,8 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 				style = GetBaseStyle(*cfg).Bold(true)
 				marker = "► "
 			}
-			DrawString(s, 2, y, marker+cat, leftW, style)
+			DrawSpan(s, 2, y, leftW, marker+cat, style)
+			leftHits = append(leftHits, menuHit{minX: 2, maxX: 2 + leftW, y: y, index: i})
 		}
 
 		for y := 2; y < h-2; y++ {
@@ -135,17 +145,17 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 		case 0: // General & Output
 			qVal := core.GetString(fields, "quality")
 			if qVal == "" {
-				qVal = "Best Available"
+				qVal = T(*cfg, "wiz_best")
 			} else {
 				qVal += "p"
 			}
 			secVal := core.GetString(fields, "download_section")
 			if secVal == "" {
-				secVal = "Full Video"
+				secVal = T(*cfg, "wiz_full")
 			}
 			tmplVal := core.GetString(fields, "output_template")
 			if tmplVal == "" {
-				tmplVal = "%(title)s.%(ext)s"
+				tmplVal = T(*cfg, "wiz_default_template")
 			}
 			winVal := noStr
 			if core.GetBool(fields, "windows_filenames") {
@@ -169,14 +179,14 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 			}
 
 			rightItems = []settingItem{
-				{Label: fmt.Sprintf("Max Quality: %s", qVal), CLI: "-f bestvideo[height<=?]", Key: "quality"},
-				{Label: fmt.Sprintf("Time Range / Section: %s", secVal), CLI: "--download-sections", Key: "section"},
-				{Label: fmt.Sprintf("Output Template: %s", tmplVal), CLI: "-o template", Key: "template"},
-				{Label: fmt.Sprintf("Safe Filenames (NTFS/FAT32): %s", winVal), CLI: "--windows-filenames", Key: "windows_filenames"},
-				{Label: fmt.Sprintf("Restrict Filenames (ASCII): %s", restVal), CLI: "--restrict-filenames", Key: "restrict_filenames"},
-				{Label: fmt.Sprintf("Keep Download Timestamp: %s", noMtimeVal), CLI: "--no-mtime", Key: "no_mtime"},
-				{Label: fmt.Sprintf("Download Archive: %s", archVal), CLI: "--download-archive", Key: "use_archive"},
-				{Label: fmt.Sprintf("Force Overwrite: %s", forceVal), CLI: "--force-overwrites", Key: "force_overwrite"},
+				{Label: T(*cfg, "wiz_quality", qVal), CLI: "-f bestvideo[height<=?]", Key: "quality"},
+				{Label: T(*cfg, "wiz_section", secVal), CLI: "--download-sections", Key: "section"},
+				{Label: T(*cfg, "wiz_template", tmplVal), CLI: "-o template", Key: "template"},
+				{Label: T(*cfg, "wiz_win_names", winVal), CLI: "--windows-filenames", Key: "windows_filenames"},
+				{Label: T(*cfg, "wiz_restrict", restVal), CLI: "--restrict-filenames", Key: "restrict_filenames"},
+				{Label: T(*cfg, "wiz_mtime", noMtimeVal), CLI: "--no-mtime", Key: "no_mtime"},
+				{Label: T(*cfg, "wiz_archive", archVal), CLI: "--download-archive", Key: "use_archive"},
+				{Label: T(*cfg, "wiz_overwrite", forceVal), CLI: "--force-overwrites", Key: "force_overwrite"},
 			}
 
 		case 1: // Video & Audio Codecs
@@ -187,7 +197,7 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 			vcodec := core.GetString(fields, "vcodec")
 			fps := core.GetString(fields, "fps_limit")
 			if fps == "" {
-				fps = "Max"
+				fps = T(*cfg, "wiz_max")
 			} else {
 				fps += " FPS"
 			}
@@ -199,12 +209,12 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 			audioQ := core.GetString(fields, "audio_quality")
 
 			rightItems = []settingItem{
-				{Label: fmt.Sprintf("Video Codec Preset: %s", pName), CLI: "--recode-video", Key: "video_preset"},
-				{Label: fmt.Sprintf("Video Codec Filter: %s", strings.ToUpper(vcodec)), CLI: "-f [vcodec^=?]", Key: "vcodec"},
-				{Label: fmt.Sprintf("FPS Limit: %s", fps), CLI: "-f [fps<=?]", Key: "fps_limit"},
-				{Label: fmt.Sprintf("Audio Only: %s", audioOnly), CLI: "-x / --extract-audio", Key: "audio_only"},
-				{Label: fmt.Sprintf("Audio Format: %s", audioFmt), CLI: "--audio-format", Key: "audio_format"},
-				{Label: fmt.Sprintf("Audio Quality: %s", audioQ), CLI: "--audio-quality", Key: "audio_quality"},
+				{Label: T(*cfg, "wiz_preset", pName), CLI: "--recode-video", Key: "video_preset"},
+				{Label: T(*cfg, "wiz_vcodec", strings.ToUpper(vcodec)), CLI: "-f [vcodec^=?]", Key: "vcodec"},
+				{Label: T(*cfg, "wiz_fps", fps), CLI: "-f [fps<=?]", Key: "fps_limit"},
+				{Label: T(*cfg, "wiz_audio_only", audioOnly), CLI: "-x / --extract-audio", Key: "audio_only"},
+				{Label: T(*cfg, "wiz_audio_fmt", audioFmt), CLI: "--audio-format", Key: "audio_format"},
+				{Label: T(*cfg, "wiz_audio_q", audioQ), CLI: "--audio-quality", Key: "audio_quality"},
 			}
 
 		case 2: // Subtitles & Metadata
@@ -240,15 +250,15 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 			}
 
 			rightItems = []settingItem{
-				{Label: fmt.Sprintf("Download Subtitles: %s", subsVal), CLI: "--write-subs", Key: "subs_enabled"},
-				{Label: fmt.Sprintf("Subtitle Languages: %s", langsVal), CLI: "--sub-langs", Key: "sub_langs"},
-				{Label: fmt.Sprintf("Include Auto-Generated Subs: %s", autoVal), CLI: "--write-auto-subs", Key: "auto_subs"},
-				{Label: fmt.Sprintf("Embed Subs in Container: %s", embedSubsVal), CLI: "--embed-subs", Key: "embed_subs"},
-				{Label: fmt.Sprintf("Embed Metadata & Poster: %s", embedMetaVal), CLI: "--embed-metadata", Key: "embed_metadata"},
-				{Label: fmt.Sprintf("Embed Chapters: %s", embedChapVal), CLI: "--embed-chapters", Key: "embed_chapters"},
-				{Label: fmt.Sprintf("Split by Chapters: %s", splitChapVal), CLI: "--split-chapters", Key: "split_chapters"},
-				{Label: fmt.Sprintf("SponsorBlock: %s", strings.ToUpper(sbVal)), CLI: "--sponsorblock", Key: "sponsorblock"},
-				{Label: fmt.Sprintf("Save Description & Thumbnail: %s", extraVal), CLI: "--write-description", Key: "write_extra"},
+				{Label: T(*cfg, "wiz_subs", subsVal), CLI: "--write-subs", Key: "subs_enabled"},
+				{Label: T(*cfg, "wiz_sub_langs", langsVal), CLI: "--sub-langs", Key: "sub_langs"},
+				{Label: T(*cfg, "wiz_auto_subs", autoVal), CLI: "--write-auto-subs", Key: "auto_subs"},
+				{Label: T(*cfg, "wiz_embed_subs", embedSubsVal), CLI: "--embed-subs", Key: "embed_subs"},
+				{Label: T(*cfg, "wiz_embed_meta", embedMetaVal), CLI: "--embed-metadata", Key: "embed_metadata"},
+				{Label: T(*cfg, "wiz_embed_chap", embedChapVal), CLI: "--embed-chapters", Key: "embed_chapters"},
+				{Label: T(*cfg, "wiz_split", splitChapVal), CLI: "--split-chapters", Key: "split_chapters"},
+				{Label: T(*cfg, "wiz_sponsor", strings.ToUpper(sbVal)), CLI: "--sponsorblock", Key: "sponsorblock"},
+				{Label: T(*cfg, "wiz_extra", extraVal), CLI: "--write-description", Key: "write_extra"},
 			}
 
 		case 3: // Network & Acceleration
@@ -256,7 +266,7 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 			retriesVal := core.GetString(fields, "retries")
 			rateVal := core.GetString(fields, "ratelimit")
 			if rateVal == "" {
-				rateVal = "Unlimited"
+				rateVal = T(*cfg, "wiz_unlimited")
 			}
 			geoVal := noStr
 			if core.GetBool(fields, "geobypass") {
@@ -268,47 +278,51 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 			}
 			passVal := core.GetString(fields, "video_password")
 			if passVal == "" {
-				passVal = "(none)"
+				passVal = T(*cfg, "wiz_none")
+			} else {
+				passVal = strings.Repeat("•", len([]rune(passVal)))
 			}
 
 			rightItems = []settingItem{
-				{Label: fmt.Sprintf("Concurrent Fragments: %s", fragsVal), CLI: "--concurrent-fragments", Key: "concurrent_fragments"},
-				{Label: fmt.Sprintf("Connection Retries: %s", retriesVal), CLI: "--retries", Key: "retries"},
-				{Label: fmt.Sprintf("Speed Rate Limit: %s", rateVal), CLI: "--limit-rate", Key: "ratelimit"},
-				{Label: fmt.Sprintf("Bypass Geo Restrictions: %s", geoVal), CLI: "--geo-bypass", Key: "geobypass"},
-				{Label: fmt.Sprintf("Live Stream from Start: %s", liveVal), CLI: "--live-from-start", Key: "live_start"},
-				{Label: fmt.Sprintf("Video Password: %s", passVal), CLI: "--video-password", Key: "video_password"},
+				{Label: T(*cfg, "wiz_frags", fragsVal), CLI: "--concurrent-fragments", Key: "concurrent_fragments"},
+				{Label: T(*cfg, "wiz_retries", retriesVal), CLI: "--retries", Key: "retries"},
+				{Label: T(*cfg, "wiz_rate", rateVal), CLI: "--limit-rate", Key: "ratelimit"},
+				{Label: T(*cfg, "wiz_geo", geoVal), CLI: "--geo-bypass", Key: "geobypass"},
+				{Label: T(*cfg, "wiz_live", liveVal), CLI: "--live-from-start", Key: "live_start"},
+				{Label: T(*cfg, "wiz_password", passVal), CLI: "--video-password", Key: "video_password"},
 			}
 
 		case 4: // Cookies & Auth
 			cMode := core.GetString(fields, "cookies_mode")
 			cBrowser := core.GetString(fields, "cookies_browser")
 			if cBrowser == "" {
-				cBrowser = "(none)"
+				cBrowser = T(*cfg, "wiz_none")
+			} else {
+				cBrowser = titleWord(cBrowser)
 			}
 			cFile := core.GetString(fields, "cookies_file")
 			if cFile == "" {
-				cFile = "(none)"
+				cFile = T(*cfg, "wiz_none")
 			}
 			pMode := core.GetString(fields, "proxy_mode")
 			pURL := core.GetString(fields, "proxy_url")
 			if pURL == "" {
-				pURL = "(none)"
+				pURL = T(*cfg, "wiz_none")
 			}
 
 			rightItems = []settingItem{
-				{Label: fmt.Sprintf("Cookies Mode: %s", strings.ToUpper(cMode)), CLI: "--cookies", Key: "cookies_mode"},
-				{Label: fmt.Sprintf("Browser Cookies: %s", strings.Title(cBrowser)), CLI: "--cookies-from-browser", Key: "cookies_browser"},
-				{Label: fmt.Sprintf("Cookies File: %s", cFile), CLI: "--cookies file", Key: "cookies_file"},
-				{Label: fmt.Sprintf("Proxy Mode: %s", strings.ToUpper(pMode)), CLI: "--proxy", Key: "proxy_mode"},
-				{Label: fmt.Sprintf("Proxy URL: %s", pURL), CLI: "--proxy URL", Key: "proxy_url"},
+				{Label: T(*cfg, "wiz_cookies_mode", strings.ToUpper(cMode)), CLI: "--cookies", Key: "cookies_mode"},
+				{Label: T(*cfg, "wiz_cookies_browser", cBrowser), CLI: "--cookies-from-browser", Key: "cookies_browser"},
+				{Label: T(*cfg, "wiz_cookies_file", cFile), CLI: "--cookies file", Key: "cookies_file"},
+				{Label: T(*cfg, "wiz_proxy_mode", strings.ToUpper(pMode)), CLI: "--proxy", Key: "proxy_mode"},
+				{Label: T(*cfg, "wiz_proxy_url", pURL), CLI: "--proxy URL", Key: "proxy_url"},
 			}
 
 		case 5: // Actions & Save
 			rightItems = []settingItem{
-				{Label: "Start Download", CLI: "execute", Key: "act_run"},
-				{Label: "Save as Preset & Download", CLI: "save_and_run", Key: "act_save"},
-				{Label: "Cancel", CLI: "back", Key: "act_cancel"},
+				{Label: T(*cfg, "wiz_act_run"), CLI: "execute", Key: "act_run"},
+				{Label: T(*cfg, "wiz_act_save"), CLI: "save_and_run", Key: "act_save"},
+				{Label: T(*cfg, "wiz_act_cancel"), CLI: "back", Key: "act_cancel"},
 			}
 		}
 
@@ -317,32 +331,99 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 		if rightIdx >= len(rightItems) {
 			rightIdx = 0
 		}
-
-		for idx, itm := range rightItems {
-			y := 3 + idx
+		rightHits := make([]menuHit, 0, len(rightItems))
+		visibleRight := max(1, h-7)
+		rightFirst = windowStart(rightIdx, rightFirst, visibleRight)
+		for idx := rightFirst; idx < len(rightItems); idx++ {
+			itm := rightItems[idx]
+			y := 3 + idx - rightFirst
 			if y >= h-4 {
 				break
 			}
-			isSel := (idx == rightIdx && inRightPane)
+			isSel := idx == rightIdx && inRightPane
 			style := GetBaseStyle(*cfg)
 			marker := "  "
 			if isSel {
 				style = GetHighlightStyle(*cfg)
 				marker = "> "
 			}
-			DrawString(s, rightX, y, marker+itm.Label, rightW-len(itm.CLI)-3, style)
-			DrawString(s, w-len(itm.CLI)-4, y, "["+itm.CLI+"]", len(itm.CLI)+2, GetDimStyle(*cfg))
+			tag := "[" + itm.CLI + "]"
+			tagW := StringWidth(tag)
+			labelW := rightW
+			if rightW > tagW+4 {
+				labelW = rightW - tagW - 2
+			}
+			DrawSpan(s, rightX, y, max(0, labelW), marker+itm.Label, style)
+			if rightW > tagW+4 {
+				DrawString(s, rightX+labelW, y, tag, tagW, GetDimStyle(*cfg))
+			}
+			rightHits = append(rightHits, menuHit{minX: rightX, maxX: rightX + max(0, rightW), y: y, index: idx})
 		}
 
 		footer := T(*cfg, "footer_vertical_tabs")
 		if inRightPane {
 			footer = T(*cfg, "footer_vertical_items")
 		}
-		DrawFooter(s, footer, w, h)
+		DrawFooter(s, footer, w, h, *cfg)
 		s.Show()
 
-		ev := s.PollEvent()
+		confirmManual := func(index int) (*core.DownloadPreset, bool, bool) {
+			if index < 0 || index >= len(rightItems) {
+				return nil, false, false
+			}
+			rightIdx = index
+			inRightPane = true
+			action, finish := handleManualFieldEdit(s, cfg, fields, rightItems[index].Key)
+			if !finish {
+				return nil, false, false
+			}
+			preset := &core.DownloadPreset{
+				ID:     fmt.Sprintf("preset_%d", time.Now().Unix()),
+				Name:   T(*cfg, "wiz_manual_name"),
+				Fields: fields,
+			}
+			if action == "save" {
+				pName, ok := TextInput(s, cfg, T(*cfg, "wiz_save_title"), T(*cfg, "wiz_save_prompt"), T(*cfg, "wiz_save_default"), T(*cfg, "footer_input"))
+				if ok && strings.TrimSpace(pName) != "" {
+					preset.Name = strings.TrimSpace(pName)
+					cfg.DownloadPresets = append(cfg.DownloadPresets, *preset)
+					_ = core.SaveConfig(*cfg)
+				}
+			}
+			return preset, action != "cancel", true
+		}
+		ev, resized := pollUI(s)
+		if resized {
+			continue
+		}
 		switch ev := ev.(type) {
+		case *tcell.EventMouse:
+			x, y := ev.Position()
+			if ev.Buttons()&tcell.WheelUp != 0 {
+				if inRightPane {
+					rightIdx = wrapIndex(rightIdx, -1, len(rightItems))
+				} else {
+					leftIdx = wrapIndex(leftIdx, -1, len(categories))
+					rightIdx = 0
+				}
+			} else if ev.Buttons()&tcell.WheelDown != 0 {
+				if inRightPane {
+					rightIdx = wrapIndex(rightIdx, 1, len(rightItems))
+				} else {
+					leftIdx = wrapIndex(leftIdx, 1, len(categories))
+					rightIdx = 0
+				}
+			} else if ev.Buttons()&tcell.Button1 != 0 {
+				if hit, ok := hitIndex(leftHits, x, y); ok {
+					leftIdx = hit
+					rightIdx = 0
+					inRightPane = false
+				} else if hit, ok := hitIndex(rightHits, x, y); ok {
+					if preset, proceed, done := confirmManual(hit); done {
+						return preset, proceed
+					}
+				}
+			}
 		case *tcell.EventKey:
 			if CheckPaletteHotkey(ev) {
 				GlobalPalette.Open(s, cfg)
@@ -351,18 +432,10 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 			if !inRightPane {
 				switch ev.Key() {
 				case tcell.KeyUp:
-					if leftIdx > 0 {
-						leftIdx--
-					} else {
-						leftIdx = len(categories) - 1
-					}
+					leftIdx = wrapIndex(leftIdx, -1, len(categories))
 					rightIdx = 0
 				case tcell.KeyDown:
-					if leftIdx < len(categories)-1 {
-						leftIdx++
-					} else {
-						leftIdx = 0
-					}
+					leftIdx = wrapIndex(leftIdx, 1, len(categories))
 					rightIdx = 0
 				case tcell.KeyEnter, tcell.KeyRight:
 					inRightPane = true
@@ -370,45 +443,41 @@ func ScreenManualPresetConfig(s tcell.Screen, cfg *core.Config, initialFields ma
 				case tcell.KeyEscape:
 					return nil, false
 				case tcell.KeyRune:
-					if ev.Rune() == 'q' {
+					switch ev.Rune() {
+					case 'q':
 						return nil, false
-					} else if ev.Rune() == 'l' {
+					case 'k':
+						leftIdx = wrapIndex(leftIdx, -1, len(categories))
+						rightIdx = 0
+					case 'j':
+						leftIdx = wrapIndex(leftIdx, 1, len(categories))
+						rightIdx = 0
+					case 'l':
 						inRightPane = true
 					}
 				}
 			} else {
 				switch ev.Key() {
 				case tcell.KeyUp:
-					if rightIdx > 0 {
-						rightIdx--
-					} else {
-						rightIdx = len(rightItems) - 1
-					}
+					rightIdx = wrapIndex(rightIdx, -1, len(rightItems))
 				case tcell.KeyDown:
-					if rightIdx < len(rightItems)-1 {
-						rightIdx++
-					} else {
-						rightIdx = 0
-					}
+					rightIdx = wrapIndex(rightIdx, 1, len(rightItems))
 				case tcell.KeyEscape, tcell.KeyLeft:
 					inRightPane = false
 				case tcell.KeyEnter:
-					action, finish := handleManualFieldEdit(s, cfg, fields, rightItems[rightIdx].Key)
-					if finish {
-						preset := &core.DownloadPreset{
-							ID:     fmt.Sprintf("preset_%d", time.Now().Unix()),
-							Name:   "Manual Download",
-							Fields: fields,
-						}
-						if action == "save" {
-							pName, ok := TextInput(s, cfg, "Save Preset", "Enter name for this preset:", "My Custom Preset", T(*cfg, "footer_input"))
-							if ok && strings.TrimSpace(pName) != "" {
-								preset.Name = strings.TrimSpace(pName)
-								cfg.DownloadPresets = append(cfg.DownloadPresets, *preset)
-								_ = core.SaveConfig(*cfg)
-							}
-						}
-						return preset, (action != "cancel")
+					if preset, proceed, done := confirmManual(rightIdx); done {
+						return preset, proceed
+					}
+				case tcell.KeyRune:
+					switch ev.Rune() {
+					case 'k':
+						rightIdx = wrapIndex(rightIdx, -1, len(rightItems))
+					case 'j':
+						rightIdx = wrapIndex(rightIdx, 1, len(rightItems))
+					case 'h':
+						inRightPane = false
+					case 'q':
+						return nil, false
 					}
 				}
 			}
@@ -426,12 +495,12 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 		return "cancel", true
 
 	case "quality":
-		qLabels := []string{"Best Available", "4K (2160p)", "2K (1440p)", "Full HD (1080p)", "HD (720p)", "SD (480p)", "Custom height in px..."}
+		qLabels := []string{T(*cfg, "wiz_q_best"), T(*cfg, "wiz_q_2160"), T(*cfg, "wiz_q_1440"), T(*cfg, "wiz_q_1080"), T(*cfg, "wiz_q_720"), T(*cfg, "wiz_q_480"), T(*cfg, "wiz_q_custom")}
 		qVals := []string{"", "2160", "1440", "1080", "720", "480", "custom"}
-		qi := RunMenu(s, cfg, "Max Resolution", qLabels, "Select maximum video height limit:", T(*cfg, "footer_nav"))
+		qi := RunMenu(s, cfg, T(*cfg, "wiz_quality_title"), qLabels, T(*cfg, "wiz_quality_hint"), T(*cfg, "footer_nav"))
 		if qi >= 0 {
 			if qVals[qi] == "custom" {
-				if val, ok := TextInput(s, cfg, "Max Quality", "Enter height limit in pixels (e.g. 1080):", "", T(*cfg, "footer_input")); ok {
+				if val, ok := TextInput(s, cfg, T(*cfg, "wiz_quality_title"), T(*cfg, "wiz_quality_prompt"), "", T(*cfg, "footer_input")); ok {
 					fields["quality"] = strings.TrimSpace(val)
 				}
 			} else {
@@ -439,11 +508,11 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 			}
 		}
 	case "section":
-		if val, ok := TextInput(s, cfg, "Time Range Cut", "Enter timecode section (e.g. 00:01:00-00:03:30):", core.GetString(fields, "download_section"), T(*cfg, "footer_input")); ok {
+		if val, ok := TextInput(s, cfg, T(*cfg, "wiz_section_title"), T(*cfg, "wiz_section_prompt"), core.GetString(fields, "download_section"), T(*cfg, "footer_input")); ok {
 			fields["download_section"] = strings.TrimSpace(val)
 		}
 	case "template":
-		if val, ok := TextInput(s, cfg, "Filename Template", "Enter yt-dlp output template:", core.GetString(fields, "output_template"), T(*cfg, "footer_input")); ok {
+		if val, ok := TextInput(s, cfg, T(*cfg, "wiz_template_title"), T(*cfg, "wiz_template_prompt"), core.GetString(fields, "output_template"), T(*cfg, "footer_input")); ok {
 			fields["output_template"] = strings.TrimSpace(val)
 		}
 	case "windows_filenames":
@@ -463,29 +532,29 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 		for _, k := range keys {
 			pNames = append(pNames, PresetDisplayName(*cfg, core.VideoPresets[k]))
 		}
-		pNames = append(pNames, "Custom FFmpeg Flags...")
-		pi := RunMenu(s, cfg, "Video Codec Preset", pNames, "Choose target codec preset (1. MP4 / 2. MKV on top):", T(*cfg, "footer_nav"))
+		pNames = append(pNames, T(*cfg, "wiz_custom_ffmpeg"))
+		pi := RunMenu(s, cfg, T(*cfg, "wiz_preset_title"), pNames, T(*cfg, "wiz_preset_hint"), T(*cfg, "footer_nav"))
 		if pi >= 0 {
 			if pi < len(keys) {
 				fields["video_preset"] = keys[pi]
 			} else {
-				if flags, ok := TextInput(s, cfg, "Custom FFmpeg", "Enter custom FFmpeg flags:", "-c:v libx264 -c:a aac", T(*cfg, "footer_input")); ok {
+				if flags, ok := TextInput(s, cfg, T(*cfg, "wiz_custom_ffmpeg_title"), T(*cfg, "wiz_custom_ffmpeg_prompt"), "-c:v libx264 -c:a aac", T(*cfg, "footer_input")); ok {
 					fields["video_preset"] = "custom"
 					fields["custom_flags"] = flags
 				}
 			}
 		}
 	case "vcodec":
-		vLabels := []string{"Auto (Best available)", "Force AV1 [vcodec^=av01]", "Force VP9 [vcodec^=vp9]", "Force H.264 [vcodec^=avc1]"}
+		vLabels := []string{T(*cfg, "wiz_vc_auto"), T(*cfg, "wiz_vc_av1"), T(*cfg, "wiz_vc_vp9"), T(*cfg, "wiz_vc_h264")}
 		vVals := []string{"auto", "av1", "vp9", "h264"}
-		vi := RunMenu(s, cfg, "Video Codec Preference", vLabels, "Select video stream codec:", T(*cfg, "footer_nav"))
+		vi := RunMenu(s, cfg, T(*cfg, "wiz_vcodec_title"), vLabels, T(*cfg, "wiz_vcodec_hint"), T(*cfg, "footer_nav"))
 		if vi >= 0 {
 			fields["vcodec"] = vVals[vi]
 		}
 	case "fps_limit":
-		fpsLabels := []string{"Max FPS (Unlimited)", "Limit to 60 FPS", "Limit to 30 FPS"}
+		fpsLabels := []string{T(*cfg, "wiz_fps_max"), T(*cfg, "wiz_fps_60"), T(*cfg, "wiz_fps_30")}
 		fpsVals := []string{"", "60", "30"}
-		fi := RunMenu(s, cfg, "FPS Limit", fpsLabels, "Select frame rate limit:", T(*cfg, "footer_nav"))
+		fi := RunMenu(s, cfg, T(*cfg, "wiz_fps_title"), fpsLabels, T(*cfg, "wiz_fps_hint"), T(*cfg, "footer_nav"))
 		if fi >= 0 {
 			fields["fps_limit"] = fpsVals[fi]
 		}
@@ -493,14 +562,14 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 		fields["audio_only"] = !core.GetBool(fields, "audio_only")
 	case "audio_format":
 		fmts := []string{"mp3", "flac", "wav", "m4a", "opus"}
-		fi := RunMenu(s, cfg, "Audio Format", fmts, "Select audio target format:", T(*cfg, "footer_nav"))
+		fi := RunMenu(s, cfg, T(*cfg, "wiz_audio_fmt_title"), fmts, T(*cfg, "wiz_audio_fmt_hint"), T(*cfg, "footer_nav"))
 		if fi >= 0 {
 			fields["audio_format"] = fmts[fi]
 		}
 	case "audio_quality":
-		qLabels := []string{"Best / VBR 0 (320 kbps)", "High / VBR 2 (256 kbps)", "Medium / VBR 5 (192 kbps)", "Smallest / VBR 9 (128 kbps)"}
+		qLabels := []string{T(*cfg, "wiz_aq_best"), T(*cfg, "wiz_aq_high"), T(*cfg, "wiz_aq_medium"), T(*cfg, "wiz_aq_small")}
 		qVals := []string{"0", "2", "5", "9"}
-		qi := RunMenu(s, cfg, "Audio Quality", qLabels, "Select audio encoding quality:", T(*cfg, "footer_nav"))
+		qi := RunMenu(s, cfg, T(*cfg, "wiz_audio_q_title"), qLabels, T(*cfg, "wiz_audio_q_hint"), T(*cfg, "footer_nav"))
 		if qi >= 0 {
 			fields["audio_quality"] = qVals[qi]
 		}
@@ -508,7 +577,7 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 	case "subs_enabled":
 		fields["subs_enabled"] = !core.GetBool(fields, "subs_enabled")
 	case "sub_langs":
-		if val, ok := TextInput(s, cfg, "Subtitle Languages", "Languages separated by comma (e.g. ru,en):", core.GetString(fields, "sub_langs"), T(*cfg, "footer_input")); ok {
+		if val, ok := TextInput(s, cfg, T(*cfg, "wiz_sub_langs_title"), T(*cfg, "wiz_sub_langs_prompt"), core.GetString(fields, "sub_langs"), T(*cfg, "footer_input")); ok {
 			fields["sub_langs"] = strings.TrimSpace(val)
 		}
 	case "auto_subs":
@@ -522,9 +591,9 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 	case "split_chapters":
 		fields["split_chapters"] = !core.GetBool(fields, "split_chapters")
 	case "sponsorblock":
-		sbLabels := []string{"Disabled (Off)", "Remove Sponsors & Intros (Cut)", "Mark Chapters (No cutting)"}
+		sbLabels := []string{T(*cfg, "wiz_sb_off"), T(*cfg, "wiz_sb_remove"), T(*cfg, "wiz_sb_mark")}
 		sbVals := []string{"off", "remove", "mark"}
-		sbi := RunMenu(s, cfg, "SponsorBlock", sbLabels, "Choose SponsorBlock mode:", T(*cfg, "footer_nav"))
+		sbi := RunMenu(s, cfg, T(*cfg, "wiz_sponsor_title"), sbLabels, T(*cfg, "wiz_sponsor_hint"), T(*cfg, "footer_nav"))
 		if sbi >= 0 {
 			fields["sponsorblock"] = sbVals[sbi]
 		}
@@ -532,26 +601,26 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 		fields["write_extra"] = !core.GetBool(fields, "write_extra")
 
 	case "concurrent_fragments":
-		cLabels := []string{"2 streams", "4 streams (default)", "8 streams (fast)", "16 streams (max)"}
+		cLabels := []string{T(*cfg, "wiz_frags_2"), T(*cfg, "wiz_frags_4"), T(*cfg, "wiz_frags_8"), T(*cfg, "wiz_frags_16")}
 		cVals := []string{"2", "4", "8", "16"}
-		ci := RunMenu(s, cfg, "Concurrent Fragments", cLabels, "Parallel download threads for DASH/HLS:", T(*cfg, "footer_nav"))
+		ci := RunMenu(s, cfg, T(*cfg, "wiz_frags_title"), cLabels, T(*cfg, "wiz_frags_hint"), T(*cfg, "footer_nav"))
 		if ci >= 0 {
 			fields["concurrent_fragments"] = cVals[ci]
 		}
 	case "retries":
-		rLabels := []string{"5 retries", "10 retries (recommended)", "20 retries", "Infinite"}
+		rLabels := []string{T(*cfg, "wiz_retry_5"), T(*cfg, "wiz_retry_10"), T(*cfg, "wiz_retry_20"), T(*cfg, "wiz_retry_inf")}
 		rVals := []string{"5", "10", "20", "infinite"}
-		ri := RunMenu(s, cfg, "Connection Retries", rLabels, "Retries on connection failure:", T(*cfg, "footer_nav"))
+		ri := RunMenu(s, cfg, T(*cfg, "wiz_retries_title"), rLabels, T(*cfg, "wiz_retries_hint"), T(*cfg, "footer_nav"))
 		if ri >= 0 {
 			fields["retries"] = rVals[ri]
 		}
 	case "ratelimit":
-		rtLabels := []string{"Unlimited", "10 MB/s", "5 MB/s", "2 MB/s", "Custom limit..."}
+		rtLabels := []string{T(*cfg, "wiz_unlimited"), "10 MB/s", "5 MB/s", "2 MB/s", T(*cfg, "wiz_rate_custom")}
 		rtVals := []string{"", "10M", "5M", "2M", "custom"}
-		rti := RunMenu(s, cfg, "Rate Limit", rtLabels, "Select download speed limit:", T(*cfg, "footer_nav"))
+		rti := RunMenu(s, cfg, T(*cfg, "wiz_rate_title"), rtLabels, T(*cfg, "wiz_rate_hint"), T(*cfg, "footer_nav"))
 		if rti >= 0 {
 			if rtVals[rti] == "custom" {
-				if val, ok := TextInput(s, cfg, "Rate Limit", "Enter limit (e.g. 1M, 500K):", "", T(*cfg, "footer_input")); ok {
+				if val, ok := TextInput(s, cfg, T(*cfg, "wiz_rate_title"), T(*cfg, "wiz_rate_prompt"), "", T(*cfg, "footer_input")); ok {
 					fields["ratelimit"] = strings.TrimSpace(val)
 				}
 			} else {
@@ -563,41 +632,41 @@ func handleManualFieldEdit(s tcell.Screen, cfg *core.Config, fields map[string]i
 	case "live_start":
 		fields["live_start"] = !core.GetBool(fields, "live_start")
 	case "video_password":
-		if val, ok := TextInput(s, cfg, "Video Password", "Enter password for protected video:", core.GetString(fields, "video_password"), T(*cfg, "footer_input")); ok {
+		if val, ok := TextInputSecret(s, cfg, T(*cfg, "wiz_password_title"), T(*cfg, "wiz_password_prompt"), core.GetString(fields, "video_password"), T(*cfg, "footer_input")); ok {
 			fields["video_password"] = strings.TrimSpace(val)
 		}
 
 	case "cookies_mode":
-		mLabels := []string{"Use Global Default", "Disabled (None)", "Import from Browser", "Use cookies.txt File"}
+		mLabels := []string{T(*cfg, "wiz_ck_default"), T(*cfg, "wiz_ck_none"), T(*cfg, "wiz_ck_browser"), T(*cfg, "wiz_ck_file")}
 		mVals := []string{"default", "none", "browser", "file"}
-		mi := RunMenu(s, cfg, "Cookies Mode", mLabels, "Select cookie strategy:", T(*cfg, "footer_nav"))
+		mi := RunMenu(s, cfg, T(*cfg, "wiz_cookies_title"), mLabels, T(*cfg, "wiz_cookies_hint"), T(*cfg, "footer_nav"))
 		if mi >= 0 {
 			fields["cookies_mode"] = mVals[mi]
 		}
 	case "cookies_browser":
 		var bLabels []string
 		for _, b := range core.SupportedBrowsers {
-			bLabels = append(bLabels, strings.Title(b))
+			bLabels = append(bLabels, titleWord(b))
 		}
-		bi := RunMenu(s, cfg, "Browser Cookies", bLabels, "Choose browser:", T(*cfg, "footer_nav"))
+		bi := RunMenu(s, cfg, T(*cfg, "wiz_browser_title"), bLabels, T(*cfg, "wiz_browser_hint"), T(*cfg, "footer_nav"))
 		if bi >= 0 {
 			fields["cookies_mode"] = "browser"
 			fields["cookies_browser"] = core.SupportedBrowsers[bi]
 		}
 	case "cookies_file":
-		if val, ok := TextInput(s, cfg, "Cookies File", "Enter path to cookies.txt:", core.GetString(fields, "cookies_file"), T(*cfg, "footer_input")); ok {
+		if val, ok := TextInput(s, cfg, T(*cfg, "wiz_ck_file_title"), T(*cfg, "wiz_ck_file_prompt"), core.GetString(fields, "cookies_file"), T(*cfg, "footer_input")); ok {
 			fields["cookies_mode"] = "file"
 			fields["cookies_file"] = strings.TrimSpace(val)
 		}
 	case "proxy_mode":
-		pLabels := []string{"Use Global Default", "Direct Connection (No proxy)", "Custom Proxy URL"}
+		pLabels := []string{T(*cfg, "wiz_px_default"), T(*cfg, "wiz_px_direct"), T(*cfg, "wiz_px_custom")}
 		pVals := []string{"default", "none", "custom"}
-		pi := RunMenu(s, cfg, "Proxy Mode", pLabels, "Select proxy mode:", T(*cfg, "footer_nav"))
+		pi := RunMenu(s, cfg, T(*cfg, "wiz_proxy_title"), pLabels, T(*cfg, "wiz_proxy_hint"), T(*cfg, "footer_nav"))
 		if pi >= 0 {
 			fields["proxy_mode"] = pVals[pi]
 		}
 	case "proxy_url":
-		if val, ok := TextInput(s, cfg, "Proxy URL", "Enter proxy (socks5://127.0.0.1:10808):", core.GetString(fields, "proxy_url"), T(*cfg, "footer_input")); ok {
+		if val, ok := TextInput(s, cfg, T(*cfg, "wiz_proxy_url_title"), T(*cfg, "wiz_proxy_url_prompt"), core.GetString(fields, "proxy_url"), T(*cfg, "footer_input")); ok {
 			fields["proxy_mode"] = "custom"
 			fields["proxy_url"] = strings.TrimSpace(val)
 		}

@@ -14,6 +14,8 @@ import (
 func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 	leftIdx := 0
 	rightIdx := 0
+	leftFirst := 0
+	rightFirst := 0
 	inRightPane := false
 
 	categories := []string{
@@ -37,9 +39,16 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 		leftW := 26
 		divX := leftW + 2
 
-		for i, cat := range categories {
-			y := 3 + i
-			isSel := (i == leftIdx)
+		leftHits := make([]menuHit, 0, len(categories))
+		visibleLeft := max(1, h-7)
+		leftFirst = windowStart(leftIdx, leftFirst, visibleLeft)
+		for i := leftFirst; i < len(categories); i++ {
+			cat := categories[i]
+			y := 3 + i - leftFirst
+			if y >= h-4 {
+				break
+			}
+			isSel := i == leftIdx
 			style := GetBaseStyle(*cfg)
 			marker := "  "
 			if isSel && !inRightPane {
@@ -49,7 +58,8 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 				style = GetBaseStyle(*cfg).Bold(true)
 				marker = "► "
 			}
-			DrawString(s, 2, y, marker+cat, leftW, style)
+			DrawSpan(s, 2, y, leftW, marker+cat, style)
+			leftHits = append(leftHits, menuHit{minX: 2, maxX: 2 + leftW, y: y, index: i})
 		}
 
 		for y := 2; y < h-2; y++ {
@@ -74,12 +84,12 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 					cookieDisplay = "cookies.txt"
 				}
 			} else if cfg.CookiesMode == "browser" {
-				cookieDisplay = strings.Title(cfg.CookiesBrowser)
+				cookieDisplay = titleWord(cfg.CookiesBrowser)
 			}
 
 			rightItems = []settingItem{
 				{Label: T(*cfg, "settings_download_dir", cfg.DownloadDir), CLI: "-o", Key: "download_dir"},
-				{Label: T(*cfg, "settings_language", cfg.Language), CLI: "i18n", Key: "language"},
+				{Label: T(*cfg, "settings_language", LanguageName(*cfg)), CLI: "i18n", Key: "language"},
 				{Label: T(*cfg, "settings_cookies", cookieDisplay), CLI: "--cookies", Key: "cookies"},
 				{Label: T(*cfg, "settings_proxy", cfg.ProxyMode), CLI: "--proxy", Key: "proxy"},
 				{Label: T(*cfg, "settings_archive", archStr), CLI: "--download-archive", Key: "archive"},
@@ -126,10 +136,7 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 				{Label: T(*cfg, "settings_win_names", winNamesStr), CLI: "--windows-filenames", Key: "win_names"},
 			}
 		case 3: // Interface & System
-			themeName := GetTheme(*cfg).NameEN
-			if cfg.Language == "ru" {
-				themeName = GetTheme(*cfg).NameRU
-			}
+			themeName := GetTheme(*cfg).DisplayName(*cfg)
 			bgName := T(*cfg, "bg_option_solid")
 			if cfg.UseTerminalBG {
 				bgName = T(*cfg, "bg_option_keep")
@@ -171,32 +178,78 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 		if rightIdx >= len(rightItems) {
 			rightIdx = 0
 		}
-
-		for idx, itm := range rightItems {
-			y := 3 + idx
+		rightHits := make([]menuHit, 0, len(rightItems))
+		visibleRight := max(1, h-7)
+		rightFirst = windowStart(rightIdx, rightFirst, visibleRight)
+		for idx := rightFirst; idx < len(rightItems); idx++ {
+			itm := rightItems[idx]
+			y := 3 + idx - rightFirst
 			if y >= h-4 {
 				break
 			}
-			isSel := (idx == rightIdx && inRightPane)
+			isSel := idx == rightIdx && inRightPane
 			style := GetBaseStyle(*cfg)
 			marker := "  "
 			if isSel {
 				style = GetHighlightStyle(*cfg)
 				marker = "> "
 			}
-			DrawString(s, rightX, y, marker+itm.Label, rightW-len(itm.CLI)-3, style)
-			DrawString(s, w-len(itm.CLI)-4, y, "["+itm.CLI+"]", len(itm.CLI)+2, GetDimStyle(*cfg))
+			tag := "[" + itm.CLI + "]"
+			tagW := StringWidth(tag)
+			labelW := rightW
+			if rightW > tagW+4 {
+				labelW = rightW - tagW - 2
+				DrawString(s, rightX+labelW, y, tag, tagW, GetDimStyle(*cfg))
+			}
+			DrawSpan(s, rightX, y, max(0, labelW), marker+itm.Label, style)
+			rightHits = append(rightHits, menuHit{minX: rightX, maxX: rightX + max(0, rightW), y: y, index: idx})
 		}
 
 		footer := T(*cfg, "footer_vertical_tabs")
 		if inRightPane {
 			footer = T(*cfg, "footer_vertical_items")
 		}
-		DrawFooter(s, footer, w, h)
+		DrawFooter(s, footer, w, h, *cfg)
 		s.Show()
 
-		ev := s.PollEvent()
+		ev, resized := pollUI(s)
+		if resized {
+			continue
+		}
+		editRight := func(index int) {
+			if index < 0 || index >= len(rightItems) {
+				return
+			}
+			rightIdx = index
+			inRightPane = true
+			handleSettingEdit(s, cfg, rightItems[index].Key)
+		}
 		switch ev := ev.(type) {
+		case *tcell.EventMouse:
+			x, y := ev.Position()
+			if ev.Buttons()&tcell.WheelUp != 0 {
+				if inRightPane {
+					rightIdx = wrapIndex(rightIdx, -1, len(rightItems))
+				} else {
+					leftIdx = wrapIndex(leftIdx, -1, len(categories))
+					rightIdx = 0
+				}
+			} else if ev.Buttons()&tcell.WheelDown != 0 {
+				if inRightPane {
+					rightIdx = wrapIndex(rightIdx, 1, len(rightItems))
+				} else {
+					leftIdx = wrapIndex(leftIdx, 1, len(categories))
+					rightIdx = 0
+				}
+			} else if ev.Buttons()&tcell.Button1 != 0 {
+				if hit, ok := hitIndex(leftHits, x, y); ok {
+					leftIdx = hit
+					rightIdx = 0
+					inRightPane = false
+				} else if hit, ok := hitIndex(rightHits, x, y); ok {
+					editRight(hit)
+				}
+			}
 		case *tcell.EventKey:
 			if CheckPaletteHotkey(ev) {
 				GlobalPalette.Open(s, cfg)
@@ -205,18 +258,10 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 			if !inRightPane {
 				switch ev.Key() {
 				case tcell.KeyUp:
-					if leftIdx > 0 {
-						leftIdx--
-					} else {
-						leftIdx = len(categories) - 1
-					}
+					leftIdx = wrapIndex(leftIdx, -1, len(categories))
 					rightIdx = 0
 				case tcell.KeyDown:
-					if leftIdx < len(categories)-1 {
-						leftIdx++
-					} else {
-						leftIdx = 0
-					}
+					leftIdx = wrapIndex(leftIdx, 1, len(categories))
 					rightIdx = 0
 				case tcell.KeyEnter, tcell.KeyRight:
 					inRightPane = true
@@ -224,30 +269,40 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 				case tcell.KeyEscape:
 					return
 				case tcell.KeyRune:
-					if ev.Rune() == 'q' {
+					switch ev.Rune() {
+					case 'q':
 						return
-					} else if ev.Rune() == 'l' {
+					case 'k':
+						leftIdx = wrapIndex(leftIdx, -1, len(categories))
+						rightIdx = 0
+					case 'j':
+						leftIdx = wrapIndex(leftIdx, 1, len(categories))
+						rightIdx = 0
+					case 'l':
 						inRightPane = true
 					}
 				}
 			} else {
 				switch ev.Key() {
 				case tcell.KeyUp:
-					if rightIdx > 0 {
-						rightIdx--
-					} else {
-						rightIdx = len(rightItems) - 1
-					}
+					rightIdx = wrapIndex(rightIdx, -1, len(rightItems))
 				case tcell.KeyDown:
-					if rightIdx < len(rightItems)-1 {
-						rightIdx++
-					} else {
-						rightIdx = 0
-					}
+					rightIdx = wrapIndex(rightIdx, 1, len(rightItems))
 				case tcell.KeyEscape, tcell.KeyLeft:
 					inRightPane = false
 				case tcell.KeyEnter:
-					handleSettingEdit(s, cfg, rightItems[rightIdx].Key)
+					editRight(rightIdx)
+				case tcell.KeyRune:
+					switch ev.Rune() {
+					case 'k':
+						rightIdx = wrapIndex(rightIdx, -1, len(rightItems))
+					case 'j':
+						rightIdx = wrapIndex(rightIdx, 1, len(rightItems))
+					case 'h':
+						inRightPane = false
+					case 'q':
+						return
+					}
 				}
 			}
 		}
@@ -257,17 +312,18 @@ func ScreenSettingsVertical(s tcell.Screen, cfg *core.Config) {
 func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 	switch key {
 	case "download_dir":
-		if val, ok := TextInput(s, cfg, T(*cfg, "settings_title"), "New Download Directory:", cfg.DownloadDir, T(*cfg, "footer_input")); ok {
+		if val, ok := TextInput(s, cfg, T(*cfg, "settings_title"), T(*cfg, "settings_download_dir_prompt"), cfg.DownloadDir, T(*cfg, "footer_input")); ok {
 			cfg.DownloadDir = val
 			_ = core.SaveConfig(*cfg)
 		}
 	case "language":
-		if cfg.Language == "en" {
-			cfg.Language = "ru"
-		} else {
-			cfg.Language = "en"
+		labels := []string{T(*cfg, "lang_en_gb"), T(*cfg, "lang_en_us"), T(*cfg, "lang_ru")}
+		codes := []string{"en_gb", "en_us", "ru"}
+		selected := RunMenu(s, cfg, T(*cfg, "settings_title"), labels, T(*cfg, "settings_choose_language"), T(*cfg, "footer_nav"))
+		if selected >= 0 {
+			cfg.Language = codes[selected]
+			_ = core.SaveConfig(*cfg)
 		}
-		_ = core.SaveConfig(*cfg)
 	case "cookies":
 		cOpts := []string{
 			T(*cfg, "cookies_mode_file") + fmt.Sprintf(" [%s]", cfg.CookiesFile),
@@ -294,7 +350,7 @@ func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 		} else if cIdx == 1 {
 			var bLabels []string
 			for _, b := range core.SupportedBrowsers {
-				bLabels = append(bLabels, strings.Title(b))
+				bLabels = append(bLabels, titleWord(b))
 			}
 			bi := RunMenu(s, cfg, T(*cfg, "settings_title"), bLabels, T(*cfg, "cookies_prompt_browser"), T(*cfg, "footer_nav"))
 			if bi >= 0 {
@@ -382,7 +438,7 @@ func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 		cfg.OverwriteOriginal = !cfg.OverwriteOriginal
 		_ = core.SaveConfig(*cfg)
 	case "frags":
-		choices := []string{"2 streams", "4 streams (default)", "8 streams (fast)", "16 streams (max)"}
+		choices := []string{T(*cfg, "wiz_frags_2"), T(*cfg, "wiz_frags_4"), T(*cfg, "wiz_frags_8"), T(*cfg, "wiz_frags_16")}
 		vals := []int{2, 4, 8, 16}
 		ci := RunMenu(s, cfg, T(*cfg, "settings_title"), choices, "Concurrent Fragment Downloads", T(*cfg, "footer_nav"))
 		if ci >= 0 {
@@ -400,11 +456,7 @@ func handleSettingEdit(s tcell.Screen, cfg *core.Config, key string) {
 		var tNames []string
 		for k, th := range Themes {
 			tKeys = append(tKeys, k)
-			if cfg.Language == "ru" {
-				tNames = append(tNames, th.NameRU)
-			} else {
-				tNames = append(tNames, th.NameEN)
-			}
+			tNames = append(tNames, th.DisplayName(*cfg))
 		}
 		ti := RunMenu(s, cfg, T(*cfg, "settings_title"), tNames, "Choose Theme", T(*cfg, "footer_nav"))
 		if ti >= 0 {

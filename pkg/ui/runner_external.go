@@ -52,12 +52,12 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	ytdlpCmd := exec.Command(ytdlpCmdList[0], ytdlpCmdList[1:]...)
 	ytdlpOut, err := ytdlpCmd.StdoutPipe()
 	if err != nil {
-		ShowMessage(s, cfg, T(*cfg, "log_title"), []string{fmt.Sprintf("Failed to spawn yt-dlp: %v", err)}, T(*cfg, "footer_message"))
+		ShowMessage(s, cfg, T(*cfg, "log_title"), []string{T(*cfg, "log_spawn_ytdlp", err)}, T(*cfg, "footer_message"))
 		return
 	}
 	ytdlpCmd.Stderr = ytdlpCmd.Stdout
 	if err := ytdlpCmd.Start(); err != nil {
-		ShowMessage(s, cfg, T(*cfg, "log_title"), []string{fmt.Sprintf("Start error: %v", err)}, T(*cfg, "footer_message"))
+		ShowMessage(s, cfg, T(*cfg, "log_title"), []string{T(*cfg, "log_start_err", err)}, T(*cfg, "footer_message"))
 		return
 	}
 
@@ -111,9 +111,16 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	for !ytdlpCompleted {
 		select {
 		case ev := <-eventChan:
+			if _, ok := ev.(*tcell.EventResize); ok {
+				s.Sync()
+				invalidateLogo()
+				continue
+			}
 			if kEv, ok := ev.(*tcell.EventKey); ok {
 				if CheckPaletteHotkey(kEv) {
-					GlobalPalette.Open(s, cfg)
+					GlobalPalette.OpenOver(s, cfg, func(screen tcell.Screen) {
+						drawRunnerFrame(screen, cfg, lines, currentStage, "Download Video", url, pct, speedStr, showRawLogs, false)
+					})
 					continue
 				}
 				if kEv.Key() == tcell.KeyF10 {
@@ -149,7 +156,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			if s.HasPendingEvent() && len(eventChan) == 0 {
 				eventChan <- s.PollEvent()
 			}
-			renderRunnerUI(s, cfg, lines, currentStage, "Download Video", url, pct, speedStr, showRawLogs)
+			renderRunnerUI(s, cfg, lines, currentStage, "Download Video", url, pct, speedStr, showRawLogs, false)
 		}
 	}
 
@@ -168,11 +175,14 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 				visible = visible[len(visible)-maxRows:]
 			}
 			for i, line := range visible {
-				DrawString(s, 2, 3+i, line, w-4, tcell.StyleDefault)
+				DrawString(s, 2, 3+i, line, w-4, GetBaseStyle(*cfg))
 			}
-			DrawFooter(s, T(*cfg, "log_footer_done"), w, h)
+			DrawFooter(s, T(*cfg, "log_footer_done"), w, h, *cfg)
 			s.Show()
-			ev := s.PollEvent()
+			ev, resized := pollUI(s)
+			if resized {
+				continue
+			}
 			if kEv, ok := ev.(*tcell.EventKey); ok {
 				if CheckPaletteHotkey(kEv) {
 					GlobalPalette.Open(s, cfg)
@@ -201,7 +211,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 		candidate = core.FindNewestDownloadedFile(outDir, startTime)
 	}
 	if candidate == "" {
-		lines = append(lines, "[Error] Could not locate downloaded file for external transcode")
+		lines = append(lines, T(*cfg, "log_locate_fail"))
 		statusMsg := T(*cfg, "log_finished_err", 1)
 		lines = append(lines, statusMsg)
 		_ = core.AddHistoryEntry("Download Video", url, outDir, "Failed (locate)")
@@ -215,11 +225,14 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 				visible = visible[len(visible)-maxRows:]
 			}
 			for i, line := range visible {
-				DrawString(s, 2, 3+i, line, w-4, tcell.StyleDefault)
+				DrawString(s, 2, 3+i, line, w-4, GetBaseStyle(*cfg))
 			}
-			DrawFooter(s, T(*cfg, "log_footer_done"), w, h)
+			DrawFooter(s, T(*cfg, "log_footer_done"), w, h, *cfg)
 			s.Show()
-			ev := s.PollEvent()
+			ev, resized := pollUI(s)
+			if resized {
+				continue
+			}
 			if kEv, ok := ev.(*tcell.EventKey); ok {
 				if kEv.Key() == tcell.KeyEnter || kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
 					break
@@ -251,7 +264,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	ffCmd := exec.Command(ffCmdList[0], ffCmdList[1:]...)
 	ffOut, err := ffCmd.StdoutPipe()
 	if err != nil {
-		lines = append(lines, fmt.Sprintf("[Error] Failed to spawn ffmpeg: %v", err))
+		lines = append(lines, T(*cfg, "log_spawn_ffmpeg", err))
 		statusMsg := T(*cfg, "log_finished_err", 1)
 		lines = append(lines, statusMsg)
 		_ = core.AddHistoryEntry("Download Video", url, plan.FinalPath, "Failed (ffmpeg spawn)")
@@ -266,11 +279,14 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 				visible = visible[len(visible)-maxRows:]
 			}
 			for i, line := range visible {
-				DrawString(s, 2, 3+i, line, w-4, tcell.StyleDefault)
+				DrawString(s, 2, 3+i, line, w-4, GetBaseStyle(*cfg))
 			}
-			DrawFooter(s, T(*cfg, "log_footer_done"), w, h)
+			DrawFooter(s, T(*cfg, "log_footer_done"), w, h, *cfg)
 			s.Show()
-			ev := s.PollEvent()
+			ev, resized := pollUI(s)
+			if resized {
+				continue
+			}
 			if kEv, ok := ev.(*tcell.EventKey); ok {
 				if kEv.Key() == tcell.KeyEnter || kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
 					break
@@ -281,7 +297,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	}
 	ffCmd.Stderr = ffCmd.Stdout
 	if err := ffCmd.Start(); err != nil {
-		lines = append(lines, fmt.Sprintf("[Error] ffmpeg start: %v", err))
+		lines = append(lines, T(*cfg, "log_ffmpeg_start", err))
 		statusMsg := T(*cfg, "log_finished_err", 1)
 		lines = append(lines, statusMsg)
 		_ = core.AddHistoryEntry("Download Video", url, plan.FinalPath, "Failed (ffmpeg start)")
@@ -295,11 +311,14 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 				visible = visible[len(visible)-maxRows:]
 			}
 			for i, line := range visible {
-				DrawString(s, 2, 3+i, line, w-4, tcell.StyleDefault)
+				DrawString(s, 2, 3+i, line, w-4, GetBaseStyle(*cfg))
 			}
-			DrawFooter(s, T(*cfg, "log_footer_done"), w, h)
+			DrawFooter(s, T(*cfg, "log_footer_done"), w, h, *cfg)
 			s.Show()
-			ev := s.PollEvent()
+			ev, resized := pollUI(s)
+			if resized {
+				continue
+			}
 			if kEv, ok := ev.(*tcell.EventKey); ok {
 				if kEv.Key() == tcell.KeyEnter || kEv.Key() == tcell.KeyEscape || kEv.Rune() == 'q' {
 					break
@@ -358,9 +377,16 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 	for !ffCompleted {
 		select {
 		case ev := <-eventChan:
+			if _, ok := ev.(*tcell.EventResize); ok {
+				s.Sync()
+				invalidateLogo()
+				continue
+			}
 			if kEv, ok := ev.(*tcell.EventKey); ok {
 				if CheckPaletteHotkey(kEv) {
-					GlobalPalette.Open(s, cfg)
+					GlobalPalette.OpenOver(s, cfg, func(screen tcell.Screen) {
+						drawRunnerFrame(screen, cfg, lines, currentStage, "Download Video", url, pct, speedStr, showRawLogs, false)
+					})
 					continue
 				}
 				if kEv.Key() == tcell.KeyF10 {
@@ -395,7 +421,7 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			if s.HasPendingEvent() && len(eventChan) == 0 {
 				eventChan <- s.PollEvent()
 			}
-			renderRunnerUI(s, cfg, lines, currentStage, "Download Video", url, pct, speedStr, showRawLogs)
+			renderRunnerUI(s, cfg, lines, currentStage, "Download Video", url, pct, speedStr, showRawLogs, false)
 		}
 	}
 
@@ -455,11 +481,14 @@ func RunDownloadExternal(s tcell.Screen, cfg *core.Config, preset core.DownloadP
 			visible = visible[len(visible)-maxRows:]
 		}
 		for i, line := range visible {
-			DrawString(s, 2, 3+i, line, w-4, tcell.StyleDefault)
+			DrawString(s, 2, 3+i, line, w-4, GetBaseStyle(*cfg))
 		}
-		DrawFooter(s, T(*cfg, "log_footer_done"), w, h)
+		DrawFooter(s, T(*cfg, "log_footer_done"), w, h, *cfg)
 		s.Show()
-		ev := s.PollEvent()
+		ev, resized := pollUI(s)
+		if resized {
+			continue
+		}
 		if kEv, ok := ev.(*tcell.EventKey); ok {
 			if CheckPaletteHotkey(kEv) {
 				GlobalPalette.Open(s, cfg)

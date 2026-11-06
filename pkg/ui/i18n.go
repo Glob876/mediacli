@@ -163,8 +163,23 @@ func T(cfg core.Config, key string, args ...interface{}) string {
 	return msg
 }
 
+func IsRussian(cfg core.Config) bool {
+	return normalizeLang(cfg.Language) == "ru_ru"
+}
+
+func LanguageName(cfg core.Config) string {
+	switch normalizeLang(cfg.Language) {
+	case "ru_ru":
+		return T(cfg, "lang_ru")
+	case "en_us":
+		return T(cfg, "lang_en_us")
+	default:
+		return T(cfg, "lang_en_gb")
+	}
+}
+
 func PresetDisplayName(cfg core.Config, p core.VideoPreset) string {
-	if normalizeLang(cfg.Language) == "ru_ru" {
+	if IsRussian(cfg) {
 		return p.NameRU
 	}
 	return p.NameEN
