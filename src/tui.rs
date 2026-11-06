@@ -577,9 +577,13 @@ impl App {
                 self.task = Some(id);
             }
             "convert" => {
-                let mut pipeline = media::preset_pipeline(&value("preset"), &value("input"))?;
-                pipeline.output.path = value("output");
-                self.enqueue(pipeline, "Convert")?;
+                let input = value("input");
+                let plan =
+                    media::conversion_plan(&value("preset"), &input, &value("output"), &self.cfg)?;
+                let id = self.queue.enqueue(plan, "Convert", &input, "")?;
+                self.screen = "queue".into();
+                self.task = Some(id);
+                self.selected = self.queue.list().len().saturating_sub(1);
             }
             "size" => {
                 let pipeline = Pipeline {
@@ -990,6 +994,7 @@ impl App {
                                 commands,
                                 target: string(entry, "target"),
                                 replacement: None,
+                                external: None,
                             },
                             &string(entry, "type"),
                             &string(entry, "source"),
@@ -1190,9 +1195,9 @@ impl App {
             "dracula" => Color::Rgb(189, 147, 249),
             "gruvbox" => Color::Rgb(250, 189, 47),
             "classic" => Color::White,
-            "green" => Color::Green,
+            "matrix" => Color::Green,
             "amber" => Color::Yellow,
-            "red" => Color::Red,
+            "fire" => Color::Red,
             "purple" => Color::Magenta,
             _ => Color::Cyan,
         }
@@ -1603,7 +1608,7 @@ pub async fn run() -> Result<()> {
     let cfg = config::load()?;
     let queue = Queue::new(
         number(&cfg, "bg_queue_max", 3.0) as usize,
-        Some(config::directory().join("tui_queue_rust.json")),
+        Some(config::directory().join("tui_queue.json")),
     )?;
     terminal::enable_raw_mode()?;
     let _guard = TerminalGuard;
@@ -1630,12 +1635,11 @@ pub async fn run() -> Result<()> {
     let result = (|| -> Result<()> {
         while !app.quit {
             terminal.draw(|frame| app.draw(frame))?;
-            if event::poll(Duration::from_millis(100))? {
-                if let Event::Key(key) = event::read()? {
-                    if let Err(error) = app.key(key) {
-                        app.message("Error", format!("{error:#}"));
-                    }
-                }
+            if event::poll(Duration::from_millis(100))?
+                && let Event::Key(key) = event::read()?
+                && let Err(error) = app.key(key)
+            {
+                app.message("Error", format!("{error:#}"));
             }
         }
         Ok(())

@@ -910,6 +910,7 @@ dependencies = [
  "crossterm 0.29.0",
  "dirs",
  "fs2",
+ "libc",
  "ratatui",
  "reqwest",
  "same-file",

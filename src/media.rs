@@ -44,6 +44,14 @@ pub struct Plan {
     pub target: String,
     #[serde(default)]
     pub replacement: Option<Replacement>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external: Option<ExternalTranscode>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExternalTranscode {
+    pub preset: String,
+    pub fields: Value,
+    pub config: Value,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Replacement {
@@ -131,12 +139,13 @@ pub fn probe(input: &str, cfg: &Value) -> Result<Value> {
     let path = config::user_path(input);
     ensure!(path.is_file(), "input is not a file: {}", path.display());
     let bytes = capture(
-        &vec![
+        &[
             config::tool(cfg, "ffprobe"),
             "-v".into(),
             "error".into(),
             "-show_format".into(),
             "-show_streams".into(),
+            "-show_chapters".into(),
             "-of".into(),
             "json".into(),
             text_path(&path),
@@ -523,7 +532,7 @@ pub fn build(p: &Pipeline, cfg: &Value) -> Result<Plan> {
                     ""|"crop"=>video_filters.push(format!("scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1")),
                     "letterbox"=>{let color=if s("pad_color").is_empty(){"black".into()}else{s("pad_color")};video_filters.push(format!("scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={color},setsar=1"));},
                     "stretch"=>video_filters.push(format!("scale={width}:{height},setsar=1")),
-                    "blur"=>{let label=format!("blur{op_index}");video_filters.push(format!("split[{label}bg][{label}fg];[{label}bg]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},boxblur=25:5[{label}back];[{label}fg]scale={width}:{height}:force_original_aspect_ratio=decrease[{label}front];[{label}back][{label}front]overlay=(W-w)/2:(H-h)/2,setsar=1"));},
+                    "blur"=>{let label=format!("blur{op_index}");video_filters.push(format!("split[{label}bg][{label}fg];[{label}bg]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},gblur=sigma=20[{label}back];[{label}fg]scale={width}:{height}:force_original_aspect_ratio=decrease[{label}front];[{label}back][{label}front]overlay=(W-w)/2:(H-h)/2,setsar=1"));},
                     "rotate"|"flip"=>{},_=>bail!("unknown aspect mode")
                 }
                 match n("rotate", 0.0) as i64 {
@@ -962,6 +971,7 @@ pub fn build(p: &Pipeline, cfg: &Value) -> Result<Plan> {
         commands: passes,
         target: requested,
         replacement: None,
+        external: None,
     })
 }
 
@@ -1040,7 +1050,9 @@ pub fn waveform(input: &str, start: f64, columns: usize, cfg: &Value) -> Result<
         Duration::from_secs(30),
     )?;
     let samples: Vec<f64> = bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|b| f64::from(i16::from_le_bytes([b[0], b[1]])).abs() / 32768.0)
         .collect();
     let mut peaks = vec![0.0_f64; columns];
@@ -1064,4 +1076,54 @@ pub fn masked(command: &[String]) -> Vec<String> {
 }
 pub fn display_command(command: &[String]) -> String {
     shell_words::join(masked(command))
+}
+
+/// Build a conversion without ever writing directly over its source.
+pub fn conversion_plan(preset: &str, input: &str, output: &str, cfg: &Value) -> Result<Plan> {
+    let mut pipeline = preset_pipeline(preset, input)?;
+    if !output.is_empty() {
+        pipeline.output.path = output.into();
+        return build(&pipeline, cfg);
+    }
+    let extension = string(&pipeline.operations[0].config, "container");
+    if config::boolean(cfg, "overwrite_original") {
+        let path = config::user_path(input);
+        let final_path = path.with_extension(&extension);
+        if final_path.exists() && !same_file::is_same_file(&path, &final_path).unwrap_or(false) {
+            bail!(
+                "replacement destination already exists: {}",
+                final_path.display()
+            );
+        }
+        let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+        let temporary = path.with_file_name(format!(".{stem}_tmp_{}.{}", timestamp(), extension));
+        pipeline.output.path = text_path(&temporary);
+        let mut plan = build(&pipeline, cfg)?;
+        plan.target = text_path(&final_path);
+        plan.replacement = Some(Replacement {
+            input: text_path(&path),
+            temporary: text_path(&temporary),
+            final_path: text_path(&final_path),
+        });
+        return Ok(plan);
+    }
+    let presets = config::convert_presets();
+    let suffix = presets
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == preset)
+        .map(|p| string(p, "suffix"))
+        .unwrap_or("_converted".into());
+    let same_extension = Path::new(input)
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case(&extension));
+    let suffix = if boolean(cfg, "use_ffmpeg_suffix") || same_extension {
+        suffix
+    } else {
+        String::new()
+    };
+    pipeline.output.path = unique_output(input, &suffix, &extension, "");
+    build(&pipeline, cfg)
 }

@@ -877,6 +877,7 @@ async fn admin_history(args: &Arguments, cfg: &Value) -> Result<()> {
                     commands,
                     target: string(entry, "target"),
                     replacement: None,
+                    external: None,
                 },
                 &string(entry, "type"),
                 &string(entry, "source"),
@@ -1030,7 +1031,11 @@ pub fn ranges_plans(args: &Arguments, cfg: &Value) -> Result<Vec<Plan>> {
         } else {
             media::unique_output(&input, "_ranges_joined", "mp4", "")
         };
-        media::protect_output(&target, &[input.clone()], args.boolean("overwrite"))?;
+        media::protect_output(
+            &target,
+            std::slice::from_ref(&input),
+            args.boolean("overwrite"),
+        )?;
         let list_path = config::directory()
             .join("concat")
             .join(format!("ranges-{}.ffconcat", media::timestamp()));
@@ -1067,6 +1072,7 @@ pub fn ranges_plans(args: &Arguments, cfg: &Value) -> Result<Vec<Plan>> {
             commands,
             target,
             replacement: None,
+            external: None,
         }]);
     }
     Ok(plans)

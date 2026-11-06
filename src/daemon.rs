@@ -182,7 +182,7 @@ async fn handle_inner(
                 std::fs::create_dir_all(&directory)?;
                 let target = directory.join(format!("{}.jpg", media::timestamp()));
                 media::capture(
-                    &vec![
+                    &[
                         config::tool(&cfg, "ffmpeg"),
                         "-nostdin".into(),
                         "-v".into(),
@@ -288,9 +288,12 @@ fn dispatch(
         }
         ("POST", "/api/convert") => {
             let input = string(&value, "input");
-            let mut pipeline = media::preset_pipeline(&string(&value, "preset_id"), &input)?;
-            pipeline.output.path = string(&value, "output");
-            let plan = media::build(&pipeline, &cfg)?;
+            let plan = media::conversion_plan(
+                &string(&value, "preset_id"),
+                &input,
+                &string(&value, "output"),
+                &cfg,
+            )?;
             let target = plan.target.clone();
             let id = server.queue.enqueue(plan, "Convert", &input, "")?;
             Ok((202, json!({"task_id":id,"output":target})))
@@ -516,6 +519,7 @@ fn dispatch(
                         commands,
                         target: string(entry, "target"),
                         replacement: None,
+                        external: None,
                     },
                     &string(entry, "type"),
                     &string(entry, "source"),
@@ -592,10 +596,10 @@ pub fn library_path(name: &str, cfg: &Value) -> Result<PathBuf> {
 pub fn delete_history(entry: &Value, delete_file: bool, cfg: &Value) -> Result<()> {
     if delete_file {
         let target = string(entry, "target");
-        if !target.is_empty() {
-            if let Ok(path) = library_path(&target, cfg) {
-                std::fs::remove_file(path)?;
-            }
+        if !target.is_empty()
+            && let Ok(path) = library_path(&target, cfg)
+        {
+            std::fs::remove_file(path)?;
         }
     }
     storage::update_json(

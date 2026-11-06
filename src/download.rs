@@ -56,10 +56,16 @@ pub fn build(
             value
         }
     };
+    let preset_id = fallback("video_preset");
+    let external = string(cfg, "transcode_mode") == "external"
+        && !b("audio_only")
+        && thumbnail.is_none()
+        && !["", "default", "audio_mp3", "audio_flac"].contains(&preset_id.as_str());
     let mut command = vec![
         "yt-dlp".into(),
         "--newline".into(),
         "--progress".into(),
+        "--no-simulate".into(),
         "--no-color".into(),
         "--continue".into(),
         "--print".into(),
@@ -172,7 +178,9 @@ pub fn build(
             "res,ext:mp4:m4a:webm,codec:h264:vp9:av01".into(),
         ]);
         let id = fallback("video_preset");
-        if id == "custom" {
+        if external {
+            command.extend(["--merge-output-format".into(), "mp4".into()]);
+        } else if id == "custom" {
             let ext = if s("custom_ext").is_empty() {
                 "mp4".into()
             } else {
@@ -265,5 +273,14 @@ pub fn build(
         commands: vec![command],
         target: media::text_path(&directory),
         replacement: None,
+        external: if external {
+            Some(media::ExternalTranscode {
+                preset: preset_id,
+                fields: options.clone(),
+                config: cfg.clone(),
+            })
+        } else {
+            None
+        },
     })
 }

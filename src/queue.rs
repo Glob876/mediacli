@@ -74,13 +74,18 @@ impl Queue {
         if let Some(path) = &state.persistence {
             let records = storage::read_json(path, json!([]))?;
             let array = records.as_array().context("invalid queue journal")?;
+            if array.iter().any(|r| r.get("Task").is_some()) {
+                let backup = path.with_extension("go-backup.json");
+                if !backup.exists() {
+                    storage::write_json(&backup, &records)?;
+                }
+            }
             for record in array {
-                // Rust journal. Legacy Go journals remain intact until an explicit import is implemented.
-                ensure!(
-                    record.get("id").is_some(),
-                    "legacy queue journal: preserve it and retry the saved operation from history"
-                );
-                let mut task: Task = serde_json::from_value(record.clone())?;
+                let mut task: Task = if record.get("Task").is_some() {
+                    import_legacy(record, array)?
+                } else {
+                    serde_json::from_value(record.clone())?
+                };
                 ensure!(
                     task.id > 0
                         && !state.tasks.contains_key(&task.id)
@@ -351,14 +356,100 @@ impl Queue {
                 break;
             }
         }
+        if code == 0
+            && let Some(external) = &task.plan.external
+        {
+            let files: Vec<String> = self
+                .get(id)
+                .unwrap()
+                .log_tail
+                .iter()
+                .filter_map(|line| line.strip_prefix("MEDIACLI_FILE="))
+                .filter_map(|path| serde_json::from_str::<String>(path).ok())
+                .collect();
+            if files.is_empty() {
+                code = 1;
+                failure = Some("yt-dlp did not report an output file".into());
+            }
+            for file in files {
+                if task.cancellation.is_cancelled() {
+                    code = 130;
+                    break;
+                }
+                self.change(id, |task| task.stage = "External FFmpeg transcode".into());
+                let plan = if external.preset == "custom" {
+                    let extension = config::string(&external.fields, "custom_ext");
+                    let extension = if extension.is_empty() {
+                        "mp4"
+                    } else {
+                        &extension
+                    };
+                    let flags = config::string(&external.fields, "custom_flags");
+                    let target = media::unique_output(&file, "_converted", extension, "");
+                    let mut command = vec![
+                        config::tool(&external.config, "ffmpeg"),
+                        "-nostdin".into(),
+                        "-n".into(),
+                        "-i".into(),
+                        file.clone(),
+                    ];
+                    match shell_words::split(&flags) {
+                        Ok(flags) => {
+                            command.extend(flags);
+                            command.push(target.clone());
+                            Ok(Plan {
+                                commands: vec![command],
+                                target,
+                                ..Default::default()
+                            })
+                        }
+                        Err(error) => Err(anyhow::Error::new(error)),
+                    }
+                } else {
+                    media::conversion_plan(&external.preset, &file, "", &external.config)
+                };
+                match plan {
+                    Ok(plan) => {
+                        for command in &plan.commands {
+                            match self.execute(id, command, &task.cancellation).await {
+                                Ok(exit) => code = exit,
+                                Err(error) => {
+                                    code = 1;
+                                    failure = Some(error.to_string());
+                                }
+                            }
+                            if code != 0 {
+                                break;
+                            }
+                        }
+                        if let Some(replacement) = &plan.replacement
+                            && let Err(error) = replacement.finish(code == 0)
+                        {
+                            code = 1;
+                            failure = Some(error.to_string());
+                        }
+                        if code == 0 {
+                            self.change(id, |task| task.target = plan.target.clone());
+                        }
+                    }
+                    Err(error) => {
+                        code = 1;
+                        failure = Some(error.to_string());
+                    }
+                }
+                if code != 0 {
+                    break;
+                }
+            }
+        }
         if task.cancellation.is_cancelled() {
             code = 130;
         }
-        if let Some(replacement) = &task.plan.replacement {
-            if let Err(error) = replacement.finish(code == 0) {
-                code = 1;
-                failure = Some(error.to_string());
-            }
+        if let Some(replacement) = &task.plan.replacement
+            && let Err(error) = replacement.finish(code == 0)
+        {
+            code = 1;
+            failure = Some(error.to_string());
         }
         if let Some(message) = failure {
             self.log(id, message);
@@ -426,7 +517,16 @@ impl Queue {
         let stderr_task = tokio::spawn(async move {
             stderr_queue.read_stream(id, stderr).await;
         });
-        let code = tokio::select! {result=child.wait()=>result?.code().unwrap_or(1),_ = cancel.cancelled()=>{let _=child.kill().await;130}};
+        let code = tokio::select! {
+            result=child.wait()=>result?.code().unwrap_or(1),
+            _ = cancel.cancelled()=>{
+                #[cfg(unix)]
+                if let Some(pid)=child.id(){ unsafe { libc::kill(-(pid as i32),libc::SIGKILL); } }
+                #[cfg(windows)]
+                if let Some(pid)=child.id(){ let _=Command::new("taskkill").args(["/PID",&pid.to_string(),"/T","/F"]).output().await; }
+                let _=child.kill().await;130
+            }
+        };
         // Both readers must finish before finalization so no completion or file events are lost.
         let _ = stdout_task.await;
         let _ = stderr_task.await;
@@ -480,4 +580,73 @@ pub fn progress(line: &str) -> Option<f64> {
     } else {
         None
     }
+}
+
+fn import_legacy(record: &Value, records: &[Value]) -> Result<Task> {
+    let old = &record["Task"];
+    let id = old["ID"].as_u64().context("invalid legacy task ID")?;
+    let mut root = record;
+    let mut visited = std::collections::BTreeSet::new();
+    while let Some(previous) = root["Previous"].as_u64().filter(|id| *id != 0) {
+        ensure!(visited.insert(previous), "cyclic legacy queue dependency");
+        root = records
+            .iter()
+            .find(|r| r["Task"]["ID"].as_u64() == Some(previous))
+            .context("missing legacy queue dependency")?;
+    }
+    let mut chain = vec![root];
+    loop {
+        let last = chain.last().unwrap()["Task"]["ID"].as_u64().unwrap();
+        let next = records
+            .iter()
+            .find(|r| r["Previous"].as_u64() == Some(last));
+        let Some(next) = next else { break };
+        ensure!(chain.len() < records.len(), "cyclic queue");
+        chain.push(next);
+    }
+    let commands = chain
+        .iter()
+        .map(|r| serde_json::from_value::<Vec<String>>(r["Task"]["Cmd"].clone()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let mut replacement = None;
+    for item in &chain {
+        let legacy = &item["Task"]["Replacement"];
+        if !legacy.is_null() {
+            replacement = Some(media::Replacement {
+                input: config::string(legacy, "Input"),
+                temporary: config::string(legacy, "Temporary"),
+                final_path: config::string(legacy, "Final"),
+            });
+        } else {
+            ensure!(
+                !config::boolean(item, "HasHook"),
+                "legacy queue has an unrecoverable completion hook"
+            );
+        }
+    }
+    let status = config::string(old, "Status");
+    Ok(Task {
+        id,
+        title: config::string(old, "Title"),
+        source: config::string(old, "Source"),
+        target: config::string(old, "Target"),
+        status,
+        stage: config::string(old, "Stage"),
+        progress: config::number(old, "Progress", 0.0),
+        exit_code: config::number(old, "ExitCode", 0.0) as i32,
+        finalized: true,
+        started_at: config::string(old, "StartedAt"),
+        finished_at: config::string(old, "FinishedAt"),
+        log_tail: Vec::new(),
+        group_id: config::string(old, "group_id"),
+        chain_index: 0,
+        chain_total: commands.len(),
+        plan: Plan {
+            commands,
+            target: config::string(old, "Target"),
+            replacement,
+            external: None,
+        },
+        cancellation: CancellationToken::new(),
+    })
 }
