@@ -67,7 +67,11 @@ printf "[1/3] Compiling native binary for %s/%s... " "$HOST_OS" "$HOST_ARCH"
 START_BUILD=$(date +%s)
 
 if cargo build --release --locked >> "$LOG_FILE" 2>&1; then
-    cp "target/release/$BIN_NAME" "$TARGET_PATH"
+    temporary_path=$(mktemp "$PROJECT_DIR/dist/.mediacli.XXXXXX")
+    trap 'rm -f "$temporary_path"' EXIT
+    cp -p "target/release/$BIN_NAME" "$temporary_path"
+    mv -f "$temporary_path" "$TARGET_PATH"
+    trap - EXIT
     
     END_BUILD=$(date +%s)
     BUILD_DURATION=$((END_BUILD - START_BUILD))

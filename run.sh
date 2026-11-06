@@ -36,7 +36,11 @@ TARGET_PATH="$PROJECT_DIR/dist/$BIN_NAME"
 # Cargo tracks source changes, compiler options and dependency changes itself.
 echo "Building MediaCLI..."
 cargo build --release --locked >> "$LOG_FILE" 2>&1
-cp "target/release/$BIN_NAME" "$TARGET_PATH"
+temporary_path=$(mktemp "$PROJECT_DIR/dist/.mediacli.XXXXXX")
+trap 'rm -f "$temporary_path"' EXIT
+cp -p "target/release/$BIN_NAME" "$temporary_path"
+mv -f "$temporary_path" "$TARGET_PATH"
+trap - EXIT
 
 if [ "$START_ELECTRON" -eq 0 ]; then
     exec "$TARGET_PATH" "$@"

@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const { mkdtempSync, mkdirSync, copyFileSync, writeFileSync, readFileSync, rmSync, existsSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnSync, spawn } = require('node:child_process');
+const { once } = require('node:events');
 
 function fixture(t) {
   const root = mkdtempSync(path.join(tmpdir(), 'mediacli-run-'));
@@ -62,4 +63,20 @@ test('build rejects launch options before installing anything', { skip: process.
   const result = spawnSync('bash', [path.join(__dirname, '../build.sh'), '--startelectron'], { encoding: 'utf8' });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /Launch the application with .\/run.sh/);
+});
+
+test('run updates a binary while an earlier process is still running', { skip: process.platform === 'win32' }, async t => {
+  const { root, run } = fixture(t);
+  mkdirSync(path.join(root, 'dist'));
+  const binary = path.join(root, 'dist/mediacli');
+  copyFileSync('/bin/sleep', binary);
+  const previous = spawn(binary, ['30']);
+  t.after(() => previous.kill());
+  await once(previous, 'spawn');
+  const result = run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(previous.exitCode, null);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(root, 'tui-launch.json'), 'utf8')), []);
+  previous.kill();
+  await once(previous, 'exit');
 });
