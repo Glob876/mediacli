@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,44 +28,9 @@ func PrepareFFmpegOutput(inputPath string, targetExt string, defaultSuffix strin
 		finalTarget := filepath.Join(dir, filename+targetExtWithDot)
 		temporaryName := fmt.Sprintf(".%s_tmp_%d%s", filename, time.Now().UnixNano(), targetExtWithDot)
 		temporaryPath := filepath.Join(dir, temporaryName)
-		return FFmpegOutputPlan{
-			TempOutputPath: temporaryPath,
-			FinalPath:      finalTarget,
-			TargetDisplay:  filepath.Base(finalTarget) + " (Replace Original)",
-			OnComplete: func(exitCode int) error {
-				if exitCode != 0 {
-					err := os.Remove(temporaryPath)
-					if os.IsNotExist(err) {
-						return nil
-					}
-					return err
-				}
-				info, err := os.Stat(temporaryPath)
-				if err != nil {
-					return fmt.Errorf("inspect converted file: %w", err)
-				}
-				if !info.Mode().IsRegular() || info.Size() == 0 {
-					return fmt.Errorf("converted file is empty or not a regular file: %s", temporaryPath)
-				}
-				sameSource := filepath.Clean(inputPath) == filepath.Clean(finalTarget)
-				sourceInfo, sourceError := os.Stat(inputPath)
-				destinationInfo, destinationError := os.Stat(finalTarget)
-				if sourceError == nil && destinationError == nil {
-					sameSource = sameSource || os.SameFile(sourceInfo, destinationInfo)
-				}
-				// Rename replaces the destination atomically on supported systems.
-				// If replacement is unavailable, preserve both files and report the error.
-				if err := os.Rename(temporaryPath, finalTarget); err != nil {
-					return fmt.Errorf("install converted file (source preserved): %w", err)
-				}
-				if !sameSource {
-					if err := os.Remove(inputPath); err != nil {
-						return fmt.Errorf("converted file saved; remove original: %w", err)
-					}
-				}
-				return nil
-			},
-		}
+		replacement := OutputReplacement{Input: inputPath, Temporary: temporaryPath, Final: finalTarget}
+		replacements.Store(temporaryPath, replacement)
+		return FFmpegOutputPlan{TempOutputPath: temporaryPath, FinalPath: finalTarget, TargetDisplay: filepath.Base(finalTarget) + " (Replace Original)", OnComplete: replacement.Complete}
 	}
 
 	useSuffix := cfg.UseFFmpegSuffix

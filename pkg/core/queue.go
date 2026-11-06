@@ -14,40 +14,45 @@ import (
 type TaskStatus string
 
 const (
-	StatusQueued    TaskStatus = "queued"
-	StatusRunning   TaskStatus = "running"
-	StatusDone      TaskStatus = "done"
-	StatusFailed    TaskStatus = "failed"
-	StatusCancelled TaskStatus = "cancelled"
+	StatusInterrupted TaskStatus = "interrupted"
+	StatusQueued      TaskStatus = "queued"
+	StatusRunning     TaskStatus = "running"
+	StatusDone        TaskStatus = "done"
+	StatusFailed      TaskStatus = "failed"
+	StatusCancelled   TaskStatus = "cancelled"
 )
 
 type BackgroundTask struct {
-	ID         int
-	Cmd        []string
-	Title      string
-	Source     string
-	Target     string
-	Status     TaskStatus
-	Stage      string
-	Progress   float64
-	LogLines   []string
-	StartedAt  time.Time
-	FinishedAt time.Time
-	ExitCode   int
-	GroupID    string `json:"group_id,omitempty"`
-	ChainIndex int    `json:"chain_index,omitempty"`
-	ChainTotal int    `json:"chain_total,omitempty"`
+	ID          int
+	Replacement *OutputReplacement
+	Cmd         []string
+	Title       string
+	Source      string
+	Target      string
+	Status      TaskStatus
+	Stage       string
+	Progress    float64
+	LogLines    []string
+	StartedAt   time.Time
+	FinishedAt  time.Time
+	ExitCode    int
+	GroupID     string `json:"group_id,omitempty"`
+	ChainIndex  int    `json:"chain_index,omitempty"`
+	ChainTotal  int    `json:"chain_total,omitempty"`
 
-	cmdObj         *exec.Cmd
-	onComplete     func(int) error
-	previousTaskID int
+	unrecoverableHook bool
+	cmdObj            *exec.Cmd
+	onComplete        func(int) error
+	previousTaskID    int
 }
 
 type BackgroundQueueManager struct {
-	tasks    []*BackgroundTask
-	maxTasks int
-	nextID   int
-	mu       sync.Mutex
+	storagePath      string
+	persistenceError error
+	tasks            []*BackgroundTask
+	maxTasks         int
+	nextID           int
+	mu               sync.Mutex
 }
 
 var GlobalQueue = NewBackgroundQueueManager(3)
@@ -72,6 +77,7 @@ func (qm *BackgroundQueueManager) Enqueue(cmd []string, title, source, target st
 func (qm *BackgroundQueueManager) EnqueueWithHook(cmd []string, title, source, target string, onComplete func(int) error) *BackgroundTask {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
+	defer qm.persistLocked()
 
 	task := &BackgroundTask{
 		ID:         qm.nextID,
@@ -84,6 +90,12 @@ func (qm *BackgroundQueueManager) EnqueueWithHook(cmd []string, title, source, t
 		Stage:      "Queued...",
 		LogLines:   make([]string, 0),
 		StartedAt:  time.Now(),
+	}
+	if len(cmd) > 0 && onComplete != nil {
+		if value, ok := replacements.LoadAndDelete(cmd[len(cmd)-1]); ok {
+			replacement := value.(OutputReplacement)
+			task.Replacement = &replacement
+		}
 	}
 	qm.nextID++
 	qm.tasks = append(qm.tasks, task)
@@ -117,6 +129,7 @@ func (qm *BackgroundQueueManager) SyncMaxTasksFromConfig(cfg Config) {
 func (qm *BackgroundQueueManager) CancelTask(taskID int) bool {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
+	defer qm.persistLocked()
 
 	for _, t := range qm.tasks {
 		if t.ID == taskID {
@@ -144,6 +157,7 @@ func (qm *BackgroundQueueManager) CancelGroup(groupID string) int {
 	}
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
+	defer qm.persistLocked()
 	n := 0
 	for _, t := range qm.tasks {
 		if t.GroupID == groupID && (t.Status == StatusQueued || t.Status == StatusRunning) {
@@ -168,6 +182,7 @@ func (qm *BackgroundQueueManager) EnqueueChain(cmds [][]string, title, source, t
 	}
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
+	defer qm.persistLocked()
 	var tasks []*BackgroundTask
 	for i, cmd := range cmds {
 		task := &BackgroundTask{
@@ -331,6 +346,7 @@ func (qm *BackgroundQueueManager) workerLoop() {
 			if len(nextTask.Cmd) > 0 {
 				nextTask.cmdObj = exec.Command(nextTask.Cmd[0], nextTask.Cmd[1:]...)
 			}
+			_ = qm.persistLocked()
 			go qm.monitorTask(nextTask)
 		}
 		qm.mu.Unlock()
@@ -441,7 +457,9 @@ func (qm *BackgroundQueueManager) monitorTask(task *BackgroundTask) {
 func (qm *BackgroundQueueManager) finishTask(task *BackgroundTask, exitCode int, errStr string) {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
+	defer qm.persistLocked()
 
+	CleanupPassLogs(task.Cmd)
 	cancelled := task.Status == StatusCancelled
 	if cancelled && exitCode == 0 {
 		exitCode = -1
@@ -451,6 +469,7 @@ func (qm *BackgroundQueueManager) finishTask(task *BackgroundTask, exitCode int,
 			exitCode = 1
 			errStr = err.Error()
 		}
+		task.unrecoverableHook = true
 		task.onComplete = nil
 	}
 	task.ExitCode = exitCode
@@ -471,7 +490,42 @@ func (qm *BackgroundQueueManager) finishTask(task *BackgroundTask, exitCode int,
 	if errStr != "" {
 		task.LogLines = append(task.LogLines, "[Error] "+errStr)
 	}
-	_ = AddHistoryEntry(task.Title, task.Source, task.Target, historyStatus)
+	var commands [][]string
+	if !task.unrecoverableHook && task.onComplete == nil {
+		root := task
+		for root.previousTaskID != 0 {
+			var previous *BackgroundTask
+			for _, candidate := range qm.tasks {
+				if candidate.ID == root.previousTaskID {
+					previous = candidate
+					break
+				}
+			}
+			if previous == nil {
+				break
+			}
+			root = previous
+		}
+		current := root
+		for current != nil {
+			if current.unrecoverableHook || current.onComplete != nil {
+				commands = nil
+				break
+			}
+			commands = append(commands, append([]string(nil), current.Cmd...))
+			var next *BackgroundTask
+			for _, candidate := range qm.tasks {
+				if candidate.previousTaskID == current.ID {
+					next = candidate
+					break
+				}
+			}
+			current = next
+		}
+	}
+	if err := addHistoryEntry(task.Title, task.Source, task.Target, historyStatus, commands); err != nil {
+		task.LogLines = append(task.LogLines, "[History] "+err.Error())
+	}
 }
 
 // TaskLogs returns an independent copy for the foreground log viewer.

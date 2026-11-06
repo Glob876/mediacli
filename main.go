@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"mediacli/pkg/core"
 	"mediacli/pkg/daemon"
@@ -64,6 +65,10 @@ func main() {
 	// Применяем лимит фоновых задач из конфига до старта UI.
 	if cfg, err := core.LoadConfig(); err == nil {
 		core.GlobalQueue.SyncMaxTasksFromConfig(cfg)
+	}
+
+	if err := core.GlobalQueue.EnablePersistence(filepath.Join(core.GetConfigDir(), "tui_queue.json")); err != nil {
+		fmt.Fprintf(os.Stderr, "Queue recovery: %v\n", err)
 	}
 
 	if err := ui.RunApp(); err != nil {
