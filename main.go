@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"mediacli/pkg/cli"
 	"mediacli/pkg/core"
 	"mediacli/pkg/daemon"
 	"mediacli/pkg/ui"
@@ -18,6 +19,10 @@ func main() {
 	// Перехватываем до flag.Parse, т.к. у daemon свой FlagSet.
 	if len(os.Args) > 1 && os.Args[1] == "daemon" {
 		os.Exit(daemon.Run(os.Args[2:]))
+	}
+
+	if len(os.Args) > 1 && os.Args[1] != "gui" && os.Args[1] != "--gui" && os.Args[1] != "-gui" && os.Args[1] != "-g" {
+		os.Exit(cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 	}
 
 	var isGUI bool

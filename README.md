@@ -116,6 +116,23 @@ confirmation and retains media files. The previous text console is removed.
 
 ---
 
+## CLI 0.1.2
+
+Run without arguments for the TUI, or pass a command for non-interactive use:
+
+```bash
+mediacli --help
+mediacli download 'https://example.com/video' --quality 1080
+mediacli trim input.mp4 --start 00:00:10 --end 00:00:20 -o cut.mp4
+mediacli convert input.mp4 --preset standard_mp4 -o output.mp4
+mediacli pipeline --project project.json --dry-run
+mediacli probe input.mp4 --json
+```
+
+Downloads, all media operations, projects, batch processing, size/range exports,
+configuration, presets, history, dependency checks and daemon task management are
+available as commands. [Full CLI reference and examples (Russian)](docs/cli.md).
+
 ## TUI 0.1.2
 
 - The terminal queue is saved in `tui_queue.json`. After a restart, unfinished
