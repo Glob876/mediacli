@@ -35,7 +35,7 @@ Build-only use: `cargo build --release --locked`. The result is
 | `src/media.rs` | Probe, typed operation validation, FFmpeg plans, waveform |
 | `src/download.rs` | yt-dlp arguments and external-transcode plans |
 | `src/queue.rs` | Workers, multipass ordering, cancellation, retry, recovery |
-| `src/cli.rs` | Commands, flags, projects, batch processing and daemon client |
+| `src/cli.rs`, `src/remote.rs` | Commands, projects, batch processing and daemon client |
 | `src/daemon.rs` | Loopback HTTP API, SSE and media range requests |
 | `src/tui.rs` | Terminal screens, forms, picker, palette and editor |
 | `electron/*.ts`, `electron/renderer/app.ts` | Desktop shell and renderer |
@@ -71,6 +71,8 @@ as well. Windows uses `taskkill /T` for the child tree.
 - Ctrl+P or F12 searches actions in Russian or English.
 - Forms: up/down or Tab selects a field, left/right cycles known choices,
   Space toggles booleans, Ctrl+U clears, F2 opens the file picker, Ctrl+S applies.
+  F5 saves the current download form as a preset; the Presets screen applies,
+  renames and deletes saved download/media presets.
 - Picker: Enter opens a directory or selects a file; Alt+Enter selects the
   current directory; Backspace opens its parent.
 - Queue: C or Ctrl+C cancels, R retries the complete command sequence,
@@ -79,7 +81,8 @@ as well. Windows uses `taskkill /T` for the child tree.
   C clears records after confirmation. Media files are retained.
 - Editor: I sets input/output, A adds an operation, Delete removes it,
   Ctrl+Z/Y undoes/redoes, S/L saves/loads a project, P saves a media preset,
-  M sets target size, D displays commands, Enter exports. Drafts are autosaved.
+  M sets target size, D displays commands, E edits an operation, [ / ] reorder
+  operations, V renders a five-second preview, Enter exports. Drafts are autosaved.
 - Ranges: arrows move by frame/second, I/O mark bounds, D removes a range,
   G jumps to time, Ctrl+Z/Y undo/redo, Enter exports.
 
@@ -89,7 +92,9 @@ The npm launcher remains a small Node script selecting a bundled Rust binary.
 `npm run build` builds the current host target. A target triple can be supplied
 with `node scripts/build-npm.cjs TARGET`; install its Rust standard library and
 linker first. CI builds six targets on Linux, macOS and Windows runners, then
-combines their artifacts into the npm archive. Publishing still runs only on
+combines their artifacts into the npm archive. Each binary carries a receipt
+with its version, target, source hash and binary hash; packing rejects cached
+Go binaries, changed binaries and mixed source revisions. Publishing still runs only on
 `main` with the existing publishing configuration.
 
 Local validation covers Linux. macOS and Windows require their CI runners and
