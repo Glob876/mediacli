@@ -48,6 +48,9 @@ func NewServer(token string) *Server {
 func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/status", s.handleStatus)
 	s.mux.HandleFunc("POST /api/downloads", s.handleCreateDownload)
+	s.mux.HandleFunc("GET /api/tasks/{id}/logs", s.handleTaskLogs)
+	s.mux.HandleFunc("POST /api/tasks/{id}/retry", s.handleRetryTask)
+	s.mux.HandleFunc("POST /api/history/{index}/retry", s.handleRetryHistory)
 	s.mux.HandleFunc("GET /api/tasks", s.handleListTasks)
 	s.mux.HandleFunc("GET /api/tasks/{id}", s.handleGetTask)
 	s.mux.HandleFunc("POST /api/tasks/{id}/cancel", s.handleCancelTask)
@@ -155,10 +158,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 type createDownloadReq struct {
-	URL        string                 `json:"url"`
-	OutDir     string                 `json:"out_dir"`
-	IsPlaylist bool                   `json:"is_playlist"`
-	Fields     map[string]interface{} `json:"fields"`
+	URL           string                 `json:"url"`
+	OutDir        string                 `json:"out_dir"`
+	TranscodeMode string                 `json:"transcode_mode"`
+	IsPlaylist    bool                   `json:"is_playlist"`
+	Fields        map[string]interface{} `json:"fields"`
 }
 
 // POST /api/downloads — validate, build yt-dlp args via core, enqueue.
@@ -180,6 +184,13 @@ func (s *Server) handleCreateDownload(w http.ResponseWriter, r *http.Request) {
 	cfg, err := core.LoadConfig()
 	if err != nil {
 		cfg = core.GetDefaultConfig()
+	}
+	if req.TranscodeMode != "" {
+		if req.TranscodeMode != "embedded" && req.TranscodeMode != "external" {
+			writeErr(w, 400, "invalid transcode_mode")
+			return
+		}
+		cfg.TranscodeMode = req.TranscodeMode
 	}
 	outDir := core.ParseUserPath(cfg.DownloadDir)
 	if strings.TrimSpace(req.OutDir) != "" {
@@ -823,7 +834,12 @@ var metaThemes = []map[string]string{
 // в Go): TUI-темы, браузеры для cookies, ascii-пресеты логотипа,
 // стили прогресса, цели использования.
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, Metadata())
+}
+
+// Metadata returns the settings choices shared by the desktop API and CLI.
+func Metadata() map[string]any {
+	return map[string]any{
 		"themes":           metaThemes,
 		"browsers":         core.SupportedBrowsers,
 		"logo_ascii":       []string{"standard", "coder_mini", "toilet", "rubifont"},
@@ -833,16 +849,21 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 		"video_presets":    core.OrderedVideoPresetKeys,
 		"thumbnail_format": []string{"png", "jpg", "webp"},
 		"audio_formats":    []string{"mp3", "flac", "wav", "m4a", "opus"},
-	})
+	}
 }
 
 // Run starts the loopback daemon. args are the CLI args after `daemon`.
 // Prints MEDIACLI_DAEMON_PORT=<port> to stdout for the Electron launcher.
 func Run(args []string) int {
 	fs := flag.NewFlagSet("daemon", flag.ContinueOnError)
+	persist := fs.Bool("persist", false, "Save and recover the daemon queue (unfinished jobs require retry)")
+	queueFile := fs.String("queue-file", "", "Queue journal path (implies --persist)")
 	port := fs.Int("port", 0, "TCP port on 127.0.0.1 (0 = pick free)")
 	token := fs.String("token", "", "Bearer token (fallback: MEDIACLI_TOKEN env, empty = no auth)")
 	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return 0
+		}
 		return 2
 	}
 	tok := *token
@@ -855,12 +876,42 @@ func Run(args []string) int {
 		cfg = core.GetDefaultConfig()
 	}
 	core.GlobalQueue.SyncMaxTasksFromConfig(cfg)
+	if *persist || *queueFile != "" {
+		path := core.ParseUserPath(*queueFile)
+		if path == "" {
+			path = filepath.Join(core.GetConfigDir(), "daemon_queue.json")
+		}
+		if err := core.GlobalQueue.EnablePersistence(path); err != nil {
+			fmt.Fprintln(os.Stderr, "daemon queue recovery:", err)
+			return 1
+		}
+	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(*port))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "daemon listen error:", err)
 		return 1
 	}
+	defer func() {
+		for _, task := range core.GlobalQueue.Snapshots() {
+			if task.Status == core.StatusRunning || task.Status == core.StatusQueued {
+				core.GlobalQueue.CancelTask(task.ID)
+			}
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			pending := false
+			for _, task := range core.GlobalQueue.Snapshots() {
+				if task.Status == core.StatusCancelled && !task.Finalized {
+					pending = true
+				}
+			}
+			if !pending {
+				break
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
 	actual := ln.Addr().(*net.TCPAddr).Port
 	fmt.Printf("MEDIACLI_DAEMON_PORT=%d\n", actual)
 

@@ -591,18 +591,47 @@ func (s *Server) handleOpMetadata(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/batch — применить пайплайн к N файлам
 func (s *Server) handleBatch(w http.ResponseWriter, r *http.Request) {
-	var job core.BatchJob
-	if err := json.NewDecoder(r.Body).Decode(&job); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+	var body struct {
+		Inputs         []string        `json:"inputs"`
+		Pipeline       json.RawMessage `json:"pipeline"`
+		OutputDir      string          `json:"output_dir"`
+		OutputTemplate string          `json:"output_template"`
+		Overwrite      bool            `json:"overwrite"`
+		DryRun         bool            `json:"dry_run"`
+		SkipInvalid    bool            `json:"skip_invalid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, "invalid JSON: "+err.Error())
 		return
 	}
-	cfg, _ := core.LoadConfig()
-	ids, err := core.EnqueueBatch(job, cfg)
+	pipeline, err := core.UnmarshalPipeline(body.Pipeline)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, "batch failed: "+err.Error())
+		writeErr(w, 400, "invalid pipeline: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]interface{}{"task_ids": ids, "count": len(ids)})
+	job := core.BatchJob{Inputs: body.Inputs, Pipeline: pipeline, OutputDir: body.OutputDir, OutputTemplate: body.OutputTemplate, Overwrite: body.Overwrite}
+	cfg, _ := core.LoadConfig()
+	if len(job.Inputs) == 0 {
+		writeErr(w, 400, "no inputs")
+		return
+	}
+	report := core.PlanBatch(job, cfg)
+	if body.DryRun {
+		writeJSON(w, 200, report)
+		return
+	}
+	for _, item := range report.Items {
+		if item.Error != "" && !body.SkipInvalid {
+			writeErr(w, 400, item.Error)
+			return
+		}
+	}
+	ids := report.Enqueue()
+	if len(ids) == 0 {
+		writeErr(w, 400, "no valid batch inputs")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]interface{}{"task_ids": ids, "count": len(ids), "report": report})
 }
 
 func (s *Server) handleCancelGroup(w http.ResponseWriter, r *http.Request) {
