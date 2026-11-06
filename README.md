@@ -3,7 +3,7 @@
 
 # MediaCLI
 
-Version: **0.1.2** · `mediacli --version`
+Version: **0.1.3** · `mediacli --version`
 
 **An ultra-fast, keyboard-driven terminal media suite wrapping `yt-dlp` and `FFmpeg`.**  
 *Implemented in Rust, dual-pane TUI, background task engine, and a searchable command palette.*
@@ -59,7 +59,7 @@ A build from GitHub Actions can be installed from the saved archive before it
 is on the registry:
 
 ```bash
-npm install -g ./glob876-mediacli-0.1.2.tgz
+npm install -g ./glob876-mediacli-0.1.3.tgz
 mediacli --version
 ```
 
@@ -116,7 +116,7 @@ confirmation and retains media files. The previous text console is removed.
 
 ---
 
-## CLI 0.1.2
+## CLI 0.1.3
 
 Run without arguments for the TUI, or pass a command for non-interactive use:
 
@@ -133,7 +133,7 @@ Downloads, all media operations, projects, batch processing, size/range exports,
 configuration, presets, history, dependency checks and daemon task management are
 available as commands. [Full CLI reference and examples (Russian)](docs/cli.md).
 
-## TUI 0.1.2
+## TUI 0.1.3
 
 - The terminal queue is saved in `tui_queue.json`. After a restart, unfinished
   jobs appear as interrupted; use **Ctrl+P → Task queue → Retry whole chain**.
@@ -249,7 +249,7 @@ Shortcut for everything-at-once (build-if-stale, npm ci-if-missing,
 Electron download-if-missing, then launch, no sudo needed):
 
 ```bash
-./build.sh --startelectron
+./run.sh
 ```
 
 Shell UI: пустая главная с полупрозрачным полем ссылки (кнопка `→` скачивает,

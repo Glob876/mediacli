@@ -98,7 +98,7 @@ fn authenticated_api_matches_electron_contract() {
         .unwrap();
     assert_eq!(response.status(), 401);
     let status = daemon.request("GET", "/api/status", json!({}));
-    assert_eq!(status["version"], "0.1.2");
+    assert_eq!(status["version"], mediacli::VERSION);
     assert!(status["dependencies"].is_array());
     for (endpoint, key) in [
         ("/api/presets", "video_presets"),
