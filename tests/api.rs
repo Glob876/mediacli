@@ -231,3 +231,45 @@ fn legacy_queue_is_imported_as_interrupted_with_a_backup() {
     assert_eq!(tasks[1].plan.commands.len(), 2);
     assert!(queue.with_extension("go-backup.json").is_file());
 }
+
+#[test]
+fn remote_cli_uses_daemon_settings_and_presets() {
+    let daemon = Daemon::start();
+    let local = daemon.directory.path().join("local-cli-config");
+    let invoke = |args: &[&str]| {
+        let output = Command::new(env!("CARGO_BIN_EXE_mediacli"))
+            .args(args)
+            .args(["--server", &daemon.base, "--token", "test-token", "--json"])
+            .env("XDG_CONFIG_HOME", &local)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let value = invoke(&["config", "set", "language", "ru"]);
+    assert_eq!(value["language"], "ru");
+    assert!(!local.join("mediacli/config.json").exists());
+    assert_eq!(
+        daemon.request("GET", "/api/config", json!({}))["language"],
+        "ru"
+    );
+    let preset = daemon.directory.path().join("preset.json");
+    std::fs::write(
+        &preset,
+        b"{\"operations\":[{\"type\":\"scale\",\"config\":{\"width\":80}}]}",
+    )
+    .unwrap();
+    invoke(&[
+        "presets",
+        "save",
+        "test",
+        "--file",
+        preset.to_str().unwrap(),
+    ]);
+    let value = invoke(&["presets", "show", "test"]);
+    assert_eq!(value["id"], "test");
+}

@@ -46,6 +46,8 @@ pub struct Plan {
     pub replacement: Option<Replacement>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external: Option<ExternalTranscode>,
+    #[serde(default)]
+    pub duration_seconds: f64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalTranscode {
@@ -972,6 +974,7 @@ pub fn build(p: &Pipeline, cfg: &Value) -> Result<Plan> {
         target: requested,
         replacement: None,
         external: None,
+        duration_seconds: duration,
     })
 }
 
@@ -1011,6 +1014,10 @@ impl Replacement {
         );
         let same = same_file::is_same_file(&self.input, &self.final_path).unwrap_or(false)
             || self.input == self.final_path;
+        ensure!(
+            same || !Path::new(&self.final_path).exists(),
+            "replacement destination appeared during conversion; original and temporary preserved"
+        );
         fs::rename(&self.temporary, &self.final_path)
             .context("install converted file; original preserved")?;
         if !same {

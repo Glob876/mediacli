@@ -180,7 +180,16 @@ async fn handle_inner(
             tokio::task::spawn_blocking(move || -> Result<PathBuf> {
                 let directory = config::directory().join("thumbs");
                 std::fs::create_dir_all(&directory)?;
-                let target = directory.join(format!("{}.jpg", media::timestamp()));
+                use std::hash::{Hash, Hasher};
+                let metadata = std::fs::metadata(&source)?;
+                let mut hash = std::collections::hash_map::DefaultHasher::new();
+                source.hash(&mut hash);
+                metadata.len().hash(&mut hash);
+                metadata.modified()?.hash(&mut hash);
+                let target = directory.join(format!("{:x}.jpg", hash.finish()));
+                if target.is_file() {
+                    return Ok(target);
+                }
                 media::capture(
                     &[
                         config::tool(&cfg, "ffmpeg"),
@@ -269,6 +278,15 @@ fn dispatch(
             Ok((202, json!({"task_id":id})))
         }
         ("POST", "/api/downloads") => {
+            let mut cfg = cfg;
+            let mode = string(&value, "transcode_mode");
+            if !mode.is_empty() {
+                ensure!(
+                    ["embedded", "external"].contains(&mode.as_str()),
+                    "invalid transcode_mode"
+                );
+                cfg["transcode_mode"] = json!(mode);
+            }
             let url = string(&value, "url");
             let fields = if value["fields"].is_null() {
                 json!({})
@@ -520,6 +538,7 @@ fn dispatch(
                         target: string(entry, "target"),
                         replacement: None,
                         external: None,
+                        duration_seconds: 0.0,
                     },
                     &string(entry, "type"),
                     &string(entry, "source"),

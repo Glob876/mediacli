@@ -35,6 +35,7 @@ pub fn defaults() -> Value {
     value["download_dir"] = json!(home.join("Downloads/MediaCLI"));
     value["cookies_file"] = json!(directory().join("cookies.txt"));
     value["archive_file"] = json!(directory().join("archive.txt"));
+    value["media_presets"] = json!([]);
     value["ffprobe_path"] = json!("");
     value["ffmpeg_path"] = json!("");
     value

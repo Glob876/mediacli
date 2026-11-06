@@ -402,3 +402,32 @@ fn cli_timeout_waits_for_process_finalization() {
     ]);
     assert_eq!(result.status.code(), Some(124));
 }
+#[test]
+fn cookies_are_private_and_dry_run_keeps_them_unchanged() {
+    let fixture = Fixture::new();
+    let file = fixture.path("cookies.txt");
+    fixture.ok(&[
+        "cookies",
+        "add",
+        ".example.com",
+        "session",
+        "secret",
+        "--file",
+        text(&file),
+    ]);
+    let saved = std::fs::read(&file).unwrap();
+    fixture.ok(&[
+        "cookies",
+        "add",
+        ".example.com",
+        "other",
+        "value",
+        "--file",
+        text(&file),
+        "--dry-run",
+    ]);
+    assert_eq!(std::fs::read(&file).unwrap(), saved);
+    let cookies = fixture.ok(&["cookies", "list", "--file", text(&file), "--json"]);
+    assert_eq!(cookies.as_array().unwrap().len(), 1);
+    assert_eq!(cookies[0]["value"], "secret");
+}

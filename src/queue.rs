@@ -514,6 +514,10 @@ impl Queue {
             }
             if let Some(progress) = progress(&line) {
                 task.progress = progress;
+            } else if task.plan.duration_seconds > 0.0
+                && let Some(seconds) = ffmpeg_time(&line)
+            {
+                task.progress = (seconds / task.plan.duration_seconds * 100.0).clamp(0.0, 100.0);
             }
             task.log_tail.push(line);
             if task.log_tail.len() > 10000 {
@@ -678,6 +682,7 @@ fn import_legacy(record: &Value, records: &[Value]) -> Result<Task> {
             target: config::string(old, "Target"),
             replacement,
             external: None,
+            duration_seconds: 0.0,
         },
         output_files: Vec::new(),
         cancellation: CancellationToken::new(),
@@ -698,4 +703,10 @@ fn cleanup_pass_logs(command: &[String]) {
             let _ = std::fs::remove_file(format!("{prefix}{suffix}"));
         }
     }
+}
+
+pub fn ffmpeg_time(line: &str) -> Option<f64> {
+    let marker = line.find("time=")?;
+    let time = line[marker + 5..].split_whitespace().next()?;
+    media::parse_time(time).ok()
 }

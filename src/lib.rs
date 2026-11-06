@@ -4,6 +4,7 @@ pub mod daemon;
 pub mod download;
 pub mod media;
 pub mod queue;
+pub mod remote;
 pub mod storage;
 pub mod tui;
 

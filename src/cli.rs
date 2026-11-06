@@ -238,7 +238,15 @@ pub fn duration(raw: &str) -> Result<Duration> {
 }
 
 pub async fn execute(command: &str, args: &Arguments) -> Result<()> {
-    let mut cfg = config::load()?;
+    validate_arguments(command, args)?;
+    if crate::remote::execute(command, args).await? {
+        return Ok(());
+    }
+    let mut cfg = if server(args).is_empty() {
+        config::load()?
+    } else {
+        request(args, "GET", "/api/config", None).await?
+    };
     if args.has("transcode") {
         let mode = args.value("transcode");
         if !["embedded", "external"].contains(&mode.as_str()) {
@@ -255,7 +263,16 @@ pub async fn execute(command: &str, args: &Arguments) -> Result<()> {
     {
         let action = args.positionals.first().map(String::as_str).unwrap_or("");
         if [
-            "set", "reset", "import", "export", "save", "delete", "clear", "retry", "cancel",
+            "set",
+            "reset",
+            "import",
+            "export",
+            "save",
+            "delete",
+            "clear",
+            "retry",
+            "cancel",
+            "cancel-group",
         ]
         .contains(&action)
         {
@@ -269,15 +286,28 @@ pub async fn execute(command: &str, args: &Arguments) -> Result<()> {
         "config" => admin_config(args, &cfg),
         "presets" => admin_presets(args, &cfg),
         "history" => admin_history(args, &cfg).await,
-        "doctor" => emit(&dependencies(&cfg), args.boolean("json")),
-        "cookies" => {
-            let mode = string(&cfg, "cookies_mode");
-            emit(
-                &json!({"mode":mode,"file":cfg["cookies_file"],"browser":cfg["cookies_browser"],"exists":config::user_path(&string(&cfg,"cookies_file")).is_file()}),
-                args.boolean("json"),
-            )
+        "doctor" => {
+            let dependencies = dependencies(&cfg);
+            emit(&dependencies, args.boolean("json"))?;
+            ensure!(
+                dependencies
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|d| d["available"] == true),
+                "required media tools are missing"
+            );
+            Ok(())
         }
-        "library" => emit(&crate::daemon::library(&cfg)?, args.boolean("json")),
+        "cookies" => cookies(args, &cfg),
+        "library" => {
+            let value = if let Some(directory) = args.positionals.first() {
+                crate::daemon::browse(config::user_path(directory))?
+            } else {
+                crate::daemon::library(&cfg)?
+            };
+            emit(&value, args.boolean("json"))
+        }
         "probe" | "inspect" => {
             let input = args
                 .positionals
@@ -707,6 +737,31 @@ pub async fn remote_queue(args: &Arguments) -> Result<()> {
         .map(String::as_str)
         .unwrap_or("list");
     let id = args.positionals.get(1).cloned().unwrap_or_default();
+    if action == "cancel-group" {
+        if args.boolean("dry-run") {
+            return emit(&json!({"cancel_group":id}), args.boolean("json"));
+        }
+        return emit(
+            &request(
+                args,
+                "POST",
+                &format!("/api/tasks/group/{id}/cancel"),
+                Some(json!({})),
+            )
+            .await?,
+            args.boolean("json"),
+        );
+    }
+    if action == "retry" {
+        let response = request(
+            args,
+            "POST",
+            &format!("/api/tasks/{id}/retry"),
+            Some(json!({})),
+        )
+        .await?;
+        return crate::remote::submitted(response, args).await;
+    }
     match action {
         "list" => emit(
             &request(args, "GET", "/api/tasks", None).await?,
@@ -920,6 +975,7 @@ async fn admin_history(args: &Arguments, cfg: &Value) -> Result<()> {
                     target: string(entry, "target"),
                     replacement: None,
                     external: None,
+                    duration_seconds: 0.0,
                 },
                 &string(entry, "type"),
                 &string(entry, "source"),
@@ -1002,7 +1058,18 @@ async fn batch(args: &Arguments, cfg: &Value) -> Result<()> {
     let mut build_args = args.clone();
     build_args.positionals = vec![inputs[0].clone()];
     build_args.flags.remove("input");
-    let pipeline = make_pipeline("batch", &build_args)?;
+    let pipeline = if server(args).is_empty() {
+        make_pipeline("batch", &build_args)?
+    } else {
+        crate::remote::pipeline("batch", &build_args).await?
+    };
+    if !server(args).is_empty() {
+        let response=request(args,"POST","/api/batch",Some(json!({"pipeline":pipeline,"inputs":inputs,"output_dir":args.value("output-dir"),"output_template":args.value("output-template"),"dry_run":args.boolean("dry-run"),"skip_invalid":args.boolean("skip-invalid")}))).await?;
+        if args.boolean("dry-run") {
+            return emit(&response, args.boolean("json"));
+        }
+        return crate::remote::submitted(response, args).await;
+    }
     let (report, plans) = batch_report(
         &inputs,
         &pipeline,
@@ -1116,6 +1183,7 @@ pub fn ranges_plans(args: &Arguments, cfg: &Value) -> Result<Vec<Plan>> {
             target,
             replacement: None,
             external: None,
+            duration_seconds: 0.0,
         }]);
     }
     Ok(plans)
@@ -1186,4 +1254,79 @@ fn validate_arguments(command: &str, args: &Arguments) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn cookies(args: &Arguments, cfg: &Value) -> Result<()> {
+    let action = args
+        .positionals
+        .first()
+        .map(String::as_str)
+        .unwrap_or("list");
+    let file = if args.has("file") {
+        args.value("file")
+    } else {
+        string(cfg, "cookies_file")
+    };
+    let path = config::user_path(&file);
+    if action == "add" {
+        if args.positionals.len() != 4 {
+            return Err(usage("cookies add DOMAIN NAME VALUE [--file FILE]"));
+        }
+        for value in &args.positionals[1..] {
+            if value.contains(['\r', '\n', '\t']) {
+                return Err(usage("cookie fields cannot contain tabs or newlines"));
+            }
+        }
+        if args.boolean("dry-run") {
+            return emit(
+                &json!({"file":file,"domain":args.positionals[1],"name":args.positionals[2],"value":"***"}),
+                args.boolean("json"),
+            );
+        }
+        let parent = path.parent().unwrap_or(Path::new("."));
+        std::fs::create_dir_all(parent)?;
+        let lock_path = path.with_extension("cookie-lock");
+        let lock = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(lock_path)?;
+        fs2::FileExt::lock_exclusive(&lock)?;
+        let mut bytes = match std::fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                b"# Netscape HTTP Cookie File\n".to_vec()
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if !bytes.ends_with(b"\n") {
+            bytes.push(b'\n');
+        }
+        bytes.extend_from_slice(
+            format!(
+                "{}\tTRUE\t/\tFALSE\t0\t{}\t{}\n",
+                args.positionals[1], args.positionals[2], args.positionals[3]
+            )
+            .as_bytes(),
+        );
+        storage::write_private(&path, &bytes)?;
+        fs2::FileExt::unlock(&lock)?;
+        return emit(&json!({"saved":file}), args.boolean("json"));
+    }
+    if action != "list" {
+        return Err(usage("cookies list|add"));
+    }
+    let bytes = std::fs::read_to_string(&path)?;
+    let mut cookies = Vec::new();
+    for raw in bytes.lines() {
+        let line = raw.strip_prefix("#HttpOnly_").unwrap_or(raw);
+        if line.starts_with('#') || line.trim().is_empty() {
+            continue;
+        }
+        let fields: Vec<_> = line.split('\t').collect();
+        if fields.len() == 7 {
+            cookies.push(json!({"domain":fields[0],"name":fields[5],"value":fields[6],"path":fields[2],"secure":fields[3]=="TRUE","expires":fields[4]}));
+        }
+    }
+    emit(&json!(cookies), args.boolean("json"))
 }

@@ -270,6 +270,7 @@ pub fn build(
         url.into(),
     ]);
     Ok(Plan {
+        duration_seconds: 0.0,
         commands: vec![command],
         target: media::text_path(&directory),
         replacement: None,
