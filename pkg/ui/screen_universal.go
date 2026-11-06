@@ -23,6 +23,10 @@ func ScreenUniversal(s tcell.Screen, cfg *core.Config, initialPath string) {
 	}
 	path := strings.TrimSpace(initialPath)
 	var ops []core.Operation
+	session := newEditorSession("editor")
+	if path == "" {
+		path, ops = session.restore(s, cfg)
+	}
 	for {
 		if path == "" {
 			input, ok := TextInput(s, cfg, tr("Редактор Alt+3", "Alt+3 editor"), tr("Путь к видео или аудио:", "Video or audio file path:"), "", T(*cfg, "footer_input"))
@@ -35,6 +39,9 @@ func ScreenUniversal(s tcell.Screen, cfg *core.Config, initialPath string) {
 				continue
 			}
 			path, ops = candidate, nil
+		}
+		if err := session.capture(path, ops); err != nil {
+			ShowMessage(s, cfg, "Autosave", []string{err.Error()}, T(*cfg, "footer_message"))
 		}
 		info, _ := core.ProbeMediaInfoWithConfig(path, *cfg)
 		summary := filepath.Base(path)
@@ -55,10 +62,20 @@ func ScreenUniversal(s tcell.Screen, cfg *core.Config, initialPath string) {
 			tr("Убрать последнее действие", "Remove last action"),
 			tr("Другой файл", "Choose another file"),
 			tr("Расширенный Pipeline", "Advanced pipeline"),
+			tr("Экспорт под размер", "Export to size"),
+			tr("Фрагменты / звуковая волна", "Ranges / waveform"),
+			tr("Отменить (Ctrl+Z)", "Undo (Ctrl+Z)"),
+			tr("Повторить (Ctrl+Y)", "Redo (Ctrl+Y)"),
 			tr("Закрыть", "Close"),
 		}
-		choice := RunMenu(s, cfg, tr("Редактор Alt+3", "Alt+3 editor"), items, summary, T(*cfg, "footer_nav"))
-		if choice < 0 || choice == 10 {
+		choice := runMenu(s, cfg, tr("Редактор Alt+3", "Alt+3 editor"), items, summary, T(*cfg, "footer_nav")+" · Ctrl+Z / Ctrl+Y", true)
+		if choice == -2 {
+			choice = 12
+		}
+		if choice == -3 {
+			choice = 13
+		}
+		if choice < 0 || choice == 14 {
 			return
 		}
 		switch choice {
@@ -170,6 +187,15 @@ func ScreenUniversal(s tcell.Screen, cfg *core.Config, initialPath string) {
 			}
 		case 8:
 			path, ops = "", nil
+		case 10:
+			screenSizeExport(s, cfg, path, ops, session)
+		case 11:
+			screenRanges(s, cfg, path)
+		case 12, 13:
+			nextPath, nextOps, err := session.move(choice == 13)
+			if err == nil {
+				path, ops = nextPath, nextOps
+			}
 		case 9:
 			ScreenPipeline(s, cfg)
 		}

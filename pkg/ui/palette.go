@@ -229,6 +229,9 @@ func CheckPaletteHotkey(event *tcell.EventKey) bool {
 
 func screenPaletteQueue(screen tcell.Screen, config *core.Config) {
 	title := paletteText(*config, "Очередь задач", "Task queue")
+	if err := core.GlobalQueue.PersistenceError(); err != nil {
+		ShowMessage(screen, config, title, []string{err.Error()}, T(*config, "footer_message"))
+	}
 	for {
 		tasks := core.GlobalQueue.Snapshots()
 		if len(tasks) == 0 {
@@ -249,14 +252,25 @@ func screenPaletteQueue(screen tcell.Screen, config *core.Config) {
 		actions := []string{paletteText(*config, "Посмотреть журнал", "View logs")}
 		if active {
 			actions = append(actions, paletteText(*config, "Отменить задачу", "Cancel task"))
+		} else {
+			actions = append(actions, paletteText(*config, "Повторить всю цепочку", "Retry whole chain"))
 		}
 		action := RunMenu(screen, config, title, actions, task.Title, T(*config, "footer_nav"))
 		if action == 0 {
 			logs := core.GlobalQueue.TaskLogs(task.ID)
+			if task.Status == core.StatusFailed {
+				logs = append(logs, core.ErrorHint(logs, IsRussian(*config)))
+			}
 			ShowMessage(screen, config, task.Title, logs, T(*config, "footer_message"))
 		}
 		if action == 1 {
-			core.GlobalQueue.CancelTask(task.ID)
+			if active {
+				core.GlobalQueue.CancelTask(task.ID)
+			} else {
+				if _, err := core.GlobalQueue.RetryTask(task.ID); err != nil {
+					ShowMessage(screen, config, title, []string{err.Error()}, T(*config, "footer_message"))
+				}
+			}
 		}
 	}
 }

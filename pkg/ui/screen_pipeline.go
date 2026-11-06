@@ -14,7 +14,9 @@ import (
 )
 
 func ScreenPipeline(s tcell.Screen, cfg *core.Config) {
-	fpath, ok := TextInput(s, cfg, T(*cfg, "pipeline_title"), T(*cfg, "aspect_prompt_file"), "", T(*cfg, "footer_input"))
+	session := newEditorSession("pipeline")
+	restored, restoredOps := session.restore(s, cfg)
+	fpath, ok := TextInput(s, cfg, T(*cfg, "pipeline_title"), T(*cfg, "aspect_prompt_file"), restored, T(*cfg, "footer_input"))
 	if !ok || strings.TrimSpace(fpath) == "" {
 		return
 	}
@@ -25,7 +27,13 @@ func ScreenPipeline(s tcell.Screen, cfg *core.Config) {
 	}
 
 	var ops []core.Operation
+	if p == restored {
+		ops = restoredOps
+	}
 	for {
+		if err := session.capture(p, ops); err != nil {
+			ShowMessage(s, cfg, "Autosave", []string{err.Error()}, T(*cfg, "footer_message"))
+		}
 		// Build menu labels
 		items := []string{
 			T(*cfg, "pipeline_add_transcode"),
@@ -42,6 +50,10 @@ func ScreenPipeline(s tcell.Screen, cfg *core.Config) {
 			T(*cfg, "pipeline_run"),
 			T(*cfg, "pipeline_save_preset"),
 			T(*cfg, "pipeline_clear"),
+			paletteText(*cfg, "Экспорт под размер", "Export to size"),
+			paletteText(*cfg, "Фрагменты / звуковая волна", "Ranges / waveform"),
+			paletteText(*cfg, "Отменить (Ctrl+Z)", "Undo (Ctrl+Z)"),
+			paletteText(*cfg, "Повторить (Ctrl+Y)", "Redo (Ctrl+Y)"),
 			T(*cfg, "pipeline_cancel"),
 		}
 		if len(ops) > 0 {
@@ -57,8 +69,14 @@ func ScreenPipeline(s tcell.Screen, cfg *core.Config) {
 			sub = T(*cfg, "pipeline_empty")
 		}
 
-		idx := RunMenu(s, cfg, T(*cfg, "pipeline_title"), items, sub, T(*cfg, "footer_nav"))
-		if idx < 0 || idx == 14 {
+		idx := runMenu(s, cfg, T(*cfg, "pipeline_title"), items, sub, T(*cfg, "footer_nav")+" · Ctrl+Z / Ctrl+Y", true)
+		if idx == -2 {
+			idx = 16
+		}
+		if idx == -3 {
+			idx = 17
+		}
+		if idx < 0 || idx == 18 {
 			return
 		}
 		switch idx {
@@ -294,6 +312,15 @@ func ScreenPipeline(s tcell.Screen, cfg *core.Config) {
 				ShowMessage(s, cfg, "Preset", []string{"Saved: " + name}, T(*cfg, "footer_message"))
 			}
 
+		case 14:
+			screenSizeExport(s, cfg, p, ops, session)
+		case 15:
+			screenRanges(s, cfg, p)
+		case 16, 17:
+			nextPath, nextOps, err := session.move(idx == 17)
+			if err == nil {
+				p, ops = nextPath, nextOps
+			}
 		case 13: // clear
 			ops = nil
 		}
@@ -413,12 +440,23 @@ func ScreenBatch(s tcell.Screen, cfg *core.Config) {
 		Pipeline:  core.Pipeline{Operations: []core.Operation{op}},
 		OutputDir: dir,
 	}
-	ids, err := core.EnqueueBatch(job, *cfg)
-	if err != nil {
-		ShowMessage(s, cfg, T(*cfg, "batch_title"), []string{err.Error()}, T(*cfg, "footer_message"))
+	report := core.PlanBatch(job, *cfg)
+	accepted := 0
+	for _, item := range report.Items {
+		if item.Error == "" {
+			accepted++
+		}
+	}
+	summary := fmt.Sprintf(paletteText(*cfg, "Готово: %d; пропущено: %d", "Ready: %d; skipped: %d"), accepted, len(report.Items)-accepted)
+	ShowMessage(s, cfg, T(*cfg, "batch_title"), append([]string{summary}, report.Lines()...), T(*cfg, "footer_message"))
+	if accepted == 0 {
 		return
 	}
-	ShowMessage(s, cfg, T(*cfg, "batch_title"), []string{fmt.Sprintf("Enqueued %d tasks.", len(ids))}, T(*cfg, "footer_message"))
+	if RunMenu(s, cfg, T(*cfg, "batch_title"), []string{paletteText(*cfg, "Запустить проверенные файлы", "Run validated files"), T(*cfg, "pipeline_cancel")}, summary, T(*cfg, "footer_nav")) != 0 {
+		return
+	}
+	ids := report.Enqueue()
+	ShowMessage(s, cfg, T(*cfg, "batch_title"), []string{fmt.Sprintf("%d tasks", len(ids))}, T(*cfg, "footer_message"))
 }
 
 func ScreenInspector(s tcell.Screen, cfg *core.Config) {

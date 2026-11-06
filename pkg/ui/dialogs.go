@@ -10,6 +10,10 @@ import (
 )
 
 func RunMenu(s tcell.Screen, cfg *core.Config, title string, items []string, subtitle string, footer string) int {
+	return runMenu(s, cfg, title, items, subtitle, footer, false)
+}
+
+func runMenu(s tcell.Screen, cfg *core.Config, title string, items []string, subtitle string, footer string, editorKeys bool) int {
 	if len(items) == 0 {
 		return -1
 	}
@@ -75,6 +79,14 @@ func RunMenu(s tcell.Screen, cfg *core.Config, title string, items []string, sub
 				}
 			}
 		case *tcell.EventKey:
+			if editorKeys {
+				if ev.Key() == tcell.KeyCtrlZ {
+					return -2
+				}
+				if ev.Key() == tcell.KeyCtrlY {
+					return -3
+				}
+			}
 			if CheckPaletteHotkey(ev) {
 				GlobalPalette.Open(s, cfg)
 				continue

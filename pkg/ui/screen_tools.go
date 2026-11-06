@@ -40,7 +40,7 @@ func ScreenConvert(s tcell.Screen, cfg *core.Config) {
 	preset := core.ConvertPresets[pi]
 	plan := core.PrepareFFmpegOutput(p, preset.Ext, preset.Suffix, *cfg)
 
-	cmdList := append([]string{"ffmpeg", "-y", "-i", p}, preset.FFmpegFlags...)
+	cmdList := append([]string{core.FFmpegBin(*cfg), "-y", "-i", p}, preset.FFmpegFlags...)
 	cmdList = append(cmdList, plan.TempOutputPath)
 	RunWithLogHook(s, cfg, cmdList, "Convert File", filepath.Base(p), plan.TargetDisplay, plan.OnComplete)
 }
@@ -73,7 +73,7 @@ func ScreenTrim(s tcell.Screen, cfg *core.Config) {
 	ext := filepath.Ext(p)
 	plan := core.PrepareFFmpegOutput(p, ext, "_trimmed", *cfg)
 
-	cmdList := []string{"ffmpeg", "-y", "-ss", strings.TrimSpace(startT)}
+	cmdList := []string{core.FFmpegBin(*cfg), "-y", "-ss", strings.TrimSpace(startT)}
 	if strings.TrimSpace(endT) != "" {
 		cmdList = append(cmdList, "-to", strings.TrimSpace(endT))
 	}

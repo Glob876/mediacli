@@ -3,7 +3,7 @@
 
 # MediaCLI
 
-Version: **0.1.1** · `mediacli --version`
+Version: **0.1.2** · `mediacli --version`
 
 **An ultra-fast, keyboard-driven terminal media suite wrapping `yt-dlp` and `FFmpeg`.**  
 *Engineered in Go with zero runtime overhead, dual-pane TUI, background task engine, and a searchable command palette.*
@@ -59,7 +59,7 @@ A build from GitHub Actions can be installed from the saved archive before it
 is on the registry:
 
 ```bash
-npm install -g ./glob876-mediacli-0.1.1.tgz
+npm install -g ./glob876-mediacli-0.1.2.tgz
 mediacli --version
 ```
 
@@ -113,6 +113,37 @@ Actions include downloads, conversion, trimming, pipelines, the universal
 editor, the task queue, history, settings, themes, and dependency diagnostics.
 Queue actions show logs and cancel active tasks. Clearing history requires
 confirmation and retains media files. The previous text console is removed.
+
+---
+
+## TUI 0.1.2
+
+- The terminal queue is saved in `tui_queue.json`. After a restart, unfinished
+  jobs appear as interrupted; use **Ctrl+P → Task queue → Retry whole chain**.
+  Downloads reuse yt-dlp's partial files when possible; encodes start again and
+  preserve existing output files. Original-replacement conversions retain their
+  temporary-file finalization plan.
+- **Alt+3** and **Pipeline** autosave separate drafts and offer restoration.
+  **Ctrl+Z / Ctrl+Y** undo and redo edits; the same actions are available in menus.
+- **Export to size** uses H.264/AAC, decimal MB, a 4% container reserve, and one
+  or two passes. The size is approximate. The chosen size and pass mode are saved
+  with the editor draft.
+- **Ranges / waveform** opens an independent cutting tool. **←/→** move one frame
+  according to the source's reported average FPS; **↑/↓** move one second.
+  **I** marks a start, **O** appends a range, **D** removes the last range,
+  **G** jumps to a time in seconds, **Ctrl+Z / Ctrl+Y** undo/redo range edits.
+  **Enter** exports separate clips or joins them in listed order. Accurate cuts
+  re-encode; main-editor operations are not applied. The waveform covers the
+  current 60-second window, and ranges are autosaved for the current source.
+- Batch processing checks inputs, existing destinations and output-name
+  collisions before queueing. Review the report, then start valid files.
+- History supports search and repeating saved commands. Old records without
+  commands remain readable. Original-replacement jobs are repeated from the queue.
+  History and queue files use private permissions and atomic replacement;
+  concurrent history updates within the app are serialized. History is no longer
+  truncated to 50 entries.
+
+These features use the existing terminal menus. Electron is unchanged.
 
 ---
 

@@ -80,7 +80,7 @@ func loadRunnerView(cfg *core.Config, taskID int, commandLine string) (lines []s
 	if !exists {
 		return nil, "", 0, "", false, false
 	}
-	completed = snapshot.Status == core.StatusDone || snapshot.Status == core.StatusFailed || snapshot.Status == core.StatusCancelled
+	completed = snapshot.Status == core.StatusDone || snapshot.Status == core.StatusFailed || snapshot.Status == core.StatusCancelled || snapshot.Status == core.StatusInterrupted
 	lines = []string{commandLine, ""}
 	taskLogs := core.GlobalQueue.TaskLogs(taskID)
 	lines = append(lines, taskLogs...)
@@ -97,6 +97,7 @@ func loadRunnerView(cfg *core.Config, taskID int, commandLine string) (lines []s
 			statusMessage = T(*cfg, "log_cancelled")
 		} else if snapshot.Status == core.StatusFailed {
 			statusMessage = T(*cfg, "log_finished_err", snapshot.ExitCode)
+			lines = append(lines, core.ErrorHint(taskLogs, IsRussian(*cfg)))
 		}
 		lines = append(lines, statusMessage)
 	}
