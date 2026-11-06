@@ -1908,11 +1908,16 @@ impl App {
                         task.log_tail.join("\n")
                     } else {
                         format!(
-                            "{}\n{}\n\n{} → {}\n\n{:.1}%\n{}",
+                            "{}\n{}\n\n{} → {}\n\n{} {:.1}%\n{}",
                             task.title,
                             task.stage,
                             task.source,
                             task.target,
+                            render_progress_bar(
+                                task.progress,
+                                regions[1].width.saturating_sub(12).min(44) as usize,
+                                &string(&self.cfg, "progress_style")
+                            ),
                             task.progress,
                             task.log_tail
                                 .iter()
@@ -2171,14 +2176,30 @@ impl App {
             );
         }
         if let Some(choice) = &self.choice {
-            let popup = centered(area, 65, 70);
-            frame.render_widget(Clear, popup);
-            frame.render_widget(Block::default().style(base_style), popup);
+            let mut popup = centered(area, 65, 70);
             let title = self
                 .form
                 .as_ref()
                 .map(|form| form.fields[form.selected].key.as_str())
                 .unwrap_or("");
+            if title == "progress_style" {
+                popup.height = popup.height.min(choice.values.len() as u16 + 7);
+                popup.y = area.y + (area.height - popup.height) / 2;
+            }
+            frame.render_widget(Clear, popup);
+            frame.render_widget(Block::default().style(base_style), popup);
+            let show_preview = title == "progress_style" && popup.height >= 8;
+            let regions = if show_preview {
+                Layout::default()
+                    .constraints([
+                        Constraint::Min(3),
+                        Constraint::Length(5.min(popup.height - 4)),
+                    ])
+                    .split(popup)
+                    .to_vec()
+            } else {
+                vec![popup]
+            };
             let items: Vec<_> = choice
                 .values
                 .iter()
@@ -2211,9 +2232,27 @@ impl App {
                     )
                     .highlight_style(highlight)
                     .highlight_symbol("› "),
-                popup,
+                regions[0],
                 &mut ListState::default().with_selected(Some(choice.selected)),
             );
+            if show_preview {
+                let preview = regions[1];
+                let selected_style = &choice.values[choice.selected];
+                let width = preview.width.saturating_sub(12).min(44) as usize;
+                let bar = render_progress_bar(65.0, width, selected_style);
+                let padding = if preview.height >= 5 { "\n" } else { "" };
+                frame.render_widget(
+                    Paragraph::new(format!("{padding}{bar} 65%"))
+                        .style(style)
+                        .alignment(ratatui::layout::Alignment::Center)
+                        .block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .title(self.tr(" Пример ", " Preview ")),
+                        ),
+                    preview,
+                );
+            }
         }
         if let Some(search) = &self.palette {
             let popup = centered(area, 80, 80);
@@ -2577,6 +2616,33 @@ fn setting_label(key: &str, russian: bool) -> &str {
     }
 }
 
+// Keep the preview and real task display identical to the original TUI styles.
+fn render_progress_bar(percent: f64, width: usize, style: &str) -> String {
+    let percent = if percent.is_finite() {
+        percent.clamp(0.0, 100.0)
+    } else {
+        0.0
+    };
+    let inner_width = width.saturating_sub(2).max(1);
+    let filled = (inner_width as f64 * percent / 100.0) as usize;
+    let unfilled = inner_width - filled;
+    let bar = match style {
+        "dots" => format!("{}{}", "●".repeat(filled), "○".repeat(unfilled)),
+        "minimal" => format!("{}{}", "#".repeat(filled), "-".repeat(unfilled)),
+        "classic" => {
+            let arrow = if filled > 0 && unfilled > 0 { ">" } else { "" };
+            format!(
+                "{}{}{}",
+                "=".repeat(filled),
+                arrow,
+                " ".repeat(unfilled.saturating_sub(arrow.len()))
+            )
+        }
+        _ => format!("{}{}", "█".repeat(filled), "░".repeat(unfilled)),
+    };
+    format!("[{bar}]")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2634,6 +2700,37 @@ mod tests {
                 assert_eq!(cell.fg, ratatui::style::Color::DarkGray);
             }
         }
+    }
+
+    #[test]
+    fn progress_style_preview_tracks_highlight_without_saving() {
+        let mut app = app();
+        app.open("settings").unwrap();
+        let saved = app.cfg["progress_style"].clone();
+        app.edit_setting("progress_style").unwrap();
+        let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+        for style in ["blocks", "classic", "dots", "minimal"] {
+            terminal.draw(|frame| app.draw(frame)).unwrap();
+            let buffer = terminal.backend().buffer();
+            let rendered = buffer
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert!(rendered.contains("Preview"));
+            assert!(rendered.contains(&render_progress_bar(65.0, 40, style)));
+            assert_eq!(app.cfg["progress_style"], saved);
+            app.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+                .unwrap();
+        }
+        for (width, height) in [(24, 8), (40, 12)] {
+            let mut small =
+                Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+            small.draw(|frame| app.draw(frame)).unwrap();
+        }
+        app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+            .unwrap();
+        assert_eq!(app.cfg["progress_style"], saved);
     }
 
     #[test]
