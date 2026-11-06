@@ -24,6 +24,7 @@ impl Daemon {
         let directory = tempfile::tempdir().unwrap();
         let mut child = Command::new(env!("CARGO_BIN_EXE_mediacli"))
             .args(["daemon", "--port", "0", "--persist"])
+            .env("HOME", directory.path())
             .env("XDG_CONFIG_HOME", directory.path())
             .env("MEDIACLI_TOKEN", "test-token")
             .stdout(Stdio::piped())
@@ -240,6 +241,7 @@ fn remote_cli_uses_daemon_settings_and_presets() {
         let output = Command::new(env!("CARGO_BIN_EXE_mediacli"))
             .args(args)
             .args(["--server", &daemon.base, "--token", "test-token", "--json"])
+            .env("HOME", &local)
             .env("XDG_CONFIG_HOME", &local)
             .output()
             .unwrap();

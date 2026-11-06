@@ -46,6 +46,8 @@ impl Fixture {
     fn run(&self, args: &[&str]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_mediacli"))
             .args(args)
+            .env("HOME", self.directory.path())
+            .env("USERPROFILE", self.directory.path())
             .env("XDG_CONFIG_HOME", self.directory.path().join("config"))
             .env("APPDATA", self.directory.path().join("config"))
             .env_remove("MEDIACLI_SERVER")
