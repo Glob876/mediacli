@@ -81,20 +81,14 @@ func ExpandBatch(job BatchJob, cfg Config) ([]Pipeline, error) {
 
 // EnqueueBatch ставит пакет в очередь и возвращает IDs.
 func EnqueueBatch(job BatchJob, cfg Config) ([]int, error) {
-	pipelines, err := ExpandBatch(job, cfg)
-	if err != nil {
-		return nil, err
+	if len(job.Inputs) == 0 {
+		return nil, fmt.Errorf("no inputs")
 	}
-	var ids []int
-	for _, p := range pipelines {
-		cmds, err := BuildPipeline(p, cfg)
-		if err != nil {
-			continue
-		}
-		tasks := GlobalQueue.EnqueueChain(cmds, "Batch: "+p.Name, strings.Join(p.Inputs, ","), p.Output.Path, "")
-		for _, task := range tasks {
-			ids = append(ids, task.ID)
+	report := PlanBatch(job, cfg)
+	for _, item := range report.Items {
+		if item.Error != "" {
+			return nil, fmt.Errorf("%s: %s", item.Input, item.Error)
 		}
 	}
-	return ids, nil
+	return report.Enqueue(), nil
 }

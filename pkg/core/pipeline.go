@@ -18,9 +18,11 @@ type Pipeline struct {
 }
 
 type OutputSpec struct {
-	Path      string `json:"path"`      // шаблон или явный путь
-	Overwrite bool   `json:"overwrite"` // -y
-	Dir       string `json:"dir,omitempty"`
+	TargetMegabytes float64 `json:"target_megabytes,omitempty"`
+	TwoPass         bool    `json:"two_pass,omitempty"`
+	Path            string  `json:"path"`      // шаблон или явный путь
+	Overwrite       bool    `json:"overwrite"` // -y
+	Dir             string  `json:"dir,omitempty"`
 }
 
 // Operation — полиморфная операция пайплайна.
