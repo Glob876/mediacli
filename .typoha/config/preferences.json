@@ -1,0 +1,33 @@
+{
+  "allFiles": true,
+  "animations": true,
+  "autosave": true,
+  "autosaveDelay": 1600,
+  "backgroundOpacity": 56,
+  "customCss": "",
+  "focus": false,
+  "font": "serif",
+  "fontSize": 18,
+  "hidden": false,
+  "language": "ru",
+  "lineHeight": 1.8,
+  "lineNumbers": true,
+  "pinned": [],
+  "primaryColor": "#2d6a24",
+  "recent": [
+    "/home/glob/Projects/mediacli\nelectron/renderer/locales/en_us.json",
+    "/home/glob/Projects/mediacli\nelectron/renderer/locales/en_gb.json"
+  ],
+  "secondaryColor": "",
+  "sidebarWidth": 250,
+  "sort": "name",
+  "spellcheck": true,
+  "statusbar": true,
+  "tabSize": 2,
+  "textColor": "",
+  "theme": "system",
+  "toolbar": true,
+  "typewriter": false,
+  "width": 820,
+  "wordWrap": true
+}

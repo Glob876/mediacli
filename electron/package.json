@@ -47,6 +47,23 @@
       "target": [
         "dmg"
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerLanguages": [
+        "en_US",
+        "ru_RU"
+      ],
+      "include": "installer/include.nsh",
+      "installerSidebar": "installer/sidebar.bmp",
+      "uninstallerSidebar": "installer/sidebar.bmp",
+      "installerHeader": "installer/header.bmp",
+      "installerIcon": "installer/icon.ico",
+      "uninstallerIcon": "installer/icon.ico"
     }
   },
   "devDependencies": {
