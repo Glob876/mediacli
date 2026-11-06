@@ -8,11 +8,16 @@ LOG_FILE="$DIST_DIR/build.log"
 mkdir -p "$DIST_DIR"
 : > "$LOG_FILE"
 
-LDFLAGS="-s -w"
+
 
 # Автоматическое определение текущей системы
-HOST_OS=$(go env GOOS)
-HOST_ARCH=$(go env GOARCH)
+case "$(uname -s)" in
+    Linux*) HOST_OS=linux ;;
+    Darwin*) HOST_OS=darwin ;;
+    MINGW*|MSYS*|CYGWIN*) HOST_OS=windows ;;
+    *) echo "Unsupported operating system" >&2; exit 1 ;;
+esac
+HOST_ARCH=$(uname -m)
 
 BIN_NAME="mediacli"
 if [ "$HOST_OS" = "windows" ]; then
@@ -89,19 +94,20 @@ provision_electron() {
 if [ "${1:-}" = "--startelectron" ]; then
     echo "== MediaCLI Electron quick start =="
 
-    if ! command -v go >/dev/null 2>&1; then
-        echo "[FAIL] go not found in PATH"; exit 1
+    if ! command -v cargo >/dev/null 2>&1; then
+        echo "[FAIL] cargo not found in PATH"; exit 1
     fi
     if ! command -v npm >/dev/null 2>&1; then
         echo "[FAIL] npm not found in PATH"; exit 1
     fi
 
-    # Go-бинарник: пересобираем только если отсутствует или исходники новее.
-    if [ ! -x "$TARGET_PATH" ] || [ -n "$(find main.go go.mod go.sum pkg -newer "$TARGET_PATH" 2>/dev/null | head -n 1)" ]; then
-        echo "[1/3] (Re)building Go binary..."
-        CGO_ENABLED=1 go build -trimpath -ldflags="$LDFLAGS" -o "$TARGET_PATH" . >> "$LOG_FILE" 2>&1
+    # Rust-бинарник: пересобираем только если отсутствует или исходники новее.
+    if [ ! -x "$TARGET_PATH" ] || [ -n "$(find Cargo.toml Cargo.lock src resources -newer "$TARGET_PATH" 2>/dev/null | head -n 1)" ]; then
+        echo "[1/3] (Re)building Rust binary..."
+        cargo build --release --locked >> "$LOG_FILE" 2>&1
+        cp "target/release/$BIN_NAME" "$TARGET_PATH"
     else
-        echo "[1/3] Go binary is fresh, skipping build."
+        echo "[1/3] Rust binary is fresh, skipping build."
     fi
 
     # Node-зависимости + бинарник Electron
@@ -136,7 +142,7 @@ echo "================================================================"
 echo "MediaCLI Native Build & Install Pipeline"
 echo "================================================================"
 echo "Target OS : $HOST_OS ($HOST_ARCH)"
-echo "Go Version: $(go version | awk '{print $3, $4}')"
+echo "Rust Version: $(rustc --version)"
 echo "Binary    : $TARGET_PATH"
 echo "Log File  : $LOG_FILE"
 echo "================================================================"
@@ -148,11 +154,8 @@ printf "[1/3] Compiling native binary for %s/%s... " "$HOST_OS" "$HOST_ARCH"
 
 START_BUILD=$(date +%s)
 
-if CGO_ENABLED=1 GOOS="$HOST_OS" GOARCH="$HOST_ARCH" go build \
-    -trimpath \
-    -ldflags="$LDFLAGS" \
-    -o "$TARGET_PATH" \
-    . >> "$LOG_FILE" 2>&1; then
+if cargo build --release --locked >> "$LOG_FILE" 2>&1; then
+    cp "target/release/$BIN_NAME" "$TARGET_PATH"
     
     END_BUILD=$(date +%s)
     BUILD_DURATION=$((END_BUILD - START_BUILD))
@@ -431,11 +434,12 @@ if [ "${1:-}" = "--package" ] || [ "${2:-}" = "--package" ]; then
     if ! command -v npm >/dev/null 2>&1; then
         printf "[FAIL] (npm not found)\n"; exit 1
     fi
-    # Кладём свежий Go-бинарник туда, откуда electron-builder заберёт его
-    # в resources/bin (см. electron/main.js + package.json extraResources).
+    # Кладём свежий Rust-бинарник туда, откуда electron-builder заберёт его
+    # в resources/bin (см. electron/main.ts + package.json extraResources).
     mkdir -p electron/bin
     cp "$TARGET_PATH" "electron/bin/$BIN_NAME"
     if npm ci --prefix electron >> "$LOG_FILE" 2>&1 \
+        && npm run build --prefix electron >> "$LOG_FILE" 2>&1 \
         && npx --prefix electron electron-builder "$PKG_TARGET" >> "$LOG_FILE" 2>&1; then
         printf "[OK] (see electron/release/)\n"
     else

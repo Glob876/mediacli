@@ -3,12 +3,12 @@
 const path = require('node:path');
 
 const targets = [
-  ['linux', 'x64', 'linux', 'amd64'],
-  ['linux', 'arm64', 'linux', 'arm64'],
-  ['darwin', 'x64', 'darwin', 'amd64'],
-  ['darwin', 'arm64', 'darwin', 'arm64'],
-  ['win32', 'x64', 'windows', 'amd64'],
-  ['win32', 'arm64', 'windows', 'arm64'],
+  ['linux', 'x64', 'x86_64-unknown-linux-gnu'],
+  ['linux', 'arm64', 'aarch64-unknown-linux-gnu'],
+  ['darwin', 'x64', 'x86_64-apple-darwin'],
+  ['darwin', 'arm64', 'aarch64-apple-darwin'],
+  ['win32', 'x64', 'x86_64-pc-windows-msvc'],
+  ['win32', 'arm64', 'aarch64-pc-windows-msvc'],
 ];
 
 function binaryPath(platform = process.platform, arch = process.arch) {
