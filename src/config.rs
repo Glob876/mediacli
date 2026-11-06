@@ -129,7 +129,22 @@ pub fn validate(value: &Value) -> Result<()> {
 
 pub fn save(value: &Value) -> Result<()> {
     validate(value)?;
-    storage::write_json(&directory().join("config.json"), value)
+    let path = directory().join("config.json");
+    if path.exists()
+        && !std::fs::read_dir(directory())?
+            .filter_map(|e| e.ok())
+            .any(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("config.json.bak-")
+            })
+    {
+        storage::write_private(
+            &directory().join(format!("config.json.bak-{}", crate::media::timestamp())),
+            &std::fs::read(&path)?,
+        )?;
+    }
+    storage::write_json(&path, value)
 }
 pub fn metadata() -> Value {
     serde_json::from_str(include_str!("../resources/meta.json")).unwrap()

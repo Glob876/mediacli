@@ -514,7 +514,7 @@ fn dispatch(
                     .and_then(|a| a.get(index))
                     .context("history entry not found")?;
                 let commands = serde_json::from_value(entry["commands"].clone())?;
-                let id = server.queue.enqueue(
+                let id = server.queue.replay(
                     Plan {
                         commands,
                         target: string(entry, "target"),
@@ -523,7 +523,6 @@ fn dispatch(
                     },
                     &string(entry, "type"),
                     &string(entry, "source"),
-                    "",
                 )?;
                 return Ok((202, json!({"task_ids":[id]})));
             }

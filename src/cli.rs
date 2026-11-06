@@ -238,7 +238,33 @@ pub fn duration(raw: &str) -> Result<Duration> {
 }
 
 pub async fn execute(command: &str, args: &Arguments) -> Result<()> {
-    let cfg = config::load()?;
+    let mut cfg = config::load()?;
+    if args.has("transcode") {
+        let mode = args.value("transcode");
+        if !["embedded", "external"].contains(&mode.as_str()) {
+            return Err(usage("invalid transcode mode"));
+        }
+        cfg["transcode_mode"] = json!(mode);
+    }
+    if args.boolean("background") && server(args).is_empty() {
+        return Err(usage("--background requires --server"));
+    }
+    validate_arguments(command, args)?;
+    if args.boolean("dry-run")
+        && ["config", "presets", "history", "queue", "cookies"].contains(&command)
+    {
+        let action = args.positionals.first().map(String::as_str).unwrap_or("");
+        if [
+            "set", "reset", "import", "export", "save", "delete", "clear", "retry", "cancel",
+        ]
+        .contains(&action)
+        {
+            return emit(
+                &json!({"dry_run":true,"command":command,"arguments":args.positionals}),
+                args.boolean("json"),
+            );
+        }
+    }
     match command {
         "config" => admin_config(args, &cfg),
         "presets" => admin_presets(args, &cfg),
@@ -315,7 +341,8 @@ pub async fn execute(command: &str, args: &Arguments) -> Result<()> {
         "convert" | "transcode" | "trim" | "aspect" | "mux" | "demux" | "concat" | "filter"
         | "audio" | "subtitle" | "metadata" | "scale" | "fps" | "stabilize" | "pipeline"
         | "editor" | "size" => {
-            let pipeline = make_pipeline(command, args)?;
+            let pipeline =
+                make_pipeline(command, args).map_err(|error| usage(error.to_string()))?;
             if args.has("save-project") {
                 storage::write_json(&config::user_path(&args.value("save-project")), &pipeline)?;
                 return emit(
@@ -323,7 +350,21 @@ pub async fn execute(command: &str, args: &Arguments) -> Result<()> {
                     args.boolean("json"),
                 );
             }
-            let mut plan = media::build(&pipeline, &cfg)?;
+            let mut plan = if ["convert", "transcode"].contains(&command)
+                && args.has("preset")
+                && pipeline.operations.len() == 1
+                && !args.has("preview")
+                && pipeline.output.target_megabytes == 0.0
+            {
+                media::conversion_plan(
+                    &args.value("preset"),
+                    &pipeline.inputs[0],
+                    &pipeline.output.path,
+                    &cfg,
+                )?
+            } else {
+                media::build(&pipeline, &cfg)?
+            };
             let preview = args.number("preview", 0.0)?;
             if preview > 0.0 {
                 ensure!(
@@ -616,6 +657,7 @@ pub async fn request(
         std::env::var("MEDIACLI_TOKEN").unwrap_or_default()
     };
     let client = reqwest::Client::builder()
+        .no_proxy()
         .timeout(Duration::from_secs(30))
         .build()?;
     let mut request = client
@@ -736,7 +778,7 @@ fn admin_config(args: &Arguments, cfg: &Value) -> Result<()> {
             } else {
                 serde_json::from_str(raw)?
             };
-            config::save(&updated)?;
+            config::save(&updated).map_err(|error| usage(error.to_string()))?;
             emit(&updated, args.boolean("json"))
         }
         "reset" => {
@@ -753,7 +795,7 @@ fn admin_config(args: &Arguments, cfg: &Value) -> Result<()> {
             let mut updated = config::defaults();
             let imported = storage::read_json(&config::user_path(path), Value::Null)?;
             config::merge(&mut updated, &imported)?;
-            config::save(&updated)?;
+            config::save(&updated).map_err(|error| usage(error.to_string()))?;
             emit(&updated, args.boolean("json"))
         }
         _ => Err(usage("unknown config action")),
@@ -872,7 +914,7 @@ async fn admin_history(args: &Arguments, cfg: &Value) -> Result<()> {
                 serde_json::from_value(entry.get("commands").cloned().unwrap_or(json!([])))?;
             ensure!(!commands.is_empty(), "history entry has no saved commands");
             let queue = Queue::new(number(cfg, "bg_queue_max", 3.0) as usize, None)?;
-            let id = queue.enqueue(
+            let id = queue.replay(
                 Plan {
                     commands,
                     target: string(entry, "target"),
@@ -881,7 +923,6 @@ async fn admin_history(args: &Arguments, cfg: &Value) -> Result<()> {
                 },
                 &string(entry, "type"),
                 &string(entry, "source"),
-                "",
             )?;
             wait_local(&queue, &[id], args).await
         }
@@ -969,9 +1010,11 @@ async fn batch(args: &Arguments, cfg: &Value) -> Result<()> {
         &args.value("output-template"),
         cfg,
     )?;
-    emit(&report, args.boolean("json"))?;
     if args.boolean("dry-run") {
-        return Ok(());
+        return emit(&report, args.boolean("json"));
+    }
+    if !args.boolean("json") {
+        eprintln!("{}", serde_json::to_string_pretty(&report)?);
     }
     ensure!(
         report["invalid_count"] == 0 || args.boolean("skip-invalid"),
@@ -1094,4 +1137,53 @@ async fn ranges(args: &Arguments, cfg: &Value) -> Result<()> {
         cfg,
     )
     .await
+}
+
+fn validate_arguments(command: &str, args: &Arguments) -> Result<()> {
+    let inputs = args.positionals.len() + args.all("input").len();
+    let media = [
+        "convert",
+        "transcode",
+        "trim",
+        "aspect",
+        "mux",
+        "demux",
+        "concat",
+        "filter",
+        "audio",
+        "subtitle",
+        "metadata",
+        "scale",
+        "fps",
+        "stabilize",
+        "size",
+        "ranges",
+        "pipeline",
+        "editor",
+        "probe",
+        "inspect",
+        "waveform",
+    ];
+    if media.contains(&command) && inputs == 0 && !args.has("project") {
+        return Err(usage("input required"));
+    }
+    if ["probe", "inspect", "waveform"].contains(&command) && inputs != 1 {
+        return Err(usage("expected exactly one input"));
+    }
+    if ["download", "video", "thumbnail"].contains(&command) && args.positionals.is_empty() {
+        return Err(usage("URL required"));
+    }
+    if command == "config" && args.positionals.first().is_some_and(|s| s == "set") {
+        let key = args
+            .positionals
+            .get(1)
+            .ok_or_else(|| usage("setting required"))?;
+        if config::defaults().get(key).is_none() {
+            return Err(usage(format!("unknown setting: {key}")));
+        }
+        if args.positionals.len() < 3 {
+            return Err(usage("value required"));
+        }
+    }
+    Ok(())
 }

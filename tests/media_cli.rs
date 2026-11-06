@@ -281,3 +281,124 @@ fn dry_run_and_batch_validation_do_not_start_media_tools() {
     assert!(!destination.exists());
     assert_eq!(f.run(&["trim", "--unknown"]).status.code(), Some(2));
 }
+
+#[test]
+fn configuration_dry_run_never_changes_saved_settings() {
+    let fixture = Fixture::new();
+    fixture.ok(&["config", "set", "language", "ru"]);
+    fixture.ok(&["config", "set", "language", "en"]);
+    fixture.ok(&["config", "set", "language", "ru", "--dry-run"]);
+    let saved = fixture.ok(&["config", "get", "--json"]);
+    assert_eq!(saved["language"], "en");
+    assert_eq!(
+        fixture
+            .run(&["config", "set", "bg_queue_max", "0"])
+            .status
+            .code(),
+        Some(2)
+    );
+    for args in [
+        vec!["trim"],
+        vec!["convert", "--preset", "standard_mp4"],
+        vec!["probe", "one", "two"],
+        vec!["download", "--background", "https://example.com"],
+    ] {
+        assert_eq!(fixture.run(&args).status.code(), Some(2), "{args:?}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn real_ytdlp_download_runs_external_conversion() {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::Duration,
+    };
+    let fixture = Fixture::new();
+    let bytes = Arc::new(std::fs::read(&fixture.input).unwrap());
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    listener.set_nonblocking(true).unwrap();
+    let stopped = Arc::new(AtomicBool::new(false));
+    let stop = stopped.clone();
+    let thread = std::thread::spawn(move || {
+        while !stop.load(Ordering::Relaxed) {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(3)))
+                        .unwrap();
+                    let mut request = [0_u8; 8192];
+                    let read = stream.read(&mut request).unwrap_or(0);
+                    let head = String::from_utf8_lossy(&request[..read]).starts_with("HEAD");
+                    let header = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        bytes.len()
+                    );
+                    let _ = stream.write_all(header.as_bytes());
+                    if !head {
+                        let _ = stream.write_all(&bytes);
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(10))
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    let output = fixture.path("downloads");
+    let url = format!("http://127.0.0.1:{port}/clip.mp4");
+    let result = fixture.run(&[
+        "download",
+        &url,
+        "--output-dir",
+        text(&output),
+        "--transcode",
+        "external",
+        "--preset",
+        "standard_mp4",
+        "--proxy-mode",
+        "none",
+        "--fields",
+        "{\"embed_metadata\":false,\"embed_thumbnail\":false,\"embed_chapters\":false}",
+        "--json",
+    ]);
+    stopped.store(true, Ordering::Relaxed);
+    thread.join().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let files = std::fs::read_dir(&output)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect::<Vec<_>>();
+    assert!(
+        files
+            .iter()
+            .any(|p| p.file_name().unwrap().to_string_lossy().contains("_mp4")),
+        "external conversion missing: {files:?}"
+    );
+}
+#[test]
+fn cli_timeout_waits_for_process_finalization() {
+    let fixture = Fixture::new();
+    let result = fixture.run(&[
+        "filter",
+        text(&fixture.input),
+        "--vf",
+        "realtime",
+        "--timeout",
+        "100ms",
+        "-o",
+        text(&fixture.path("timeout.mp4")),
+    ]);
+    assert_eq!(result.status.code(), Some(124));
+}

@@ -722,21 +722,11 @@ impl App {
                     args.push("--join".into());
                 }
                 let parsed = crate::cli::Arguments::parse(&args, "ranges")?;
-                let cfg = self.cfg.clone();
-                let (sender, receiver) = std::sync::mpsc::channel();
-                let queue = self.queue.clone();
-                tokio::spawn(async move {
-                    let result = crate::cli::ranges_plans(&parsed, &cfg)
-                        .map(|plans| {
-                            for plan in plans {
-                                queue.enqueue(plan, "Ranges", &ranges_source(&parsed), "")?;
-                            }
-                            Ok::<(), anyhow::Error>(())
-                        })
-                        .and_then(|r| r);
-                    let _ = sender.send(result);
-                });
-                let _ = receiver;
+                let plans = crate::cli::ranges_plans(&parsed, &self.cfg)?;
+                for plan in plans {
+                    self.queue
+                        .enqueue(plan, "Ranges", &ranges_source(&parsed), "")?;
+                }
                 self.screen = "queue".into();
             }
             action if action.starts_with("add:") || action.starts_with("media:") => {
@@ -989,7 +979,7 @@ impl App {
                     if let Some(entry) = history.as_array().unwrap().get(self.selected) {
                         let commands = serde_json::from_value(entry["commands"].clone())
                             .context("no saved command")?;
-                        self.queue.enqueue(
+                        self.queue.replay(
                             media::Plan {
                                 commands,
                                 target: string(entry, "target"),
@@ -998,7 +988,6 @@ impl App {
                             },
                             &string(entry, "type"),
                             &string(entry, "source"),
-                            "",
                         )?;
                         self.screen = "queue".into();
                     }

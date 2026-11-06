@@ -40,6 +40,8 @@ pub struct Task {
     pub chain_index: usize,
     pub chain_total: usize,
     pub plan: Plan,
+    #[serde(default)]
+    pub output_files: Vec<String>,
     #[serde(skip)]
     pub cancellation: CancellationToken,
 }
@@ -173,6 +175,7 @@ impl Queue {
                     chain_index: 0,
                     chain_total: total,
                     plan,
+                    output_files: Vec::new(),
                     cancellation: CancellationToken::new(),
                 },
             );
@@ -219,7 +222,14 @@ impl Queue {
     pub fn retry(&self, id: u64) -> Result<u64> {
         let task = self.get(id).context("task not found")?;
         ensure!(!task.active(), "task is active");
-        let mut plan = task.plan.clone();
+        self.replay(task.plan.clone(), &task.title, &task.source)
+    }
+    pub fn replay(&self, mut plan: Plan, title: &str, source: &str) -> Result<u64> {
+        ensure!(
+            !plan.commands.is_empty() && plan.commands.iter().all(|c| !c.is_empty()),
+            "no replayable command saved"
+        );
+
         if let Some(replacement) = plan.replacement.as_mut() {
             let previous = replacement.temporary.clone();
             let ext = PathBuf::from(&previous)
@@ -256,6 +266,25 @@ impl Queue {
                 *last.last_mut().unwrap() = plan.target.clone();
             }
         }
+        for command in &mut plan.commands {
+            if command.iter().any(|a| a == "-i")
+                && command
+                    .last()
+                    .is_some_and(|a| a != "-" && a != "/dev/null" && !a.eq_ignore_ascii_case("NUL"))
+            {
+                let inputs: Vec<String> = command
+                    .windows(2)
+                    .filter(|pair| pair[0] == "-i")
+                    .map(|pair| pair[1].clone())
+                    .collect();
+                media::protect_output(command.last().unwrap(), &inputs, false)?;
+                for argument in command.iter_mut() {
+                    if argument == "-y" {
+                        *argument = "-n".into();
+                    }
+                }
+            }
+        }
         let mut logs = BTreeMap::new();
         for command in &mut plan.commands {
             for index in 0..command.len().saturating_sub(1) {
@@ -273,8 +302,8 @@ impl Queue {
         }
         self.enqueue(
             plan,
-            &task.title,
-            &task.source,
+            title,
+            source,
             &format!("retry_{}", media::timestamp()),
         )
     }
@@ -359,14 +388,7 @@ impl Queue {
         if code == 0
             && let Some(external) = &task.plan.external
         {
-            let files: Vec<String> = self
-                .get(id)
-                .unwrap()
-                .log_tail
-                .iter()
-                .filter_map(|line| line.strip_prefix("MEDIACLI_FILE="))
-                .filter_map(|path| serde_json::from_str::<String>(path).ok())
-                .collect();
+            let files = self.get(id).unwrap().output_files;
             if files.is_empty() {
                 code = 1;
                 failure = Some("yt-dlp did not report an output file".into());
@@ -451,6 +473,9 @@ impl Queue {
             code = 1;
             failure = Some(error.to_string());
         }
+        for command in &task.plan.commands {
+            cleanup_pass_logs(command);
+        }
         if let Some(message) = failure {
             self.log(id, message);
         }
@@ -480,6 +505,13 @@ impl Queue {
     pub fn log(&self, id: u64, line: String) {
         let mut state = self.state.lock().unwrap();
         if let Some(task) = state.tasks.get_mut(&id) {
+            if let Some(path) = line
+                .strip_prefix("MEDIACLI_FILE=")
+                .and_then(|text| serde_json::from_str::<String>(text).ok())
+                && !task.output_files.contains(&path)
+            {
+                task.output_files.push(path);
+            }
             if let Some(progress) = progress(&line) {
                 task.progress = progress;
             }
@@ -647,6 +679,23 @@ fn import_legacy(record: &Value, records: &[Value]) -> Result<Task> {
             replacement,
             external: None,
         },
+        output_files: Vec::new(),
         cancellation: CancellationToken::new(),
     })
+}
+
+fn cleanup_pass_logs(command: &[String]) {
+    let prefix = command
+        .windows(2)
+        .find(|pair| pair[0] == "-passlogfile")
+        .map(|pair| &pair[1]);
+    if let Some(prefix) = prefix
+        && PathBuf::from(prefix)
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().starts_with("mediacli-pass-"))
+    {
+        for suffix in ["-0.log", "-0.log.mbtree"] {
+            let _ = std::fs::remove_file(format!("{prefix}{suffix}"));
+        }
+    }
 }
