@@ -906,6 +906,7 @@ dependencies = [
  "anyhow",
  "async-stream",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "crossterm 0.29.0",
  "dirs",

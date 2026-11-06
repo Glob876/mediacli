@@ -21,7 +21,7 @@ use ratatui::{
 };
 use serde_json::{Value, json};
 use std::{
-    io::{self, IsTerminal},
+    io::{self, IsTerminal, Write},
     path::PathBuf,
     time::Duration,
 };
@@ -300,6 +300,15 @@ impl Ranges {
         storage::write_json(
             &self.path(),
             &json!({"input":self.input,"ranges":self.ranges}),
+        )?;
+        let ranges: Vec<Value> = self
+            .ranges
+            .iter()
+            .map(|(start, end)| json!({"start":start,"end":end}))
+            .collect();
+        storage::write_json(
+            &config::directory().join("ranges_draft.json"),
+            &json!({"Path":self.input,"Ranges":ranges}),
         )
     }
     fn capture(&mut self) {
@@ -429,10 +438,7 @@ impl App {
                 "Downloads",
                 serde_json::to_string_pretty(&crate::daemon::library(&self.cfg)?)?,
             ),
-            "presets" => self.message(
-                "Presets",
-                serde_json::to_string_pretty(&config::media_presets()?)?,
-            ),
+            "presets" => self.screen = "presets".into(),
             "settings" => {
                 let defaults = config::defaults();
                 let fields = self
@@ -616,6 +622,34 @@ impl App {
         }
         let value = |key: &str| string(&values, key);
         match form.action.as_str() {
+            "rename-preset" => {
+                let id = value("id");
+                let name = value("name");
+                if value("kind") == "download" {
+                    if let Some(presets) = self.cfg["download_presets"].as_array_mut()
+                        && let Some(preset) = presets.iter_mut().find(|p| p["id"] == id)
+                    {
+                        preset["name"] = json!(name);
+                    }
+                    config::save(&self.cfg)?;
+                } else {
+                    storage::update_json(
+                        &config::directory().join("media_presets.json"),
+                        json!([]),
+                        |presets| {
+                            if let Some(preset) = presets
+                                .as_array_mut()
+                                .context("invalid presets")?
+                                .iter_mut()
+                                .find(|p| p["id"] == id)
+                            {
+                                preset["name"] = json!(name);
+                            }
+                            Ok(())
+                        },
+                    )?;
+                }
+            }
             "theme" => {
                 let mut updated = self.cfg.clone();
                 updated["theme"] = values["theme"].clone();
@@ -830,9 +864,14 @@ impl App {
                 }
                 self.screen = "queue".into();
             }
-            action if action.starts_with("add:") || action.starts_with("media:") => {
-                let editor = action.starts_with("add:");
-                let kind = action.split_once(':').unwrap().1;
+            action
+                if action.starts_with("add:")
+                    || action.starts_with("media:")
+                    || action.starts_with("edit:") =>
+            {
+                let editor = !action.starts_with("media:");
+                let parts: Vec<_> = action.split(':').collect();
+                let kind = parts[1];
                 let mut options = values.clone();
                 let source = value("source");
                 let output = value("output");
@@ -842,7 +881,17 @@ impl App {
                 media::validate_operation(&operation)?;
                 if editor {
                     self.editor.capture();
-                    self.editor.pipeline.operations.push(operation);
+                    if action.starts_with("edit:") {
+                        let index = parts[2].parse::<usize>()?;
+                        *self
+                            .editor
+                            .pipeline
+                            .operations
+                            .get_mut(index)
+                            .context("operation no longer exists")? = operation;
+                    } else {
+                        self.editor.pipeline.operations.push(operation);
+                    }
                     self.editor.save()?;
                 } else {
                     let inputs = if kind == "concat" {
@@ -887,6 +936,28 @@ impl App {
                 } else if confirm == "restore-editor" {
                     self.editor.pipeline =
                         crate::cli::read_project(&media::text_path(&self.editor.path()))?;
+                } else if let Some(payload) = confirm.strip_prefix("delete-preset:") {
+                    let payload: Value = serde_json::from_str(payload)?;
+                    let id = string(&payload, "id");
+                    if payload["kind"] == "download" {
+                        self.cfg["download_presets"]
+                            .as_array_mut()
+                            .context("invalid presets")?
+                            .retain(|p| p["id"] != id);
+                        config::save(&self.cfg)?;
+                    } else {
+                        storage::update_json(
+                            &config::directory().join("media_presets.json"),
+                            json!([]),
+                            |presets| {
+                                presets
+                                    .as_array_mut()
+                                    .context("invalid presets")?
+                                    .retain(|p| p["id"] != id);
+                                Ok(())
+                            },
+                        )?;
+                    }
                 } else if let Some(plans) = confirm.strip_prefix("batch:") {
                     let plans: Vec<media::Plan> = serde_json::from_str(plans)?;
                     let group = media::timestamp();
@@ -937,6 +1008,37 @@ impl App {
             let last = form.fields.len().saturating_sub(1);
             match key.code {
                 KeyCode::Esc => return Ok(()),
+                KeyCode::F(5)
+                    if ["download", "playlist", "audio-download"]
+                        .contains(&form.action.as_str()) =>
+                {
+                    let mut fields = json!({});
+                    for field in &form.fields {
+                        if config::download_fields().get(&field.key).is_some() {
+                            fields[&field.key] = if field.kind == "bool" {
+                                json!(field.value == "true")
+                            } else {
+                                json!(field.value)
+                            };
+                        }
+                    }
+                    let id = format!("dp_{}", media::timestamp());
+                    let name = format!(
+                        "Preset {}",
+                        self.cfg["download_presets"]
+                            .as_array()
+                            .map(Vec::len)
+                            .unwrap_or(0)
+                            + 1
+                    );
+                    self.cfg["download_presets"]
+                        .as_array_mut()
+                        .context("invalid download presets")?
+                        .push(json!({"id":id,"name":name,"fields":fields}));
+                    config::save(&self.cfg)?;
+                    self.screen = "presets".into();
+                    return Ok(());
+                }
                 KeyCode::F(2) => {
                     let current = config::user_path(&form.fields[form.selected].value);
                     let directory = if current.is_dir() {
@@ -1125,6 +1227,77 @@ impl App {
                 KeyCode::PageDown => self.scroll = self.scroll.saturating_add(10),
                 _ => {}
             },
+            "presets" => {
+                let presets = self.preset_items()?;
+                self.selected = self.selected.min(presets.len().saturating_sub(1));
+                match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => self.screen = "home".into(),
+                    KeyCode::Up => self.selected = self.selected.saturating_sub(1),
+                    KeyCode::Down => {
+                        self.selected = (self.selected + 1).min(presets.len().saturating_sub(1))
+                    }
+                    KeyCode::Enter => {
+                        if let Some(preset) = presets.get(self.selected) {
+                            if preset["_kind"] == "download" {
+                                self.open("download")?;
+                                if let Some(form) = self.form.as_mut() {
+                                    for field in &mut form.fields {
+                                        if let Some(value) = preset["fields"].get(&field.key) {
+                                            field.value = if let Some(text) = value.as_str() {
+                                                text.into()
+                                            } else {
+                                                value.to_string()
+                                            };
+                                        }
+                                    }
+                                }
+                            } else {
+                                self.editor = Editor {
+                                    name: "editor".into(),
+                                    pipeline: Pipeline {
+                                        operations: serde_json::from_value(
+                                            preset["operations"].clone(),
+                                        )?,
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                };
+                                self.screen = "editor".into();
+                                self.form(
+                                    "Input / output",
+                                    "editor-files",
+                                    vec![
+                                        Self::field("input", "string", json!("")),
+                                        Self::field("output", "string", json!("")),
+                                    ],
+                                );
+                            }
+                        }
+                    }
+                    KeyCode::Char('e') => {
+                        if let Some(preset) = presets.get(self.selected) {
+                            self.form(
+                                "Rename preset",
+                                "rename-preset",
+                                vec![
+                                    Self::field("name", "string", preset["name"].clone()),
+                                    Self::field("id", "string", preset["id"].clone()),
+                                    Self::field("kind", "string", preset["_kind"].clone()),
+                                ],
+                            );
+                        }
+                    }
+                    KeyCode::Delete => {
+                        if let Some(preset) = presets.get(self.selected) {
+                            self.confirm = Some(format!(
+                                "delete-preset:{}",
+                                json!({"id":preset["id"],"kind":preset["_kind"]})
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            }
             "history" => match key.code {
                 KeyCode::Char('/') => self.form(
                     "Search history",
@@ -1158,6 +1331,7 @@ impl App {
                                 target: string(entry, "target"),
                                 replacement: None,
                                 external: None,
+                                duration_seconds: 0.0,
                             },
                             &string(entry, "type"),
                             &string(entry, "source"),
@@ -1190,6 +1364,64 @@ impl App {
                         Self::field("output", "string", json!(self.editor.pipeline.output.path)),
                     ],
                 ),
+                KeyCode::Char('e') => {
+                    if let Some(operation) =
+                        self.editor.pipeline.operations.get(self.selected).cloned()
+                    {
+                        self.operation_form(&operation.kind, true)?;
+                        let form = self.form.as_mut().unwrap();
+                        form.action = format!("edit:{}:{}", operation.kind, self.selected);
+                        for field in &mut form.fields {
+                            if let Some(value) = operation.config.get(&field.key) {
+                                field.value = if let Some(text) = value.as_str() {
+                                    text.into()
+                                } else {
+                                    value.to_string()
+                                };
+                            }
+                        }
+                    }
+                }
+                KeyCode::Char('[') | KeyCode::Char(']') => {
+                    let len = self.editor.pipeline.operations.len();
+                    if self.selected < len {
+                        let next = if key.code == KeyCode::Char('[') {
+                            self.selected.saturating_sub(1)
+                        } else {
+                            (self.selected + 1).min(len - 1)
+                        };
+                        self.editor.capture();
+                        self.editor.pipeline.operations.swap(self.selected, next);
+                        self.selected = next;
+                        self.editor.save()?;
+                    }
+                }
+                KeyCode::Char('v') => {
+                    let mut pipeline = self.editor.pipeline.clone();
+                    pipeline.output.path = media::text_path(
+                        &std::env::temp_dir()
+                            .join(format!("mediacli_preview_{}.mp4", media::timestamp())),
+                    );
+                    pipeline.output.target_megabytes = 0.0;
+                    pipeline.output.two_pass = false;
+                    let mut plan = media::build(&pipeline, &self.cfg)?;
+                    let command = plan.commands.last_mut().unwrap();
+                    let output = command.pop().unwrap();
+                    command.extend([
+                        "-t".into(),
+                        "5".into(),
+                        "-c:v".into(),
+                        "libx264".into(),
+                        "-c:a".into(),
+                        "aac".into(),
+                        "-pix_fmt".into(),
+                        "yuv420p".into(),
+                        output,
+                    ]);
+                    self.queue
+                        .enqueue(plan, "Preview", &pipeline.inputs.join(","), "")?;
+                    self.screen = "queue".into();
+                }
                 KeyCode::Char('a') => {
                     self.screen = "add-operation".into();
                     self.selected = 0;
@@ -1333,6 +1565,24 @@ impl App {
         }
         Ok(())
     }
+    fn preset_items(&self) -> Result<Vec<Value>> {
+        let mut presets = self.cfg["download_presets"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        for preset in &mut presets {
+            preset["_kind"] = json!("download");
+        }
+        let mut media = config::media_presets()?
+            .as_array()
+            .cloned()
+            .context("invalid media presets")?;
+        for preset in &mut media {
+            preset["_kind"] = json!("media");
+        }
+        presets.extend(media);
+        Ok(presets)
+    }
     fn history_entries(&self) -> Result<Vec<Value>> {
         let query = self.history_query.to_lowercase();
         Ok(config::history()?
@@ -1363,6 +1613,11 @@ impl App {
         }
     }
     fn ascii_logo(&self) -> String {
+        if string(&self.cfg, "logo_mode") == "image"
+            && config::user_path(&string(&self.cfg, "logo_image_path")).is_file()
+        {
+            return "\n".repeat(8);
+        }
         if string(&self.cfg, "logo_mode") == "none" {
             return String::new();
         }
@@ -1556,6 +1811,37 @@ impl App {
                     )
                     .into();
             }
+            "presets" => {
+                let presets = self.preset_items().unwrap_or_default();
+                self.selected = self.selected.min(presets.len().saturating_sub(1));
+                let items: Vec<_> = presets
+                    .iter()
+                    .map(|preset| {
+                        ListItem::new(format!(
+                            "[{}] {}",
+                            string(preset, "_kind"),
+                            string(preset, "name")
+                        ))
+                    })
+                    .collect();
+                frame.render_stateful_widget(
+                    List::new(items)
+                        .block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .title(self.tr(" Сохранённые наборы ", " Saved presets ")),
+                        )
+                        .highlight_style(highlight),
+                    body,
+                    &mut ListState::default().with_selected(Some(self.selected)),
+                );
+                footer = self
+                    .tr(
+                        "Enter Использовать  E Переименовать  Delete Удалить  Esc Назад",
+                        "Enter Use  E Rename  Delete Remove  Esc Back",
+                    )
+                    .into();
+            }
             "history" => {
                 let entries = self.history_entries().unwrap_or_default();
                 self.selected = self.selected.min(entries.len().saturating_sub(1));
@@ -1618,7 +1904,7 @@ impl App {
                     ),
                     body,
                 );
-                footer=self.tr("I Файлы  A Операция  Del Удалить  S Сохранить  L Открыть\nM Размер  P Набор  D Команды  Ctrl+Z/Y Отмена/повтор  Enter Экспорт","I Files  A Add  Del Remove  S Save  L Load\nM Size  P Preset  D Commands  Ctrl+Z/Y Undo/redo  Enter Export").into();
+                footer=self.tr("I Файлы  A Добавить  E Изменить  [ ] Порядок  Del Удалить\nS/L Проект  M Размер  P Набор  V Превью  Ctrl+Z/Y  Enter Экспорт","I Files  A Add  E Edit  [ ] Reorder  Del Remove\nS/L Project  M Size  P Preset  V Preview  Ctrl+Z/Y  Enter Export").into();
             }
             "add-operation" => {
                 let schema = config::schema();
@@ -1714,8 +2000,8 @@ impl App {
             );
             frame.render_widget(
                 Paragraph::new(self.tr(
-                    "↑↓ Поле  ←→ Вариант  F2 Файлы  Ctrl+U Очистить  Ctrl+S Применить  Esc Отмена",
-                    "↑↓ Field  ←→ Choice  F2 Files  Ctrl+U Clear  Ctrl+S Apply  Esc Cancel",
+                    "↑↓ Поле  ←→ Вариант  F2 Файлы  Ctrl+U Очистить  Ctrl+S Применить  F5 Сохранить набор  Esc Отмена",
+                    "↑↓ Field  ←→ Choice  F2 Files  Ctrl+U Clear  Ctrl+S Apply  F5 Save preset  Esc Cancel",
                 ))
                 .style(style),
                 layout[2],
@@ -1801,6 +2087,8 @@ impl App {
                 self.tr("Восстановить сохранённый проект?", "Restore saved project?")
             } else if confirm.starts_with("batch:") {
                 self.tr("Запустить проверенные файлы?", "Start validated files?")
+            } else if confirm.starts_with("delete-preset:") {
+                self.tr("Удалить сохранённый набор?", "Delete saved preset?")
             } else if confirm == "clear-history" {
                 self.tr(
                     "Очистить историю? Файлы сохранятся.",
@@ -1858,9 +2146,70 @@ pub async fn run() -> Result<()> {
     execute!(io::stdout(), EnterAlternateScreen, crossterm::cursor::Hide)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
     let mut app = App::new(cfg, queue.clone());
+    let mut previous_image = String::new();
+    let mut announced = app
+        .queue
+        .list()
+        .iter()
+        .filter(|task| task.finalized)
+        .map(|task| task.id)
+        .collect::<std::collections::BTreeSet<_>>();
     let result = (|| -> Result<()> {
         while !app.quit {
+            let size = terminal::size()?;
+            let image = if app.screen == "home"
+                && app.form.is_none()
+                && app.palette.is_none()
+                && app.error.is_none()
+                && app.confirm.is_none()
+            {
+                terminal_image(&app.cfg, size.0, size.1).ok().flatten()
+            } else {
+                None
+            };
+            let stamp = image
+                .as_ref()
+                .map(|(stamp, _)| stamp.clone())
+                .unwrap_or_default();
+            let changed = stamp != previous_image;
+            if changed && !previous_image.is_empty() {
+                execute!(
+                    io::stdout(),
+                    crossterm::style::Print("\x1b_Ga=d,d=A;\x1b\\")
+                )?;
+                terminal.clear()?;
+            }
             terminal.draw(|frame| app.draw(frame))?;
+            if changed {
+                if let Some((_, escape)) = image {
+                    print!("{escape}");
+                    io::stdout().flush()?;
+                }
+                previous_image = stamp;
+            }
+            for task in app.queue.list() {
+                if task.finalized && announced.insert(task.id) {
+                    if config::boolean(&app.cfg, "notify_bell") {
+                        print!("\x07");
+                        io::stdout().flush()?;
+                    }
+                    if task.title == "Preview" && task.status == "done" {
+                        let opener = if cfg!(target_os = "windows") {
+                            "explorer.exe"
+                        } else if cfg!(target_os = "macos") {
+                            "open"
+                        } else {
+                            "xdg-open"
+                        };
+                        let _ = std::process::Command::new(opener)
+                            .arg(&task.target)
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null())
+                            .spawn();
+                    }
+                }
+            }
             if event::poll(Duration::from_millis(100))?
                 && let Event::Key(key) = event::read()?
                 && let Err(error) = app.key(key)
@@ -1937,6 +2286,52 @@ fn field_choices(action: &str, key: &str, cfg: &Value) -> Vec<String> {
     };
     let _ = cfg;
     values.into_iter().map(str::to_string).collect()
+}
+
+fn terminal_image(cfg: &Value, width: u16, height: u16) -> Result<Option<(String, String)>> {
+    use base64::Engine;
+    if string(cfg, "logo_mode") != "image" || width < 82 || height < 24 {
+        return Ok(None);
+    }
+    let path = config::user_path(&string(cfg, "logo_image_path"));
+    let metadata = std::fs::metadata(&path)?;
+    ensure!(
+        metadata.len() <= 16 * 1024 * 1024,
+        "logo image is too large"
+    );
+    let bytes = std::fs::read(&path)?;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let column = width * 45 / 100 + 2;
+    let mut escape = format!("\x1b7\x1b[5;{column}H");
+    if string(cfg, "logo_protocol") == "iterm2" {
+        escape.push_str(&format!(
+            "\x1b]1337;File=inline=1;height=8;preserveAspectRatio=1:{encoded}\x07"
+        ));
+    } else {
+        ensure!(
+            bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+            "Kitty logo must be PNG"
+        );
+        let chunks = encoded.as_bytes().chunks(4096).collect::<Vec<_>>();
+        for (index, chunk) in chunks.iter().enumerate() {
+            let more = usize::from(index + 1 < chunks.len());
+            if index == 0 {
+                escape.push_str(&format!("\x1b_Ga=T,f=100,t=d,r=8,m={more};"));
+            } else {
+                escape.push_str(&format!("\x1b_Gm={more};"));
+            }
+            escape.push_str(std::str::from_utf8(chunk)?);
+            escape.push_str("\x1b\\");
+        }
+    }
+    escape.push_str("\x1b8");
+    let stamp = format!(
+        "{width}:{height}:{}:{:?}:{}",
+        path.display(),
+        metadata.modified()?,
+        string(cfg, "logo_protocol")
+    );
+    Ok(Some((stamp, escape)))
 }
 
 #[cfg(test)]

@@ -8,6 +8,7 @@ description = "Terminal media tools powered by FFmpeg and yt-dlp"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 libc = "0.2"
 async-stream = "0.3"
 axum = "0.8"
