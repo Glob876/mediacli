@@ -183,7 +183,7 @@ pub fn run(arguments: Vec<String>) -> Result<()> {
             return crate::daemon::run(&args).await;
         }
         if ["gui", "--gui", "-gui", "-g"].contains(&command.as_str()) {
-            println!("./run.sh");
+            println!("./run.sh --electron");
             return Ok(());
         }
         execute(command, &args).await

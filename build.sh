@@ -372,7 +372,7 @@ else
     if [ "$HOST_OS" != "windows" ] && [ "$SKIP_GUI" -eq 0 ]; then
         echo "MediaGUI is available in your application menu (KDE/GNOME) as 'MediaGUI'."
         echo "  Launcher: $(command -v mediagui || echo "$HOME/.local/bin/mediagui / /usr/local/bin/mediagui")"
-        echo "  Or run: ./run.sh"
+        echo "  Or run: ./run.sh --electron"
     fi
     echo "================================================================"
 fi

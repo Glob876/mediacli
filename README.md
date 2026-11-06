@@ -87,6 +87,13 @@ chmod +x build.sh
 ./build.sh
 ```
 
+Run directly from the checkout without installation:
+
+```bash
+./run.sh             # TUI
+./run.sh --electron  # Electron (also: ./run.sh -e)
+```
+
 ---
 
 ## ⌨️ Keyboard Shortcuts
@@ -249,7 +256,7 @@ Shortcut for everything-at-once (build-if-stale, npm ci-if-missing,
 Electron download-if-missing, then launch, no sudo needed):
 
 ```bash
-./run.sh
+./run.sh --electron  # or ./run.sh -e
 ```
 
 Shell UI: пустая главная с полупрозрачным полем ссылки (кнопка `→` скачивает,

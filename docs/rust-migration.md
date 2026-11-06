@@ -21,8 +21,9 @@ npm run build --prefix electron
 MEDIACLI_BIN="$PWD/target/debug/mediacli" npm start --prefix electron
 ```
 
-`./run.sh` builds the release binary and TypeScript before
-starting the desktop shell. `./build.sh` retains the existing installation flow.
+`./run.sh` builds and starts the terminal interface.
+`./run.sh --electron` (or `./run.sh -e`) builds the release binary and TypeScript
+before starting the desktop shell. The terminal launcher does not require npm. `./build.sh` retains the existing installation flow.
 Build-only use: `cargo build --release --locked`. The result is
 `target/release/mediacli` (`mediacli.exe` on Windows).
 
