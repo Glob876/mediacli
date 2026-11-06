@@ -1,17 +1,18 @@
 'use strict';
 // MediaGUI Electron shell: spawns `mediacli daemon --port 0`, reads
 // MEDIACLI_DAEMON_PORT from its stdout and opens the renderer against it.
-// Dev/mock UI without Go: `npm run dev` (=> --mock, no daemon spawned).
-const { app, BrowserWindow, dialog, Menu, ipcMain } = require('electron');
-const { spawn } = require('node:child_process');
-const crypto = require('node:crypto');
-const path = require('node:path');
+// Dev/mock UI without Rust: `npm run dev` (=> --mock, no daemon spawned).
+import { app, BrowserWindow, dialog, Menu, ipcMain } from 'electron';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import crypto from 'node:crypto';
+import path from 'node:path';
 
 const MOCK = process.argv.includes('--mock');
-let daemonProc = null;
+let daemonProc: ChildProcessWithoutNullStreams | null = null;
 
 // Ответ renderer на вопрос об активных задачах (одноразовый).
-let activeReportResolver = null;
+interface ActiveReport { count: number; lang: string }
+let activeReportResolver: ((report: ActiveReport) => void) | null = null;
 ipcMain.on('mediacli:active-report', (_ev, payload) => {
   if (activeReportResolver) {
     const n = payload && Number.isFinite(payload.count) ? payload.count : -1;
@@ -23,7 +24,7 @@ ipcMain.on('mediacli:active-report', (_ev, payload) => {
 
 // Спрашивает renderer: сколько активных загрузок/конвертаций.
 // count: 0 — тихо закрываем; >0 — диалог; -1 — renderer молчит, тоже диалог.
-function queryActiveWork(win, timeoutMs = 2000) {
+function queryActiveWork(win: BrowserWindow, timeoutMs = 2000): Promise<ActiveReport> {
   return new Promise((resolve) => {
     activeReportResolver = resolve;
     try {
@@ -42,7 +43,7 @@ function queryActiveWork(win, timeoutMs = 2000) {
   });
 }
 
-function confirmCloseText(lang, count) {
+function confirmCloseText(lang: string, count: number) {
   const en = lang !== 'ru';
   if (count > 0) {
     return {
@@ -68,13 +69,14 @@ function daemonBinary() {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'bin', exe);
   }
-  return path.join(__dirname, '..', 'dist', exe);
+  return path.join(__dirname, '..', '..', 'dist', exe);
 }
 
-function waitForPort(proc, timeoutMs = 15000) {
+function waitForPort(proc: ChildProcessWithoutNullStreams, timeoutMs = 15000): Promise<number> {
   return new Promise((resolve, reject) => {
     let buf = '';
     const timer = setTimeout(() => reject(new Error('daemon port timeout')), timeoutMs);
+    proc.once('error', reject);
     proc.stdout.on('data', (chunk) => {
       buf += chunk.toString();
       const m = buf.match(/MEDIACLI_DAEMON_PORT=(\d+)/);
@@ -91,7 +93,7 @@ function waitForPort(proc, timeoutMs = 15000) {
   });
 }
 
-async function createWindow() {
+async function createWindow(): Promise<void> {
   // Верхняя системная панель (Файл/Правка/Вид...) не нужна — убираем полностью.
   Menu.setApplicationMenu(null);
   const win = new BrowserWindow({
@@ -154,14 +156,14 @@ async function createWindow() {
   });
 
   if (MOCK) {
-    await win.loadFile(path.join(__dirname, 'renderer', 'index.html'), { query: { mock: '1' } });
+    await win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'), { query: { mock: '1' } });
     return;
   }
 
   const token = crypto.randomBytes(24).toString('hex');
   daemonProc = spawn(daemonBinary(), ['daemon', '--port', '0'], {
     env: { ...process.env, MEDIACLI_TOKEN: token },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   });
   daemonProc.on('error', (err) => {
     dialog.showErrorBox('MediaGUI', `Cannot start daemon binary:\n${err.message}`);
@@ -170,7 +172,7 @@ async function createWindow() {
 
   try {
     const port = await waitForPort(daemonProc);
-    await win.loadFile(path.join(__dirname, 'renderer', 'index.html'), {
+    await win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'), {
       query: { port: String(port), token },
     });
   } catch (err) {

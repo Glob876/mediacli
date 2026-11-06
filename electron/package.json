@@ -1,17 +1,20 @@
 {
   "name": "mediagui-shell",
   "version": "0.1.1",
-  "description": "MediaGUI desktop shell (Electron) over the Go daemon API",
+  "description": "MediaGUI desktop shell over the Rust daemon API",
   "private": true,
   "author": "Glob876",
-  "main": "main.js",
+  "main": "compiled/main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --mock",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron . --mock",
     "package": "electron-builder",
     "package:linux": "electron-builder --linux",
     "package:win": "electron-builder --win",
-    "package:mac": "electron-builder --mac"
+    "package:mac": "electron-builder --mac",
+    "build": "tsc -p tsconfig.json && tsc -p renderer/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p renderer/tsconfig.json --noEmit",
+    "prepackage": "npm run build"
   },
   "build": {
     "appId": "com.mogdop.mediagui",
@@ -20,8 +23,7 @@
       "output": "release"
     },
     "files": [
-      "main.js",
-      "preload.js",
+      "compiled/**/*",
       "renderer/**/*",
       "package.json"
     ],
@@ -68,7 +70,9 @@
   },
   "devDependencies": {
     "electron": "^36.0.0",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "typescript": "^5.9.0",
+    "@types/node": "^22.0.0"
   },
   "allowScripts": {
     "electron@36.9.5": true,

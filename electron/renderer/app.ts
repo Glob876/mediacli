@@ -1,12 +1,12 @@
 'use strict';
-/* Renderer: talks to the Go daemon (or a mock with ?mock=1 for UI dev). */
+/* Renderer: talks to the Rust daemon (or a mock with ?mock=1 for UI dev). */
 const qs = new URLSearchParams(location.search);
 const MOCK = qs.get('mock') === '1';
 const BASE = MOCK ? null : `http://127.0.0.1:${qs.get('port')}`;
 const TOKEN = MOCK ? null : qs.get('token');
 
-const el = (id) => document.getElementById(id);
-const state = { lang: 'ru', accent: '#bfff00' };
+const el = (id: string): any => document.getElementById(id);
+const state: { lang: string; accent: string } = { lang: 'ru', accent: '#bfff00' };
 
 /* ================= i18n (формальное «Вы»; en-US поддерживается) ================= */
 const I18N = {
@@ -305,9 +305,9 @@ function dlVideoPresetOptions() {
 }
 
 function applyI18n() {
-  document.querySelectorAll('[data-i18n]').forEach((n) => { n.textContent = T(n.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-ph]').forEach((n) => { n.placeholder = T(n.dataset.i18nPh); });
-  document.querySelectorAll('[data-i18n-title]').forEach((n) => { n.title = T(n.dataset.i18nTitle); });
+  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach((n) => { n.textContent = T(n.dataset.i18n); });
+  document.querySelectorAll<HTMLInputElement>('[data-i18n-ph]').forEach((n) => { n.placeholder = T(n.dataset.i18nPh); });
+  document.querySelectorAll<HTMLElement>('[data-i18n-title]').forEach((n) => { n.title = T(n.dataset.i18nTitle); });
   document.documentElement.lang = state.lang;
   cselectSet('quality', qualityOptions(), cselectGet('quality'));
   if (videoPresetsCache.length) {
@@ -354,7 +354,7 @@ const GOALS = {
 };
 const goalLabel = (v) => ((GOALS[state.lang] || GOALS.ru)[v] || v);
 
-/* Справочники из GET /api/meta (single source of truth — Go). */
+/* Справочники из GET /api/meta (single source of truth — Rust). */
 let metaCache = {
   themes: [],
   browsers: ['chrome', 'firefox', 'brave', 'edge', 'opera', 'vivaldi', 'chromium', 'safari'],
@@ -373,7 +373,7 @@ async function loadMeta() {
 }
 
 /* ================= Тосты ================= */
-function toast(msg, isError) {
+function toast(msg: string, isError = false) {
   const box = el('toasts');
   const div = document.createElement('div');
   div.className = 'toast' + (isError ? ' error' : '');
@@ -386,9 +386,9 @@ function toast(msg, isError) {
 }
 
 /* ================= Кастомный dropdown ================= */
-const cselects = {};
+const cselects: Record<string, any> = {};
 
-function cselectInit(id, onChange) {
+function cselectInit(id: string, onChange: ((value: string) => void) | null = null) {
   const root = el(id);
   root.classList.add('cselect');
   root.innerHTML = `<button type="button" class="cselect-btn"><span class="cselect-label">…</span><span class="cselect-arrow">▾</span></button><div class="cselect-list hidden"></div>`;
@@ -440,7 +440,7 @@ function cselectSet(id, options, value) {
 function cselectGet(id) { return cselects[id] ? cselects[id].value : ''; }
 
 function closeAllSelects() {
-  document.querySelectorAll('.cselect.open').forEach((r) => {
+  document.querySelectorAll<HTMLElement>('.cselect.open').forEach((r) => {
     r.classList.remove('open');
     r.querySelector('.cselect-list').classList.add('hidden');
   });
@@ -478,7 +478,7 @@ function applyAccent(hex) {
   if (prev) prev.style.background = state.accent;
   const inp = el('set-accent');
   if (inp && document.activeElement !== inp) inp.value = state.accent;
-  document.querySelectorAll('.swatch').forEach((s) => {
+  document.querySelectorAll<HTMLElement>('.swatch').forEach((s) => {
     s.classList.toggle('current', s.dataset.color.toLowerCase() === state.accent);
   });
   return true;
@@ -501,7 +501,7 @@ function buildSwatches() {
 
 /* ================= API layer ================= */
 const api = {
-  async req(method, path, body) {
+  async req(method: string, path: string, body?: unknown): Promise<any> {
     const res = await fetch(BASE + path, {
       method,
       headers: {
@@ -512,7 +512,7 @@ const api = {
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
-      const err = new Error(`${method} ${path}: ${res.status} ${txt}`);
+      const err: Error & { status?: number } = new Error(`${method} ${path}: ${res.status} ${txt}`);
       err.status = res.status;
       throw err;
     }
@@ -555,7 +555,7 @@ const api = {
 };
 
 /* Mock for `npm run dev`. */
-const mockApi = {
+const mockApi: Record<string, any> = {
   _id: 0,
   _tasks: [],
   _listeners: {},
@@ -732,11 +732,11 @@ if (MOCK) {
   };
 }
 
-const backend = MOCK ? mockApi : api;
+const backend = (MOCK ? mockApi : api) as typeof api & { subscribe?: (id: number, callback: (task: any) => void) => void };
 
 /* ================= Виды (только горячие клавиши) ================= */
 function showView(name) {
-   document.querySelectorAll('.view').forEach((p) => {
+   document.querySelectorAll<HTMLElement>('.view').forEach((p) => {
      const show = p.id === `view-${name}`;
      p.classList.toggle('hidden', !show);
      if (show) {
@@ -765,7 +765,7 @@ function syncDlAudioMode() {
 
 function collectDlFields() {
   const audioOnly = !!el('dl-audio-only')?.checked;
-  const base = {};
+  const base: Record<string, any> = {};
   if (el('timerange').value.trim()) base.download_section = el('timerange').value.trim();
   if (el('subs').checked) { base.subs_enabled = true; base.embed_subs = true; }
   if (el('sponsor').checked) base.sponsorblock = 'remove';
@@ -792,8 +792,8 @@ function collectDlFields() {
 let editingPresetId = null;
 
 function showPresetPane(name) {
-  document.querySelectorAll('#preset-tabs .settab').forEach((b) => b.classList.toggle('active', b.dataset.presetPane === name));
-  document.querySelectorAll('#preset-editor .setpane').forEach((p) => {
+  document.querySelectorAll<HTMLElement>('#preset-tabs .settab').forEach((b) => b.classList.toggle('active', b.dataset.presetPane === name));
+  document.querySelectorAll<HTMLElement>('#preset-editor .setpane').forEach((p) => {
     const show = p.id === `preset-pane-${name}`;
     p.classList.toggle('hidden', !show);
     if (show) { p.classList.remove('page-enter'); void p.offsetWidth; p.classList.add('page-enter'); }
@@ -923,7 +923,7 @@ function populatePresetEditor(preset) {
 }
 
 function collectPresetEditorFields() {
-  const f = {};
+  const f: Record<string, any> = {};
   const q = cselectGet('preset-quality'); if (q !== '') f.quality = q; else f.quality = '';
   f.download_section = el('preset-section').value.trim();
   f.output_template = el('preset-template').value.trim();
@@ -1022,7 +1022,7 @@ function renderPresetsList() {
   savedPresetsCache.forEach((p, i) => {
     const row = document.createElement('div');
     row.className = 'hrow';
-    row.style.setProperty('--i', i);
+    row.style.setProperty('--i', String(i));
     const info = document.createElement('div');
     info.style.minWidth = '0';
     const b = document.createElement('b');
@@ -1306,7 +1306,7 @@ async function startDownload() {
 }
 
 /* ---------- Рендер слотов ---------- */
-const logTimers = {};
+const logTimers: Record<string, any> = {};
 
 function stopAllLogPolls() {
   Object.keys(logTimers).forEach((k) => { clearInterval(logTimers[k]); delete logTimers[k]; });
@@ -1839,7 +1839,7 @@ async function loadBrowse(path) {
     (data.dirs || []).forEach((d, i) => {
       const row = document.createElement('div');
       row.className = 'brow';
-      row.style.setProperty('--i', i);
+      row.style.setProperty('--i', String(i));
       const label = document.createElement('span');
       label.textContent = `📁 ${d}`;
       row.appendChild(label);
@@ -1849,7 +1849,7 @@ async function loadBrowse(path) {
     (data.files || []).forEach((f, i) => {
       const row = document.createElement('div');
       row.className = 'brow';
-      row.style.setProperty('--i', i);
+      row.style.setProperty('--i', String(i));
       if (el('conv-input').value.endsWith(f.name)) row.classList.add('selected');
       const left = document.createElement('span');
       left.textContent = `${f.is_media ? '🎬' : '📄'} ${f.name}`;
@@ -1881,7 +1881,7 @@ function selectBrowseFile(f, row) {
   }
 }
 
-function setConvertInput(path, meta) {
+function setConvertInput(path: string, meta = null) {
   el('conv-input').value = path;
   el('conv-fileinfo').textContent = meta || `${T('selected')}: ${path.split('/').pop()}`;
 }
@@ -1924,7 +1924,7 @@ function dropFileOf(e) {
   return null;
 }
 
-function setupDrop(zone, onFile, hoverEl) {
+function setupDrop(zone, onFile, hoverEl = null) {
   const hov = hoverEl || zone;
   zone.addEventListener('dragenter', (e) => { e.preventDefault(); hov.classList.add('dragover'); });
   zone.addEventListener('dragover', (e) => { e.preventDefault(); hov.classList.add('dragover'); });
@@ -1973,7 +1973,7 @@ async function loadHistory() {
     history.forEach((h, i) => {
       const row = document.createElement('div');
       row.className = 'hrow';
-      row.style.setProperty('--i', i);
+      row.style.setProperty('--i', String(i));
       const info = document.createElement('div');
       info.style.minWidth = '0';
       const b = document.createElement('b');
@@ -2011,8 +2011,8 @@ let settingsCache = null;
 
 /* ================= Настройки: вкладки слева ================= */
 function showSetPane(name) {
-  document.querySelectorAll('.settab').forEach((b) => b.classList.toggle('active', b.dataset.spane === name));
-  document.querySelectorAll('.setpane').forEach((p) => {
+  document.querySelectorAll<HTMLElement>('.settab').forEach((b) => b.classList.toggle('active', b.dataset.spane === name));
+  document.querySelectorAll<HTMLElement>('.setpane').forEach((p) => {
     const show = p.id === `sp-${name}`;
     p.classList.toggle('hidden', !show);
     if (show) {
@@ -2042,7 +2042,7 @@ function goalOptions() {
   return (metaCache.user_goals || ['editing']).map((v) => ({ value: v, label: goalLabel(v) }));
 }
 
-function rebuildSettingsSelects(cfg) {
+function rebuildSettingsSelects(cfg = settingsCache) {
   cfg = cfg || settingsCache || {};
   cselectSet('set-language', [
     { value: 'ru', label: 'Русский' },
@@ -2144,7 +2144,7 @@ async function loadDoctor() {
     st.dependencies.forEach((d, i) => {
       const row = document.createElement('div');
       row.className = 'hrow' + ((!d.available && d.required) ? ' failed' : '');
-      row.style.setProperty('--i', i);
+      row.style.setProperty('--i', String(i));
       const left = document.createElement('div');
       const b = document.createElement('b');
       b.textContent = d.name;
@@ -2165,8 +2165,9 @@ async function loadDoctor() {
 
 /* ================= Горячие клавиши ================= */
 document.addEventListener('keydown', (e) => {
-  const tag = (e.target && e.target.tagName) || '';
-  const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable);
+  const target = e.target as HTMLElement | null;
+  const tag = target?.tagName || '';
+  const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable;
   if (e.key === 'Escape') {
     if (!el('ws-tag-modal').classList.contains('hidden')) { wsCloseTagModal(); return; }
     if (!el('palette').classList.contains('hidden')) { closePalette(); return; }
@@ -2174,9 +2175,9 @@ document.addEventListener('keydown', (e) => {
     if (!el('preset-editor').classList.contains('hidden')) { closePresetEditor(); return; }
     if (!el('logviewer').classList.contains('hidden')) { closeLogViewer(); return; }
     if (!el('lightbox').classList.contains('hidden')) { closeLightbox(); return; }
-    if (document.querySelector('.cselect.open')) { closeAllSelects(); return; }
+    if (document.querySelector<HTMLElement>('.cselect.open')) { closeAllSelects(); return; }
     if (!el('history-drawer').classList.contains('hidden')) { closeHistory(); return; }
-    const current = document.querySelector('.view:not(.hidden)');
+    const current = document.querySelector<HTMLElement>('.view:not(.hidden)');
     if (current && current.id !== 'view-home') { showView('home'); return; }
     return;
   }
@@ -2296,7 +2297,7 @@ const consoleHist = [];
 let consoleHistIdx = 0;
 let consoleBooted = false;
 
-function consolePrint(text, cls) {
+function consolePrint(text: string, cls = '') {
   const box = el('console-out');
   const div = document.createElement('div');
   if (cls) div.className = cls;
@@ -2306,7 +2307,7 @@ function consolePrint(text, cls) {
   box.scrollTop = box.scrollHeight;
 }
 
-function openConsole(prefill, autorun) {
+function openConsole(prefill = '', autorun = false) {
   closePalette();
   if (!consoleBooted) {
     consoleBooted = true;
@@ -2751,10 +2752,10 @@ async function init() {
   cselectSet('preset-cookies-mode', presetCookiesModeOptions(), 'default');
   cselectSet('preset-cookies-browser', (metaCache.browsers || ['chrome']).map((v) => ({ value: v, label: v })), 'chrome');
   cselectSet('preset-proxy-mode', presetProxyModeOptions(), 'default');
-  document.querySelectorAll('.settab').forEach((b) => {
+  document.querySelectorAll<HTMLElement>('.settab').forEach((b) => {
     b.onclick = () => showSetPane(b.dataset.spane);
   });
-  document.querySelectorAll('#preset-tabs .settab').forEach((b) => {
+  document.querySelectorAll<HTMLElement>('#preset-tabs .settab').forEach((b) => {
     b.onclick = () => showPresetPane(b.dataset.presetPane);
   });
 
@@ -3085,7 +3086,7 @@ let wsModalType = '';
 let wsModalEditing = -1;
 
 function wsTagFields(type, config = {}) {
-  const field = (key, ru, en, kind='text', value='', options=[]) => ({key, label:L2(ru,en), kind, value:config[key] ?? value, options});
+  const field = (key: string, ru: string, en: string, kind='text', value: string | number | boolean = '', options: string[][] = []) => ({key, label:L2(ru,en), kind, value:config[key] ?? value, options});
   switch(type) {
     case 'trim': return [field('start','Начало','Start','text','00:00:00'),field('end','Конец','End','text',wsDuration ? wsTime(wsDuration) : ''),field('mode','Точность','Accuracy','select','reencode',[['reencode',L2('Точно: перекодировать','Accurate: re-encode')],['copy',L2('Быстро: по ключевым кадрам','Fast: keyframes')]])];
     case 'aspect': return [field('ratio','Соотношение W:H','Ratio W:H','text','9:16'),field('mode','Заполнение кадра','Frame fit','select','crop',[['crop',L2('Без полей: обрезать края','Fill: crop edges')],['letterbox',L2('Без потерь: добавить поля','Fit: add bars')],['blur',L2('Размытые поля','Blurred bars')],['stretch',L2('Растянуть','Stretch')]]),field('size_preset','Разрешение','Resolution','select','1080p',[['720p','720p'],['1080p','1080p'],['4k','4K']])];
@@ -3116,7 +3117,7 @@ function wsOpenTagModal(type, editing = -1) {
   for (const f of wsTagFields(type, values)) {
     const label=document.createElement('label');
     const caption=document.createElement('span'); caption.textContent=f.label;
-    const input=document.createElement(f.kind==='select' ? 'select' : 'input');
+    const input: any = document.createElement(f.kind==='select' ? 'select' : 'input');
     input.id=`ws-modal-${f.key}`;
     if (f.kind==='select') {
       f.options.forEach(([value,text])=>{ const option=document.createElement('option'); option.value=value; option.textContent=text; input.appendChild(option); });
@@ -3133,7 +3134,7 @@ function wsCloseTagModal() { el('ws-tag-modal').classList.add('hidden'); wsModal
 function wsSaveTagModal() {
   const type=wsModalType;
   const get=key=>el(`ws-modal-${key}`);
-  const cfg={};
+  const cfg: Record<string, any> = {};
   for (const field of wsTagFields(type)) cfg[field.key]=field.kind==='check' ? get(field.key).checked : get(field.key).value.trim();
   if (type==='trim') {
     const start=cfg.start ? wsSeconds(cfg.start) : 0, end=cfg.end ? wsSeconds(cfg.end) : wsDuration;
@@ -3214,7 +3215,7 @@ function wsRenderOps() {
   if (out && !out.value) wsOutput = '';
   // toggle empty vs full editor (Alt+3 universal)
   const empty = el('ws-empty');
-  const layout = document.querySelector('#view-workspace .ws-layout');
+  const layout = document.querySelector<HTMLElement>('#view-workspace .ws-layout');
   const showFull = !!wsInput;
   if (empty) empty.classList.toggle('hidden', showFull);
   if (layout) layout.classList.remove('hidden');
@@ -3289,7 +3290,7 @@ function wsRenderInspector(tab) {
     if(full) full.textContent='No file';
     return;
   }
-  document.querySelectorAll('.ws-ins-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll<HTMLElement>('.ws-ins-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   let txt='';
   if (tab==='streams') {
     txt = wsInspectData.streams.map(s=>`[${s.index} ${s.codec_type}] ${s.codec_name} ${s.width? s.width+'x'+s.height:''} ${s.language||''} ${s.pix_fmt||''}`).join('\n');
@@ -3311,7 +3312,7 @@ function wsBuildPayload() {
 }
 
 async function wsShowCommand() {
-  const payload = wsBuildPayload(); if(!payload) return;
+  const payload: ReturnType<typeof wsBuildPayload> & { start?: string; duration?: string } = wsBuildPayload(); if(!payload) return;
   try {
     const res = await backend.pipelineDryRun(payload);
     const pre = el('ws-cmd-preview');
@@ -3321,7 +3322,7 @@ async function wsShowCommand() {
 }
 
 async function wsRun() {
-  const payload = wsBuildPayload(); if(!payload) return;
+  const payload: ReturnType<typeof wsBuildPayload> & { start?: string; duration?: string } = wsBuildPayload(); if(!payload) return;
   try {
     const res = await backend.pipelineRun(payload);
     (res.task_ids || []).forEach(id => wsTaskIds.add(id));
@@ -3372,7 +3373,7 @@ function wsInit() {
   }
   el('btn-ws-add').onclick = async ()=>{
     const t = cselectGet('ws-add-op');
-    let cfg = {};
+    let cfg: Record<string, any> = {};
     // simple prompts per type
     if (t==='transcode') {
       const v = prompt('VCodec (libx264/libx265/copy):','libx264');
@@ -3413,7 +3414,7 @@ function wsInit() {
     try { await backend.saveMediaPreset(payload); toast('Preset saved'); } catch(e){ toast(e.message,true); }
   };
   el('btn-ws-preview').onclick = async ()=>{
-    const payload = wsBuildPayload(); if(!payload) return;
+    const payload: ReturnType<typeof wsBuildPayload> & { start?: string; duration?: string } = wsBuildPayload(); if(!payload) return;
     payload.start='0'; payload.duration='5';
     try {
       const res = await backend.pipelinePreview(payload);
@@ -3435,7 +3436,7 @@ function wsInit() {
   }, 3000);
   el('btn-ws-probe').onclick = wsProbeSelected;
   el('btn-ws-refresh').onclick = ()=>wsLoadBrowse('');
-  document.querySelectorAll('.ws-ins-tab').forEach(b=>b.onclick=()=>wsRenderInspector(b.dataset.tab));
+  document.querySelectorAll<HTMLElement>('.ws-ins-tab').forEach(b=>b.onclick=()=>wsRenderInspector(b.dataset.tab));
   el('btn-ws-copy-ffprobe').onclick = ()=>{
     if(!wsInput) return; const cmd = `ffprobe -v quiet -print_format json -show_format -show_streams -show_chapters "${wsInput}"`;
     navigator.clipboard.writeText(cmd).then(()=>toast('Copied')).catch(()=>toast(cmd));
@@ -3516,12 +3517,12 @@ function wsInit() {
   if (wsCard) setupDrop(wsCard, (p)=>{ void wsOpenFile(p); });
   wsLoadBrowse('');
   // sidebar navigation
-  document.querySelectorAll('.ws-nav').forEach(btn=>{
+  document.querySelectorAll<HTMLElement>('.ws-nav').forEach(btn=>{
     btn.onclick = ()=>{
-      document.querySelectorAll('.ws-nav').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll<HTMLElement>('.ws-nav').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       const sec = btn.dataset.ws;
-      document.querySelectorAll('[id^=ws-section-]').forEach(s=>s.classList.add('hidden'));
+      document.querySelectorAll<HTMLElement>('[id^=ws-section-]').forEach(s=>s.classList.add('hidden'));
       const target = el('ws-section-'+sec);
       if (target) target.classList.remove('hidden');
       // file section is default composite, ensure grid visible

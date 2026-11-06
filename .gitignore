@@ -236,3 +236,6 @@ electron/bin/
 /npm/bin/
 /node_modules/
 /*.tgz
+
+# Compiled TypeScript
+/electron/compiled/
