@@ -2,6 +2,16 @@
 
 set -euo pipefail
 
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$PROJECT_DIR"
+
+for argument in "$@"; do
+    case "$argument" in
+        --no-gui|--package|--linux|--win|--mac) ;;
+        *) echo "Unknown build option: $argument. Launch the application with ./run.sh." >&2; exit 2 ;;
+    esac
+done
+
 DIST_DIR="dist"
 LOG_FILE="$DIST_DIR/build.log"
 
@@ -25,7 +35,6 @@ if [ "$HOST_OS" = "windows" ]; then
 fi
 
 TARGET_PATH="$DIST_DIR/$BIN_NAME"
-PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Флаг --no-gui пропускает установку ярлыка в меню
 SKIP_GUI=0
@@ -36,105 +45,8 @@ for arg in "$@"; do
     fi
 done
 
-# -----------------------------------------------------------------------------
-# Функция: подготовка бинарника Electron (для --startelectron и установки GUI)
-# -----------------------------------------------------------------------------
-provision_electron() {
-    if ! command -v npm >/dev/null 2>&1; then
-        echo "[WARN] npm not found, skipping Electron provision" >&2
-        return 1
-    fi
-    if [ ! -d "electron/node_modules" ]; then
-        echo "[electron] Installing deps (npm ci)..."
-        npm ci --prefix electron >> "$LOG_FILE" 2>&1
-    fi
-    local e_ver e_bin
-    e_ver=$(node -p "require('./electron/node_modules/electron/package.json').version" 2>/dev/null || echo "")
-    if [ -z "$e_ver" ]; then
-        echo "[WARN] electron not found in node_modules, skipping GUI provision" >&2
-        return 1
-    fi
-    e_bin="electron/node_modules/electron/dist/electron"
-    if [ ! -x "$e_bin" ]; then
-        echo "[electron] Provisioning Electron v${e_ver} binary..."
-        node electron/node_modules/electron/install.js >> "$LOG_FILE" 2>&1 || true
-    fi
-    if [ ! -x "$e_bin" ]; then
-        for tool in curl unzip python3; do
-            if ! command -v "$tool" >/dev/null 2>&1; then
-                echo "[WARN] '$tool' not found, cannot provision Electron" >&2
-                return 1
-            fi
-        done
-        local e_zip="dist/electron-v${e_ver}-linux-x64.zip"
-        local e_size=0
-        [ -f "$e_zip" ] && e_size=$(wc -c < "$e_zip")
-        if [ "$e_size" -lt 100000000 ] || \
-           [ "$(python3 -c "import zipfile,sys; print(zipfile.ZipFile(sys.argv[1]).testzip() or 'OK')" "$e_zip" 2>/dev/null)" != "OK" ]; then
-            echo "[electron] Downloading Electron v${e_ver}..."
-            curl -L --progress-bar -o "$e_zip" \
-                "https://github.com/electron/electron/releases/download/v${e_ver}/electron-v${e_ver}-linux-x64.zip" >> "$LOG_FILE" 2>&1
-        fi
-        rm -rf "electron/node_modules/electron/dist"
-        mkdir -p "electron/node_modules/electron/dist"
-        unzip -q "$e_zip" -d "electron/node_modules/electron/dist"
-    fi
-    printf electron > electron/node_modules/electron/path.txt
-    if [ ! -x "$e_bin" ]; then
-        echo "[WARN] Electron binary still missing" >&2
-        return 1
-    fi
-    return 0
-}
-
-# -----------------------------------------------------------------------------
-# Быстрый запуск Electron-оболочки: ./build.sh --startelectron
-# Только проверки + досборка недостающего, без установки в PATH (без sudo).
-# -----------------------------------------------------------------------------
-if [ "${1:-}" = "--startelectron" ]; then
-    echo "== MediaCLI Electron quick start =="
-
-    if ! command -v cargo >/dev/null 2>&1; then
-        echo "[FAIL] cargo not found in PATH"; exit 1
-    fi
-    if ! command -v npm >/dev/null 2>&1; then
-        echo "[FAIL] npm not found in PATH"; exit 1
-    fi
-
-    # Rust-бинарник: пересобираем только если отсутствует или исходники новее.
-    if [ ! -x "$TARGET_PATH" ] || [ -n "$(find Cargo.toml Cargo.lock src resources -newer "$TARGET_PATH" 2>/dev/null | head -n 1)" ]; then
-        echo "[1/3] (Re)building Rust binary..."
-        cargo build --release --locked >> "$LOG_FILE" 2>&1
-        cp "target/release/$BIN_NAME" "$TARGET_PATH"
-    else
-        echo "[1/3] Rust binary is fresh, skipping build."
-    fi
-
-    # Node-зависимости + бинарник Electron
-    if [ ! -d "electron/node_modules" ]; then
-        echo "[2/3] Installing electron deps (npm ci)..."
-        npm ci --prefix electron >> "$LOG_FILE" 2>&1
-    else
-        echo "[2/3] electron/node_modules present, skipping npm ci."
-    fi
-
-    E_BIN="electron/node_modules/electron/dist/electron"
-    if [ ! -x "$E_BIN" ]; then
-        echo "[3/3] Provisioning Electron binary..."
-        if ! provision_electron; then
-            echo "[FAIL] Electron provision failed. Log: $LOG_FILE"
-            exit 1
-        fi
-        echo "[3/3] Electron binary ready."
-    else
-        echo "[3/3] Electron binary present."
-        # path.txt обязан содержать ровно 'electron' без перевода строки
-        printf electron > electron/node_modules/electron/path.txt
-    fi
-
-    echo "Starting shell..."
-    exec npm start --prefix electron
-fi
+# Shared dependency preparation is also used by run.sh.
+source "$PROJECT_DIR/scripts/electron-runtime.sh"
 
 START_TOTAL=$(date +%s)
 
@@ -226,7 +138,7 @@ if [ "$HOST_OS" != "windows" ] && [ "$SKIP_GUI" -eq 0 ]; then
         printf "[SKIP] (npm not found, GUI not installed)\n"
     else
         # Подготавливаем Electron бинарник (npm ci + dist/electron если нужно)
-        if ! provision_electron >> "$LOG_FILE" 2>&1; then
+        if ! provision_electron >> "$LOG_FILE" 2>&1 || ! npm run build --prefix electron >> "$LOG_FILE" 2>&1; then
             printf "[SKIP] (Electron provision failed, see %s)\n" "$LOG_FILE"
         else
             # Определяем куда ставить wrapper / .desktop / иконку
@@ -460,7 +372,7 @@ else
     if [ "$HOST_OS" != "windows" ] && [ "$SKIP_GUI" -eq 0 ]; then
         echo "MediaGUI is available in your application menu (KDE/GNOME) as 'MediaGUI'."
         echo "  Launcher: $(command -v mediagui || echo "$HOME/.local/bin/mediagui / /usr/local/bin/mediagui")"
-        echo "  Or run: ./build.sh --startelectron"
+        echo "  Or run: ./run.sh"
     fi
     echo "================================================================"
 fi
