@@ -6,6 +6,7 @@ pub mod media;
 pub mod queue;
 pub mod remote;
 pub mod storage;
+pub mod theme;
 pub mod tui;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

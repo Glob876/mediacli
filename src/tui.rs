@@ -15,7 +15,7 @@ use ratatui::{
     Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap},
 };
@@ -236,6 +236,22 @@ struct Field {
     kind: String,
     value: String,
 }
+struct Choice {
+    values: Vec<String>,
+    selected: usize,
+}
+impl Choice {
+    fn new(mut values: Vec<String>, current: &str) -> Self {
+        let selected = match values.iter().position(|value| value == current) {
+            Some(index) => index,
+            None => {
+                values.push(current.to_string());
+                values.len() - 1
+            }
+        };
+        Self { values, selected }
+    }
+}
 struct Form {
     title: String,
     action: String,
@@ -357,6 +373,7 @@ struct App {
     quit: bool,
     confirm: Option<String>,
     picker: Option<Picker>,
+    choice: Option<Choice>,
     error: Option<String>,
     history_query: String,
 }
@@ -380,6 +397,7 @@ impl App {
             quit: false,
             confirm: None,
             picker: None,
+            choice: None,
             error: None,
             history_query: String::new(),
         }
@@ -1004,6 +1022,26 @@ impl App {
             self.picker = Some(picker);
             return Ok(());
         }
+        if let Some(mut choice) = self.choice.take() {
+            match key.code {
+                KeyCode::Esc => return Ok(()),
+                KeyCode::Up | KeyCode::Left => choice.selected = choice.selected.saturating_sub(1),
+                KeyCode::Down | KeyCode::Right => {
+                    choice.selected = (choice.selected + 1).min(choice.values.len() - 1)
+                }
+                KeyCode::Home => choice.selected = 0,
+                KeyCode::End => choice.selected = choice.values.len() - 1,
+                KeyCode::Enter => {
+                    if let Some(form) = self.form.as_mut() {
+                        form.fields[form.selected].value = choice.values[choice.selected].clone();
+                    }
+                    return Ok(());
+                }
+                _ => {}
+            }
+            self.choice = Some(choice);
+            return Ok(());
+        }
         if let Some(mut form) = self.form.take() {
             let last = form.fields.len().saturating_sub(1);
             match key.code {
@@ -1056,14 +1094,12 @@ impl App {
                     let field = &mut form.fields[form.selected];
                     let choices = field_choices(&form.action, &field.key, &self.cfg);
                     if !choices.is_empty() {
-                        let index = choices
-                            .iter()
-                            .position(|value| value == &field.value)
-                            .unwrap_or(0);
-                        let next = if key.code == KeyCode::Right {
-                            (index + 1) % choices.len()
-                        } else {
-                            (index + choices.len() - 1) % choices.len()
+                        let current = choices.iter().position(|value| value == &field.value);
+                        let next = match (current, key.code) {
+                            (Some(index), KeyCode::Right) => (index + 1) % choices.len(),
+                            (Some(index), _) => (index + choices.len() - 1) % choices.len(),
+                            (None, KeyCode::Right) => 0,
+                            (None, _) => choices.len() - 1,
                         };
                         field.value = choices[next].clone();
                     }
@@ -1085,9 +1121,19 @@ impl App {
                     self.submit(form)?;
                     return Ok(());
                 }
-                KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
-                    form.selected = (form.selected + 1).min(last)
+                KeyCode::Enter => {
+                    let field = &form.fields[form.selected];
+                    let mut values = field_choices(&form.action, &field.key, &self.cfg);
+                    if field.kind == "bool" {
+                        values = vec!["false".into(), "true".into()];
+                    }
+                    if values.is_empty() {
+                        form.selected = (form.selected + 1).min(last);
+                    } else {
+                        self.choice = Some(Choice::new(values, &field.value));
+                    }
                 }
+                KeyCode::Tab | KeyCode::Down => form.selected = (form.selected + 1).min(last),
                 KeyCode::BackTab | KeyCode::Up => form.selected = form.selected.saturating_sub(1),
                 KeyCode::Char('u') if control => form.fields[form.selected].value.clear(),
                 KeyCode::Backspace => {
@@ -1634,33 +1680,16 @@ impl App {
             })
             .unwrap_or("MediaCLI".into())
     }
-    fn accent(&self) -> Color {
-        match string(&self.cfg, "theme").as_str() {
-            "nord" => Color::Rgb(136, 192, 208),
-            "dracula" => Color::Rgb(189, 147, 249),
-            "gruvbox" => Color::Rgb(250, 189, 47),
-            "classic" => Color::White,
-            "matrix" => Color::Green,
-            "amber" => Color::Yellow,
-            "fire" => Color::Red,
-            "purple" => Color::Magenta,
-            _ => Color::Cyan,
-        }
-    }
     fn draw(&mut self, frame: &mut ratatui::Frame) {
         let area = frame.area();
         if area.width < 24 || area.height < 8 {
             frame.render_widget(Paragraph::new("MediaCLI: enlarge terminal"), area);
             return;
         }
-        let accent = self.accent();
-        if !config::boolean(&self.cfg, "use_terminal_bg") {
-            frame.render_widget(
-                Block::default().style(Style::default().bg(Color::Rgb(16, 18, 24))),
-                area,
-            );
-        }
-        let style = Style::default().fg(accent);
+        let colors = crate::theme::colors(&self.cfg);
+        let base_style = Style::default().fg(colors.foreground).bg(colors.background);
+        frame.render_widget(Block::default().style(base_style), area);
+        let style = base_style.fg(colors.accent);
         let highlight = style.add_modifier(Modifier::BOLD | Modifier::REVERSED);
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -1963,6 +1992,7 @@ impl App {
         frame.render_widget(Paragraph::new(footer).style(style), layout[2]);
         if let Some(form) = &self.form {
             frame.render_widget(Clear, body);
+            frame.render_widget(Block::default().style(base_style), body);
             let visible = body.height.saturating_sub(4) as usize;
             let first = form.selected.saturating_sub(visible.saturating_sub(1));
             let lines: Vec<_> = form
@@ -1978,7 +2008,7 @@ impl App {
                         field.value.clone()
                     };
                     Line::from(vec![
-                        Span::styled(format!("{}: ", field.key), style),
+                        Span::styled(format!("{}: ", setting_label(&field.key, self.ru())), style),
                         Span::styled(
                             value,
                             if index == form.selected {
@@ -1990,6 +2020,13 @@ impl App {
                     ])
                 })
                 .collect();
+            if form.action == "settings" && body.width >= 8 && body.height >= 2 {
+                let version = Rect::new(body.x + 2, body.y + body.height - 2, body.width - 4, 1);
+                frame.render_widget(
+                    Paragraph::new(crate::VERSION).style(base_style.fg(colors.muted)),
+                    version,
+                );
+            }
             frame.render_widget(
                 Paragraph::new(lines).block(
                     Block::default()
@@ -2000,16 +2037,40 @@ impl App {
             );
             frame.render_widget(
                 Paragraph::new(self.tr(
-                    "↑↓ Поле  ←→ Вариант  F2 Файлы  Ctrl+U Очистить  Ctrl+S Применить  F5 Сохранить набор  Esc Отмена",
-                    "↑↓ Field  ←→ Choice  F2 Files  Ctrl+U Clear  Ctrl+S Apply  F5 Save preset  Esc Cancel",
+                    "↑↓ Поле  Enter Список  ←→ Вариант  F2 Файлы  Ctrl+U Очистить  Ctrl+S Применить  F5 Сохранить набор  Esc Отмена",
+                    "↑↓ Field  Enter Choices  ←→ Choice  F2 Files  Ctrl+U Clear  Ctrl+S Apply  F5 Save preset  Esc Cancel",
                 ))
                 .style(style),
                 layout[2],
             );
         }
+        if let Some(choice) = &self.choice {
+            let popup = centered(area, 65, 70);
+            frame.render_widget(Clear, popup);
+            frame.render_widget(Block::default().style(base_style), popup);
+            let title = self
+                .form
+                .as_ref()
+                .map(|form| form.fields[form.selected].key.as_str())
+                .unwrap_or("");
+            let items: Vec<_> = choice
+                .values
+                .iter()
+                .map(|value| ListItem::new(value.clone()))
+                .collect();
+            frame.render_stateful_widget(
+                List::new(items)
+                    .block(Block::default().borders(Borders::ALL).title(title))
+                    .highlight_style(highlight)
+                    .highlight_symbol("› "),
+                popup,
+                &mut ListState::default().with_selected(Some(choice.selected)),
+            );
+        }
         if let Some(search) = &self.palette {
             let popup = centered(area, 80, 80);
             frame.render_widget(Clear, popup);
+            frame.render_widget(Block::default().style(base_style), popup);
             let regions = Layout::default()
                 .constraints([Constraint::Length(3), Constraint::Min(1)])
                 .split(popup);
@@ -2037,6 +2098,7 @@ impl App {
         }
         if let Some(picker) = &self.picker {
             frame.render_widget(Clear, body);
+            frame.render_widget(Block::default().style(base_style), body);
             let items: Vec<_> = picker
                 .entries
                 .iter()
@@ -2071,6 +2133,7 @@ impl App {
         if let Some(error) = &self.error {
             let popup = centered(area, 85, 65);
             frame.render_widget(Clear, popup);
+            frame.render_widget(Block::default().style(base_style), popup);
             frame.render_widget(
                 Paragraph::new(format!("{error}\n\nEnter / Esc"))
                     .wrap(Wrap { trim: false })
@@ -2102,6 +2165,7 @@ impl App {
             };
             let popup = centered(area, 75, 35);
             frame.render_widget(Clear, popup);
+            frame.render_widget(Block::default().style(base_style), popup);
             frame.render_widget(
                 Paragraph::new(format!("{text}\n\nEnter / Y — Yes    Esc / N — No"))
                     .wrap(Wrap { trim: false })
@@ -2160,6 +2224,7 @@ pub async fn run() -> Result<()> {
             let image = if app.screen == "home"
                 && app.form.is_none()
                 && app.palette.is_none()
+                && app.choice.is_none()
                 && app.error.is_none()
                 && app.confirm.is_none()
             {
@@ -2260,7 +2325,7 @@ fn field_choices(action: &str, key: &str, cfg: &Value) -> Vec<String> {
             .collect();
     }
     let values: Vec<&str> = match key {
-        "language" => vec!["ru", "en", "en-US"],
+        "language" => vec!["ru", "en", "en-US", "en-GB"],
         "cookies_mode" => vec!["none", "file", "browser"],
         "proxy_mode" => vec!["system", "none", "custom"],
         "transcode_mode" => vec!["embedded", "external"],
@@ -2334,12 +2399,67 @@ fn terminal_image(cfg: &Value, width: u16, height: u16) -> Result<Option<(String
     Ok(Some((stamp, escape)))
 }
 
+fn setting_label(key: &str, russian: bool) -> &str {
+    match (key, russian) {
+        ("use_terminal_palette", true) => "Палитра цветов терминала",
+        ("use_terminal_palette", false) => "Terminal color palette",
+        ("use_terminal_bg", true) => "Фон терминала",
+        ("use_terminal_bg", false) => "Terminal background",
+        ("theme", true) => "Тема",
+        ("theme", false) => "Theme",
+        _ => key,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     fn app() -> App {
         App::new(config::defaults(), Queue::new(3, None).unwrap())
     }
+    #[test]
+    fn choices_start_at_current_values_and_cancel_preserves_them() {
+        let mut app = app();
+        app.cfg["language"] = json!("en-US");
+        app.cfg["theme"] = json!("rose_pine");
+        app.open("settings").unwrap();
+        let fields = app.form.as_ref().unwrap().fields.clone();
+        for (index, field) in fields.iter().enumerate() {
+            if field.kind != "bool" && field_choices("settings", &field.key, &app.cfg).is_empty() {
+                continue;
+            }
+            app.form.as_mut().unwrap().selected = index;
+            app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE))
+                .unwrap();
+            let choice = app.choice.as_ref().unwrap();
+            assert_eq!(choice.values[choice.selected], field.value, "{}", field.key);
+            app.key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE))
+                .unwrap();
+            app.key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE))
+                .unwrap();
+            assert_eq!(app.form.as_ref().unwrap().fields[index].value, field.value);
+        }
+        let choice = Choice::new(vec!["one".into(), "two".into()], "custom");
+        assert_eq!(choice.values[choice.selected], "custom");
+    }
+
+    #[test]
+    fn settings_version_is_gray_and_remains_visible_when_scrolling() {
+        let mut app = app();
+        app.open("settings").unwrap();
+        let mut terminal = Terminal::new(ratatui::backend::TestBackend::new(80, 24)).unwrap();
+        for selected in [0, app.form.as_ref().unwrap().fields.len() - 1] {
+            app.form.as_mut().unwrap().selected = selected;
+            terminal.draw(|frame| app.draw(frame)).unwrap();
+            let buffer = terminal.backend().buffer();
+            for (offset, character) in crate::VERSION.chars().enumerate() {
+                let cell = &buffer[(2 + offset as u16, 20)];
+                assert_eq!(cell.symbol(), character.to_string());
+                assert_eq!(cell.fg, ratatui::style::Color::DarkGray);
+            }
+        }
+    }
+
     #[test]
     fn every_screen_and_modal_fits_small_terminals() {
         for (width, height) in [(1, 1), (23, 7), (24, 8), (40, 12), (80, 24), (160, 50)] {

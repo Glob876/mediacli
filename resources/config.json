@@ -72,5 +72,6 @@
   "transcode_mode": "embedded",
   "accent_color": "#bfff00",
   "ffmpeg_path": "",
-  "show_home_logo": true
+  "show_home_logo": true,
+  "use_terminal_palette": false
 }

@@ -21,7 +21,7 @@ npm run build --prefix electron
 MEDIACLI_BIN="$PWD/target/debug/mediacli" npm start --prefix electron
 ```
 
-`./build.sh --startelectron` builds the release binary and TypeScript before
+`./run.sh` builds the release binary and TypeScript before
 starting the desktop shell. `./build.sh` retains the existing installation flow.
 Build-only use: `cargo build --release --locked`. The result is
 `target/release/mediacli` (`mediacli.exe` on Windows).
@@ -69,7 +69,7 @@ as well. Windows uses `taskkill /T` for the child tree.
 
 - Left/right switch categories; up/down and Enter select a tool.
 - Ctrl+P or F12 searches actions in Russian or English.
-- Forms: up/down or Tab selects a field, left/right cycles known choices,
+- Forms: up/down or Tab selects a field, Enter opens choices at the current value, left/right cycles known choices,
   Space toggles booleans, Ctrl+U clears, F2 opens the file picker, Ctrl+S applies.
   F5 saves the current download form as a preset; the Presets screen applies,
   renames and deletes saved download/media presets.
@@ -100,3 +100,11 @@ Go binaries, changed binaries and mixed source revisions. Publishing still runs 
 Local validation covers Linux. macOS and Windows require their CI runners and
 runtime testing on those systems; configuration of the matrix alone does not
 establish that those builds pass.
+
+## Terminal themes
+
+Settings show the application version at the bottom. Set `use_terminal_palette`
+to `true` to use the terminal's configured ANSI colors for any theme, or choose
+`theme = terminal`. With `use_terminal_bg = true`, the terminal's own background
+is retained. Theme colors are defined in `src/theme.rs`; the shared theme list
+is supplied through `/api/meta` for both TUI and Electron.

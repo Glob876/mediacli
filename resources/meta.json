@@ -67,6 +67,61 @@
       "id": "classic",
       "name_en": "Classic White",
       "name_ru": "Классический (Белый)"
+    },
+    {
+      "id": "terminal",
+      "name_en": "Terminal palette",
+      "name_ru": "Палитра терминала"
+    },
+    {
+      "id": "solarized_dark",
+      "name_en": "Solarized Dark",
+      "name_ru": "Solarized Dark"
+    },
+    {
+      "id": "solarized_light",
+      "name_en": "Solarized Light",
+      "name_ru": "Solarized Light"
+    },
+    {
+      "id": "tokyo_night",
+      "name_en": "Tokyo Night",
+      "name_ru": "Tokyo Night"
+    },
+    {
+      "id": "catppuccin",
+      "name_en": "Catppuccin Mocha",
+      "name_ru": "Catppuccin Mocha"
+    },
+    {
+      "id": "one_dark",
+      "name_en": "One Dark",
+      "name_ru": "One Dark"
+    },
+    {
+      "id": "monokai",
+      "name_en": "Monokai",
+      "name_ru": "Monokai"
+    },
+    {
+      "id": "rose_pine",
+      "name_en": "Rosé Pine",
+      "name_ru": "Rosé Pine"
+    },
+    {
+      "id": "everforest",
+      "name_en": "Everforest",
+      "name_ru": "Everforest"
+    },
+    {
+      "id": "amber",
+      "name_en": "Amber",
+      "name_ru": "Янтарная"
+    },
+    {
+      "id": "purple",
+      "name_en": "Purple",
+      "name_ru": "Фиолетовая"
     }
   ],
   "thumbnail_format": [
