@@ -41,19 +41,29 @@ Version: **0.1.1** · `mediacli --version`
 
 ## 🚀 Installation
 
-### npm CLI
+### npm
 
-The repository includes an npm package for the Go CLI, with prebuilt binaries
-for Linux, macOS and Windows (x64/arm64). Once the first npm release is published:
+Install the terminal application on Linux, macOS, or Windows (x64 and arm64):
 
 ```bash
 npm install -g @glob876/mediacli
 mediacli
 ```
 
-Node.js 18+, `yt-dlp`, `ffmpeg` and `ffprobe` are required. The Electron shell is
-distributed separately. See [npm releases](docs/npm-release.md) for Actions
-artifacts, publishing setup and versioning.
+Node.js 18 or newer starts the program. `yt-dlp`, `ffmpeg`, and `ffprobe` must
+be available on `PATH`. The package already contains the prebuilt binaries, so
+Go is not required to install it. The Electron application is distributed
+separately.
+
+A build from GitHub Actions can be installed from the saved archive before it
+is on the registry:
+
+```bash
+npm install -g ./glob876-mediacli-0.1.1.tgz
+mediacli --version
+```
+
+Publishing and version bumps are described in [npm releases](docs/npm-release.md).
 
 ### Arch Linux (AUR)
 
