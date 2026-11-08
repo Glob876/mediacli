@@ -101,7 +101,7 @@ pub fn build(
             command.push(flag.into());
         }
     }
-    if !string(cfg, "ffmpeg_path").is_empty() {
+    if config::tool(cfg, "ffmpeg") != "ffmpeg" {
         command.extend(["--ffmpeg-location".into(), config::tool(cfg, "ffmpeg")]);
     }
     for (key, flag) in [

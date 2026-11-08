@@ -8,6 +8,7 @@ pub mod remote;
 mod settings;
 pub mod storage;
 pub mod theme;
+pub mod tools;
 pub mod tui;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

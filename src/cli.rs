@@ -191,7 +191,7 @@ pub fn run(arguments: Vec<String>) -> Result<()> {
 }
 pub fn help(command: &str) {
     println!(
-        "MediaCLI {} (Rust)\nUsage: mediacli [command] [flags] [arguments]\n\nWithout arguments: interactive terminal interface.\nCommands:\n  download video thumbnail probe inspect convert transcode trim aspect\n  mux demux concat filter audio subtitle metadata scale fps stabilize\n  pipeline editor size ranges waveform batch config presets history\n  queue doctor cookies library daemon gui\n\nCommon flags: --json --dry-run --timeout 10m --server URL --token TOKEN\nMedia flags: --input FILE -o FILE --overwrite --project FILE\n  --op TYPE=JSON --options JSON --preset ID --save-project FILE\n  --size-mb MB --two-pass --preview SECONDS\nDownload flags: --quality HEIGHT --playlist --audio-only --audio-format FORMAT\n  --fields JSON/@FILE --set KEY=VALUE --output-dir DIRECTORY\n\nSee docs/cli.md for all commands and examples.",
+        "MediaCLI {} (Rust)\nUsage: mediacli [command] [flags] [arguments]\n\nWithout arguments: interactive terminal interface.\nCommands:\n  download video thumbnail probe inspect convert transcode trim aspect\n  mux demux concat filter audio subtitle metadata scale fps stabilize\n  pipeline editor size ranges waveform batch config presets history\n  queue doctor cookies library daemon gui tools\n\nTools: mediacli tools install | mediacli tools update (official yt-dlp releases)\n\nCommon flags: --json --dry-run --timeout 10m --server URL --token TOKEN\nMedia flags: --input FILE -o FILE --overwrite --project FILE\n  --op TYPE=JSON --options JSON --preset ID --save-project FILE\n  --size-mb MB --two-pass --preview SECONDS\nDownload flags: --quality HEIGHT --playlist --audio-only --audio-format FORMAT\n  --fields JSON/@FILE --set KEY=VALUE --output-dir DIRECTORY\n\nSee docs/cli.md for all commands and examples.",
         crate::VERSION
     );
     let schema = config::schema();
@@ -239,6 +239,12 @@ pub fn duration(raw: &str) -> Result<Duration> {
 
 pub async fn execute(command: &str, args: &Arguments) -> Result<()> {
     validate_arguments(command, args)?;
+    if command == "tools" {
+        ensure!(
+            server(args).is_empty(),
+            "tools manages local executables; omit --server"
+        );
+    }
     if crate::remote::execute(command, args).await? {
         return Ok(());
     }
@@ -283,6 +289,29 @@ pub async fn execute(command: &str, args: &Arguments) -> Result<()> {
         }
     }
     match command {
+        "tools" => {
+            ensure!(
+                server(args).is_empty(),
+                "tools manages local executables; omit --server"
+            );
+            let action = args
+                .positionals
+                .first()
+                .map(String::as_str)
+                .unwrap_or("install");
+            ensure!(
+                ["install", "update"].contains(&action),
+                "expected tools install or tools update"
+            );
+            if args.boolean("dry-run") {
+                return emit(
+                    &json!({"action":action,"tool":"yt-dlp","source":"https://github.com/yt-dlp/yt-dlp/releases"}),
+                    args.boolean("json"),
+                );
+            }
+            let path = crate::tools::ensure_ytdlp(action == "update").await?;
+            emit(&json!({"yt-dlp":path}), args.boolean("json"))
+        }
         "config" => admin_config(args, &cfg),
         "presets" => admin_presets(args, &cfg),
         "history" => admin_history(args, &cfg).await,

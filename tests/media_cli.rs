@@ -49,6 +49,7 @@ impl Fixture {
             .env("HOME", self.directory.path())
             .env("USERPROFILE", self.directory.path())
             .env("XDG_CONFIG_HOME", self.directory.path().join("config"))
+            .env("XDG_DATA_HOME", self.directory.path().join("data"))
             .env("APPDATA", self.directory.path().join("config"))
             .env_remove("MEDIACLI_SERVER")
             .env_remove("MEDIACLI_TOKEN")
@@ -322,6 +323,13 @@ fn real_ytdlp_download_runs_external_conversion() {
         time::Duration,
     };
     let fixture = Fixture::new();
+    let executable = which::which("yt-dlp").expect("yt-dlp is required for integration tests");
+    let hash = "a".repeat(64);
+    let tools = fixture.directory.path().join("data/mediacli/tools/yt-dlp");
+    std::fs::create_dir_all(tools.join(&hash)).unwrap();
+    std::fs::copy(executable, tools.join(&hash).join("yt-dlp")).unwrap();
+    mediacli::storage::write_json(&tools.join("current.json"), &json!({"sha256":hash,"checked_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()})).unwrap();
+
     let bytes = Arc::new(std::fs::read(&fixture.input).unwrap());
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();

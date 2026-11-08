@@ -192,6 +192,14 @@ pub fn tool(value: &Value, name: &str) -> String {
                 return sibling.to_string_lossy().into_owned();
             }
         }
+        if let Some(path) = crate::tools::bundled(name) {
+            return path.to_string_lossy().into_owned();
+        }
+        if name == "yt-dlp"
+            && let Some(path) = crate::tools::installed()
+        {
+            return path.to_string_lossy().into_owned();
+        }
         name.into()
     } else {
         user_path(&configured).to_string_lossy().into_owned()

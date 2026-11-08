@@ -531,7 +531,23 @@ impl Queue {
         arguments: &[String],
         cancel: &CancellationToken,
     ) -> Result<i32> {
-        let mut command = Command::new(&arguments[0]);
+        let binary = if arguments[0] == "yt-dlp" {
+            let path = tokio::select! {
+                result = crate::tools::ensure_ytdlp(false) => result?,
+                _ = cancel.cancelled() => return Ok(130),
+            };
+            path.to_string_lossy().into_owned()
+        } else {
+            arguments[0].clone()
+        };
+        let mut command = Command::new(binary);
+        if arguments[0] == "yt-dlp"
+            && let Some(deno) = crate::tools::bundled("deno")
+        {
+            command
+                .arg("--js-runtimes")
+                .arg(format!("deno:{}", deno.display()));
+        }
         command
             .args(&arguments[1..])
             .stdin(std::process::Stdio::null())

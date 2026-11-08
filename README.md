@@ -3,7 +3,7 @@
 
 # MediaCLI
 
-Version: **0.1.3** · `mediacli --version`
+Version: **0.1.4** · `mediacli --version`
 
 **An ultra-fast, keyboard-driven terminal media suite wrapping `yt-dlp` and `FFmpeg`.**  
 *Implemented in Rust, dual-pane TUI, background task engine, and a searchable command palette.*
@@ -22,7 +22,7 @@ Version: **0.1.3** · `mediacli --version`
 ---
 
 > [!IMPORTANT]
-> **Core Dependencies**: MediaCLI relies on [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) and [`ffmpeg`](https://ffmpeg.org) present in your `$PATH`.
+> **Media tools**: npm and desktop packages include FFmpeg, ffprobe and Deno. yt-dlp is downloaded from its official GitHub releases on first use and checked for updates once a day when downloading. Source builds can use system FFmpeg/ffprobe from `PATH`.
 
 ---
 
@@ -50,16 +50,25 @@ npm install -g @glob876/mediacli
 mediacli
 ```
 
-Node.js 18 or newer starts the program. `yt-dlp`, `ffmpeg`, and `ffprobe` must
-be available on `PATH`. The package already contains the prebuilt binaries, so
-Rust is not required to install it. The Electron application is distributed
-separately.
+Node.js 18 or newer starts the program. npm installs the matching native package
+with MediaCLI, FFmpeg, ffprobe and Deno for your OS and CPU. Keep optional
+dependencies enabled. Rust and Python are not required. The Electron application
+is distributed separately. yt-dlp is not bundled: an internet connection is
+required for its first download from the official GitHub releases.
+
+```bash
+mediacli tools install        # prepare yt-dlp before the first download
+mediacli tools update         # check and install the latest stable official release
+```
+
+Checksums are verified before execution. Automatic update failures keep the
+previous working version; concurrent downloads keep using their original version.
 
 A build from GitHub Actions can be installed from the saved archive before it
 is on the registry:
 
 ```bash
-npm install -g ./glob876-mediacli-0.1.3.tgz
+npm install -g ./glob876-mediacli-linux-x64-0.1.4.tgz ./glob876-mediacli-0.1.4.tgz
 mediacli --version
 ```
 
@@ -123,7 +132,7 @@ confirmation and retains media files. The previous text console is removed.
 
 ---
 
-## CLI 0.1.3
+## CLI 0.1.4
 
 Run without arguments for the TUI, or pass a command for non-interactive use:
 
@@ -140,7 +149,7 @@ Downloads, all media operations, projects, batch processing, size/range exports,
 configuration, presets, history, dependency checks and daemon task management are
 available as commands. [Full CLI reference and examples (Russian)](docs/cli.md).
 
-## TUI 0.1.3
+## TUI 0.1.4
 
 - The terminal queue is saved in `tui_queue.json`. After a restart, unfinished
   jobs appear as interrupted; use **Ctrl+P → Task queue → Retry whole chain**.
@@ -272,11 +281,13 @@ Shell UI: пустая главная с полупрозрачным полем
 акцентный цвет настраивается (`accent_color` в конфиге).
 
 > [!NOTE]
-> `yt-dlp` and `ffmpeg` stay external dependencies (checked via the System tab),
-> they are not bundled into the installer.
+> The installer includes FFmpeg, ffprobe and Deno. yt-dlp is downloaded and
+> updated separately from official GitHub releases, in the user data directory.
+> No administrator access or system PATH changes are needed for these tools.
 
 ---
 
 ## 📄 License
 
-Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for more information.
+MediaCLI source is distributed under the **MIT License**. See [`LICENSE`](LICENSE).
+Bundled executables have separate licenses; see [`packaging/licenses/NOTICE.md`](packaging/licenses/NOTICE.md) and the license files included in each native package.

@@ -1,14 +1,27 @@
 # Windows installer
 
-The installer is built with electron-builder's assisted NSIS target. It offers a directory choice, creates shortcuts and contains the Rust daemon; yt-dlp and FFmpeg remain separate dependencies.
+The assisted NSIS installer includes the Rust daemon, FFmpeg, ffprobe and Deno.
+yt-dlp is intentionally absent: MediaCLI installs and updates the official
+standalone executable from GitHub releases in the user's data directory.
 
-On Windows, build the Windows binary and place it in the packaging resources before building the installer:
+On Windows, from the repository root:
 
 ```powershell
-cd ..
-go build -trimpath -o bin/mediacli.exe ..
-npm ci
+npm ci --prefix electron
+npm run build --prefix electron
+cd electron
 npx electron-builder --win nsis --x64 --publish never
+# Use --arm64 instead for native Windows ARM64.
 ```
 
-Run the commands from this `installer` directory: the first command changes to `electron`. Build on Windows or use a cross-built Windows binary and Wine on Linux. Only put Windows binaries in `electron/bin` when producing the Windows installer. The installer is unsigned.
+`before-pack.cjs` checks the Rust build receipt, builds the requested target if
+needed, downloads checksum-pinned media tools, and stages only matching binaries
+under `electron/bundle/win-<arch>`. Rust (with the requested MSVC target), Node.js,
+Python 3, and the Windows linker are build dependencies. Python is not shipped
+and is not needed by users. Cross-builds require the matching Rust linker and
+Wine for NSIS; do not copy a Linux binary into a Windows installer.
+
+The installer is unsigned. It offers a directory choice and creates shortcuts.
+The GitHub Actions workflow produces separate x64 and ARM64 installer artifacts.
+Third-party licenses are included under `resources/bin/licenses`; preserve the
+corresponding source when distributing the GPL media executables.

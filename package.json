@@ -1,6 +1,6 @@
 {
   "name": "@glob876/mediacli",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Keyboard-driven terminal media suite powered by yt-dlp and FFmpeg",
   "license": "MIT",
   "author": "Glob876",
@@ -13,17 +13,40 @@
   "bin": {
     "mediacli": "npm/cli.cjs"
   },
-  "files": ["npm/cli.cjs", "npm/platforms.cjs", "npm/bin/", "README.md", "LICENSE"],
-  "engines": { "node": ">=18" },
-  "os": ["linux", "darwin", "win32"],
-  "cpu": ["x64", "arm64"],
+  "files": [
+    "npm/cli.cjs",
+    "npm/platforms.cjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "linux",
+    "darwin",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
   "scripts": {
     "build": "node scripts/build-npm.cjs",
     "test": "node --test npm/*.test.cjs scripts/*.test.cjs",
-    "prepack": "node scripts/verify-npm.cjs"
+    "prepack": "node scripts/verify-npm.cjs",
+    "pack:release": "node scripts/pack-npm.cjs"
   },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
+  },
+  "optionalDependencies": {
+    "@glob876/mediacli-linux-x64": "0.1.4",
+    "@glob876/mediacli-linux-arm64": "0.1.4",
+    "@glob876/mediacli-darwin-x64": "0.1.4",
+    "@glob876/mediacli-darwin-arm64": "0.1.4",
+    "@glob876/mediacli-win32-x64": "0.1.4",
+    "@glob876/mediacli-win32-arm64": "0.1.4"
   }
 }

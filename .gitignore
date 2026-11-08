@@ -238,3 +238,5 @@ electron/bin/
 
 # Compiled TypeScript
 /electron/compiled/
+
+/electron/bundle/
