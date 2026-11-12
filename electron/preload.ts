@@ -8,7 +8,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { ActiveReport } from './types';
 
 contextBridge.exposeInMainWorld('mediacliShell', {
-  version: '0.1.4',
+  version: '1.0.0',
 });
 
 contextBridge.exposeInMainWorld('mediacliGuard', {

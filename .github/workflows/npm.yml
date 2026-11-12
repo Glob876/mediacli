@@ -109,7 +109,7 @@ jobs:
           npm run pack:release
       - name: Smoke test the installed package
         run: |
-          npm install --global --prefix "$RUNNER_TEMP/mediacli-install" --ignore-scripts ./dist/glob876-mediacli-linux-x64-*.tgz ./dist/glob876-mediacli-0*.tgz
+          npm install --global --prefix "$RUNNER_TEMP/mediacli-install" --ignore-scripts ./dist/glob876-mediacli-linux-x64-*.tgz ./dist/glob876-mediacli-[0-9]*.tgz
           "$RUNNER_TEMP/mediacli-install/bin/mediacli" --help
       - uses: actions/upload-artifact@v4
         with:

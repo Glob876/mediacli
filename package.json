@@ -1,6 +1,6 @@
 {
   "name": "@glob876/mediacli",
-  "version": "0.1.4",
+  "version": "1.0.0",
   "description": "Keyboard-driven terminal media suite powered by yt-dlp and FFmpeg",
   "license": "MIT",
   "author": "Glob876",
@@ -42,11 +42,11 @@
     "registry": "https://registry.npmjs.org/"
   },
   "optionalDependencies": {
-    "@glob876/mediacli-linux-x64": "0.1.4",
-    "@glob876/mediacli-linux-arm64": "0.1.4",
-    "@glob876/mediacli-darwin-x64": "0.1.4",
-    "@glob876/mediacli-darwin-arm64": "0.1.4",
-    "@glob876/mediacli-win32-x64": "0.1.4",
-    "@glob876/mediacli-win32-arm64": "0.1.4"
+    "@glob876/mediacli-linux-x64": "1.0.0",
+    "@glob876/mediacli-linux-arm64": "1.0.0",
+    "@glob876/mediacli-darwin-x64": "1.0.0",
+    "@glob876/mediacli-darwin-arm64": "1.0.0",
+    "@glob876/mediacli-win32-x64": "1.0.0",
+    "@glob876/mediacli-win32-arm64": "1.0.0"
   }
 }

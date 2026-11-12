@@ -28,7 +28,7 @@ but are not runtime-tested. Download the archive from the `npm-package` Actions
 artifact even before npm publishing is configured:
 
 ```bash
-npm install -g ./glob876-mediacli-linux-x64-0.1.4.tgz ./glob876-mediacli-0.1.4.tgz
+npm install -g ./glob876-mediacli-linux-x64-1.0.0.tgz ./glob876-mediacli-1.0.0.tgz
 mediacli --help
 ```
 

@@ -252,12 +252,41 @@ impl Choice {
         Self { values, selected }
     }
 }
+#[derive(Clone)]
 struct Form {
     title: String,
     action: String,
     fields: Vec<Field>,
     selected: usize,
 }
+struct DownloadWizard {
+    action: String,
+    url: String,
+    fields: Value,
+    preset_id: Option<String>,
+}
+
+// Copy only download options. Global preferences are resolved into the draft,
+// while appearance, queue and editor settings never enter a saved preset.
+fn download_defaults(cfg: &Value) -> Value {
+    let mut fields = config::download_fields();
+    for (key, value) in fields.as_object_mut().unwrap() {
+        if let Some(saved) = cfg["preset_defaults"].get(key) {
+            *value = saved.clone();
+        }
+        if let Some(current) = cfg.get(key) {
+            *value = if value.is_boolean() {
+                current.clone()
+            } else {
+                json!(string(cfg, key))
+            };
+        }
+    }
+    fields["output_dir"] = cfg["download_dir"].clone();
+    fields["thumbnail_format"] = cfg["thumbnail_format"].clone();
+    fields
+}
+
 #[derive(Default)]
 struct Editor {
     pipeline: Pipeline,
@@ -377,6 +406,7 @@ struct App {
     error: Option<String>,
     history_query: String,
     settings: settings::Navigation,
+    wizard: Option<DownloadWizard>,
 }
 impl App {
     fn new(cfg: Value, queue: Queue) -> Self {
@@ -402,6 +432,7 @@ impl App {
             error: None,
             history_query: String::new(),
             settings: settings::Navigation::default(),
+            wizard: None,
         }
     }
 
@@ -483,6 +514,7 @@ impl App {
         self.selected = 0;
         self.scroll = 0;
         self.task = None;
+        self.wizard = None;
         match command {
             "queue" | "history" => self.screen = command.into(),
             "theme" => self.form(
@@ -506,35 +538,7 @@ impl App {
                 self.form = None;
             }
             "download" | "playlist" | "audio-download" | "thumbnail" => {
-                let mut fields = vec![
-                    Self::field("url", "string", json!("")),
-                    Self::field("output_dir", "string", self.cfg["download_dir"].clone()),
-                ];
-                let initial = if self.cfg["preset_defaults"].is_object() {
-                    self.cfg["preset_defaults"].clone()
-                } else {
-                    config::download_fields()
-                };
-                for (key, value) in initial.as_object().unwrap() {
-                    let value = if key == "audio_only" && command == "audio-download" {
-                        json!(true)
-                    } else {
-                        value.clone()
-                    };
-                    fields.push(Self::field(
-                        key,
-                        if value.is_boolean() { "bool" } else { "string" },
-                        value,
-                    ));
-                }
-                if command == "thumbnail" {
-                    fields.push(Self::field(
-                        "thumbnail_format",
-                        "string",
-                        self.cfg["thumbnail_format"].clone(),
-                    ));
-                }
-                self.form("Download", command, fields);
+                self.start_download(command, None);
             }
             "editor" | "pipeline" => {
                 self.editor = Editor {
@@ -593,6 +597,170 @@ impl App {
         }
         Ok(())
     }
+    fn start_download(&mut self, action: &str, preset_id: Option<String>) {
+        let mut fields = download_defaults(&self.cfg);
+        if action == "audio-download" {
+            fields["audio_only"] = json!(true);
+        }
+        self.wizard = Some(DownloadWizard {
+            action: action.into(),
+            url: String::new(),
+            fields,
+            preset_id,
+        });
+        self.download_url();
+    }
+
+    fn download_url(&mut self) {
+        let url = self.wizard.as_ref().unwrap().url.clone();
+        self.screen = "download-url".into();
+        self.form(
+            self.tr("Скачивание · 1/3 · Ссылка", "Download · 1/3 · URL"),
+            "wizard-url",
+            vec![Self::field("url", "string", json!(url))],
+        );
+    }
+
+    fn download_presets(&self) -> Vec<Value> {
+        self.cfg["download_presets"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn download_config(&mut self) {
+        let wizard = self.wizard.as_ref().unwrap();
+        let fields = wizard
+            .fields
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(key, _)| *key != "thumbnail_format" || wizard.action == "thumbnail")
+            .map(|(key, value)| {
+                Self::field(
+                    key,
+                    if value.is_boolean() { "bool" } else { "string" },
+                    value.clone(),
+                )
+            })
+            .collect();
+        self.screen = "download-config".into();
+        self.form(
+            self.tr(
+                "Скачивание · Настройки пресета",
+                "Download · Preset settings",
+            ),
+            "wizard-config",
+            fields,
+        );
+    }
+
+    fn download_plan(&self) -> Result<media::Plan> {
+        let wizard = self.wizard.as_ref().context("no download wizard")?;
+        let mut cfg = self.cfg.clone();
+        for key in ["no_mtime", "windows_filenames", "use_archive"] {
+            cfg[key] = wizard.fields[key].clone();
+        }
+        download::build(
+            &wizard.url,
+            &wizard.fields,
+            &cfg,
+            &string(&wizard.fields, "output_dir"),
+            wizard.action == "playlist",
+            if wizard.action == "thumbnail" {
+                Some(wizard.fields["thumbnail_format"].as_str().unwrap_or("png"))
+            } else {
+                None
+            },
+        )
+    }
+
+    fn finish_download(&mut self, name: Option<&str>) -> Result<()> {
+        let plan = self.download_plan()?;
+        if let Some(name) = name {
+            ensure!(
+                !name.trim().is_empty(),
+                "{}",
+                self.tr("Введите название пресета", "Enter a preset name")
+            );
+            let mut updated = self.cfg.clone();
+            updated["download_presets"]
+                .as_array_mut()
+                .context("invalid download presets")?
+                .push(json!({"id": format!("dp_{}", uuid::Uuid::new_v4()),
+                    "name": name.trim(), "fields": self.wizard.as_ref().unwrap().fields}));
+            config::save(&updated)?;
+            self.cfg = updated;
+        }
+        let wizard = self.wizard.as_ref().unwrap();
+        let id = self.queue.enqueue(plan, "Download", &wizard.url, "")?;
+        self.screen = "queue".into();
+        self.selected = self.queue.list().len().saturating_sub(1);
+        self.task = Some(id);
+        self.wizard = None;
+        Ok(())
+    }
+
+    fn download_key(&mut self, key: KeyEvent) -> Result<()> {
+        let presets = self.download_presets();
+        let last = if self.screen == "download-presets" {
+            presets.len() + 1
+        } else {
+            2
+        };
+        match key.code {
+            KeyCode::Up | KeyCode::BackTab => self.selected = self.selected.saturating_sub(1),
+            KeyCode::Down | KeyCode::Tab => self.selected = (self.selected + 1).min(last),
+            KeyCode::Esc => {
+                if self.screen == "download-presets" {
+                    self.download_url();
+                } else {
+                    self.screen = "download-presets".into();
+                    self.selected = 0;
+                }
+            }
+            KeyCode::Enter => {
+                if self.screen == "download-presets" {
+                    let wizard = self.wizard.as_mut().unwrap();
+                    wizard.fields = download_defaults(&self.cfg);
+                    if let Some(preset) = self.selected.checked_sub(2).and_then(|i| presets.get(i))
+                    {
+                        // Ignore unrelated keys from externally created presets.
+                        for (key, value) in wizard.fields.as_object_mut().unwrap() {
+                            if let Some(saved) = preset["fields"].get(key) {
+                                *value = saved.clone();
+                            }
+                        }
+                    }
+                    if wizard.action == "audio-download" {
+                        wizard.fields["audio_only"] = json!(true);
+                    }
+                    if self.selected == 1 {
+                        self.download_config();
+                    } else {
+                        self.screen = "download-finish".into();
+                        self.selected = 0;
+                    }
+                } else {
+                    match self.selected {
+                        0 => self.finish_download(None)?,
+                        1 => {
+                            self.screen = "download-save".into();
+                            self.form(
+                                self.tr("Сохранить пресет и скачать", "Save preset and download"),
+                                "wizard-save",
+                                vec![Self::field("name", "string", json!(""))],
+                            );
+                        }
+                        _ => self.download_config(),
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     fn operation_form(&mut self, kind: &str, editor: bool) -> Result<()> {
         let mut fields = Vec::new();
         if !editor {
@@ -664,6 +832,40 @@ impl App {
         }
         let value = |key: &str| string(&values, key);
         match form.action.as_str() {
+            "wizard-url" => {
+                let url = value("url").trim().to_string();
+                ensure!(
+                    (url.starts_with("https://") || url.starts_with("http://"))
+                        && url
+                            .parse::<reqwest::Url>()
+                            .is_ok_and(|u| u.host_str().is_some()),
+                    "{}",
+                    self.tr("Введите ссылку HTTP(S)", "Enter an HTTP(S) URL")
+                );
+                self.wizard.as_mut().context("no download wizard")?.url = url;
+                self.screen = "download-presets".into();
+                self.selected = self
+                    .download_presets()
+                    .iter()
+                    .position(|p| Some(string(p, "id")) == self.wizard.as_ref().unwrap().preset_id)
+                    .map(|i| i + 2)
+                    .unwrap_or(0);
+            }
+            "wizard-config" => {
+                let wizard = self.wizard.as_mut().context("no download wizard")?;
+                // Include empty strings, so clearing a field also clears the draft.
+                for field in &form.fields {
+                    wizard.fields[&field.key] = if field.kind == "bool" {
+                        json!(field.value == "true")
+                    } else {
+                        json!(field.value)
+                    };
+                }
+                self.download_plan()?;
+                self.screen = "download-finish".into();
+                self.selected = 0;
+            }
+            "wizard-save" => self.finish_download(Some(&value("name")))?,
             "rename-preset" => {
                 let id = value("id");
                 let name = value("name");
@@ -710,26 +912,6 @@ impl App {
                 self.queue
                     .set_maximum(number(&updated, "bg_queue_max", 3.0) as usize);
                 self.cfg = updated;
-            }
-            "download" | "playlist" | "audio-download" | "thumbnail" => {
-                let url = value("url");
-                let format = value("thumbnail_format");
-                let plan = download::build(
-                    &url,
-                    &values,
-                    &self.cfg,
-                    &value("output_dir"),
-                    form.action == "playlist",
-                    if form.action == "thumbnail" {
-                        Some(format.as_str())
-                    } else {
-                        None
-                    },
-                )?;
-                let id = self.queue.enqueue(plan, "Download", &url, "")?;
-                self.screen = "queue".into();
-                self.selected = self.queue.list().len().saturating_sub(1);
-                self.task = Some(id);
             }
             "convert" => {
                 let input = value("input");
@@ -1079,41 +1261,56 @@ impl App {
             self.choice = Some(choice);
             return Ok(());
         }
+        if self
+            .form
+            .as_ref()
+            .is_some_and(|f| f.action.starts_with("wizard-"))
+        {
+            let form = self.form.as_ref().unwrap();
+            if key.code == KeyCode::Esc {
+                let action = form.action.clone();
+                self.form = None;
+                match action.as_str() {
+                    "wizard-url" => {
+                        self.wizard = None;
+                        self.screen = "home".into();
+                    }
+                    "wizard-config" => {
+                        self.screen = "download-presets".into();
+                        self.selected = 1;
+                    }
+                    _ => {
+                        self.screen = "download-finish".into();
+                        self.selected = 1;
+                    }
+                }
+                return Ok(());
+            }
+            let submit = (control && matches!(key.code, KeyCode::Char('s') | KeyCode::Enter))
+                || (key.code == KeyCode::Enter && form.action != "wizard-config");
+            if submit {
+                let form = self.form.take().unwrap();
+                if let Err(error) = self.submit(form.clone()) {
+                    self.form = Some(form);
+                    return Err(error);
+                }
+                return Ok(());
+            }
+        }
+        if self.form.is_none()
+            && ["download-presets", "download-finish"].contains(&self.screen.as_str())
+        {
+            if control && key.code == KeyCode::Char('c') {
+                self.wizard = None;
+                self.screen = "home".into();
+                return Ok(());
+            }
+            return self.download_key(key);
+        }
         if let Some(mut form) = self.form.take() {
             let last = form.fields.len().saturating_sub(1);
             match key.code {
                 KeyCode::Esc => return Ok(()),
-                KeyCode::F(5)
-                    if ["download", "playlist", "audio-download"]
-                        .contains(&form.action.as_str()) =>
-                {
-                    let mut fields = json!({});
-                    for field in &form.fields {
-                        if config::download_fields().get(&field.key).is_some() {
-                            fields[&field.key] = if field.kind == "bool" {
-                                json!(field.value == "true")
-                            } else {
-                                json!(field.value)
-                            };
-                        }
-                    }
-                    let id = format!("dp_{}", media::timestamp());
-                    let name = format!(
-                        "Preset {}",
-                        self.cfg["download_presets"]
-                            .as_array()
-                            .map(Vec::len)
-                            .unwrap_or(0)
-                            + 1
-                    );
-                    self.cfg["download_presets"]
-                        .as_array_mut()
-                        .context("invalid download presets")?
-                        .push(json!({"id":id,"name":name,"fields":fields}));
-                    config::save(&self.cfg)?;
-                    self.screen = "presets".into();
-                    return Ok(());
-                }
                 KeyCode::F(2) => {
                     let current = config::user_path(&form.fields[form.selected].value);
                     let directory = if current.is_dir() {
@@ -1372,18 +1569,7 @@ impl App {
                     KeyCode::Enter => {
                         if let Some(preset) = presets.get(self.selected) {
                             if preset["_kind"] == "download" {
-                                self.open("download")?;
-                                if let Some(form) = self.form.as_mut() {
-                                    for field in &mut form.fields {
-                                        if let Some(value) = preset["fields"].get(&field.key) {
-                                            field.value = if let Some(text) = value.as_str() {
-                                                text.into()
-                                            } else {
-                                                value.to_string()
-                                            };
-                                        }
-                                    }
-                                }
+                                self.start_download("download", Some(string(preset, "id")));
                             } else {
                                 self.editor = Editor {
                                     name: "editor".into(),
@@ -1810,6 +1996,76 @@ impl App {
             )
             .to_string();
         match self.screen.as_str() {
+            "download-presets" | "download-finish" => {
+                let choosing = self.screen == "download-presets";
+                let wizard = self.wizard.as_ref().unwrap();
+                let mut labels: Vec<String> = if choosing {
+                    vec![
+                        self.tr(
+                            "По умолчанию (текущие настройки)",
+                            "Default (current settings)",
+                        )
+                        .into(),
+                        self.tr("Создать новый пресет…", "Create a new preset…")
+                            .into(),
+                    ]
+                } else {
+                    vec![
+                        self.tr("Скачать один раз", "Download once").into(),
+                        self.tr(
+                            "Сохранить как новый пресет и скачать…",
+                            "Save as a new preset and download…",
+                        )
+                        .into(),
+                        self.tr("Изменить настройки…", "Edit settings…").into(),
+                    ]
+                };
+                if choosing {
+                    labels.extend(self.download_presets().iter().map(|p| string(p, "name")));
+                }
+                let regions = Layout::default()
+                    .constraints([
+                        Constraint::Length(if body.height >= 7 { 4 } else { 0 }),
+                        Constraint::Min(1),
+                    ])
+                    .split(body);
+                let summary = if choosing {
+                    wizard.url.clone()
+                } else {
+                    format!(
+                        "{}\n{}: {}",
+                        wizard.url,
+                        self.tr("Папка", "Folder"),
+                        string(&wizard.fields, "output_dir")
+                    )
+                };
+                frame.render_widget(
+                    Paragraph::new(summary).wrap(Wrap { trim: false }).block(
+                        Block::default()
+                            .borders(Borders::ALL)
+                            .title(self.tr(" Скачивание ", " Download ")),
+                    ),
+                    regions[0],
+                );
+                frame.render_stateful_widget(
+                    List::new(labels.into_iter().map(ListItem::new).collect::<Vec<_>>())
+                        .block(Block::default().borders(Borders::ALL).title(if choosing {
+                            self.tr(" 2/3 · Пресет загрузки ", " 2/3 · Download preset ")
+                        } else {
+                            self.tr(" 3/3 · Запуск ", " 3/3 · Start ")
+                        }))
+                        .highlight_style(highlight)
+                        .highlight_symbol("› "),
+                    regions[1],
+                    &mut ListState::default().with_selected(Some(self.selected)),
+                );
+                footer = self
+                    .tr(
+                        "↑↓ Выбрать  Enter Продолжить  Esc Назад",
+                        "↑↓ Select  Enter Continue  Esc Back",
+                    )
+                    .into();
+            }
             "settings" => {
                 settings::draw(frame, body, &self.cfg, &mut self.settings);
                 footer = self
@@ -2103,7 +2359,7 @@ impl App {
         if let Some(form) = &self.form {
             frame.render_widget(Clear, body);
             frame.render_widget(Block::default().style(base_style), body);
-            let visible = body.height.saturating_sub(4) as usize;
+            let visible = body.height.saturating_sub(2) as usize;
             let first = form.selected.saturating_sub(visible.saturating_sub(1));
             let label_width = form
                 .fields
@@ -2111,6 +2367,8 @@ impl App {
                 .map(|field| {
                     let label = if form.action == "setting" {
                         settings::label(&self.cfg, &field.key)
+                    } else if form.action.starts_with("wizard-") {
+                        download_label(&self.cfg, &field.key)
                     } else {
                         setting_label(&field.key, self.ru()).into()
                     };
@@ -2133,6 +2391,8 @@ impl App {
                     };
                     let label = if form.action == "setting" {
                         settings::label(&self.cfg, &field.key)
+                    } else if form.action.starts_with("wizard-") {
+                        download_label(&self.cfg, &field.key)
                     } else {
                         setting_label(&field.key, self.ru()).into()
                     };
@@ -2174,6 +2434,23 @@ impl App {
                 .style(style),
                 layout[2],
             );
+        }
+        if let Some(form) = &self.form
+            && form.action.starts_with("wizard-")
+        {
+            let hint = if form.action == "wizard-config" {
+                self.tr(
+                    "↑↓ Поле  Enter Варианты  F2 Файлы  Ctrl+U Очистить  Ctrl+S Далее  Esc Назад",
+                    "↑↓ Field  Enter Choices  F2 Files  Ctrl+U Clear  Ctrl+S Next  Esc Back",
+                )
+            } else {
+                self.tr(
+                    "Enter Далее  Ctrl+U Очистить  Esc Назад",
+                    "Enter Next  Ctrl+U Clear  Esc Back",
+                )
+            };
+            frame.render_widget(Clear, layout[2]);
+            frame.render_widget(Paragraph::new(hint).style(style), layout[2]);
         }
         if let Some(choice) = &self.choice {
             let mut popup = centered(area, 65, 70);
@@ -2481,6 +2758,28 @@ pub async fn run() -> Result<()> {
 }
 
 fn field_choices(action: &str, key: &str, cfg: &Value) -> Vec<String> {
+    if action == "wizard-config" {
+        match key {
+            "quality" => {
+                return ["", "2160", "1440", "1080", "720", "480", "360"]
+                    .map(str::to_string)
+                    .to_vec();
+            }
+            "sponsorblock" => return ["off", "remove", "mark"].map(str::to_string).to_vec(),
+            "vcodec" => return ["auto", "h264", "vp9", "av1"].map(str::to_string).to_vec(),
+            "cookies_mode" => {
+                return ["default", "none", "file", "browser"]
+                    .map(str::to_string)
+                    .to_vec();
+            }
+            "proxy_mode" => {
+                return ["default", "system", "none", "custom"]
+                    .map(str::to_string)
+                    .to_vec();
+            }
+            _ => {}
+        }
+    }
     let metadata = config::metadata();
     let group = match key {
         "theme" => "themes",
@@ -2604,6 +2903,61 @@ fn tools_width(width: u16, russian: bool) -> u16 {
     (longest + 4).clamp(24, 34).min((width * 2 / 5).max(10))
 }
 
+fn download_label(cfg: &Value, key: &str) -> String {
+    let locale_key = match key {
+        "url" => {
+            return if string(cfg, "language") == "ru" {
+                "Ссылка"
+            } else {
+                "URL"
+            }
+            .into();
+        }
+        "name" => "presetName",
+        "output_dir" => "dlDir",
+        "audio_format" => "audioFmt",
+        "audio_only" => "presetAudioOnly",
+        "audio_quality" => "presetAudioQuality",
+        "auto_subs" => "presetAutoSubs",
+        "concurrent_fragments" => "settings_accel_frags",
+        "cookies_browser" => "cookiesBrowser",
+        "cookies_file" => "cookiesFile",
+        "cookies_mode" => "cookiesMode",
+        "download_section" => "presetSection",
+        "embed_chapters" => "presetEmbedChapters",
+        "embed_metadata" => "presetEmbedMeta",
+        "embed_subs" => "presetEmbedSubs",
+        "embed_thumbnail" => "presetEmbedThumb",
+        "force_overwrite" => "presetForceOverwrite",
+        "fps_limit" => "presetFps",
+        "geobypass" => "presetGeobypass",
+        "live_start" => "presetLiveStart",
+        "no_mtime" => "noMtime",
+        "output_template" => "presetTemplate",
+        "proxy_mode" => "proxy",
+        "proxy_url" => "proxyUrl",
+        "quality" => "presetQuality",
+        "ratelimit" => "presetRatelimit",
+        "restrict_filenames" => "presetRestrict",
+        "retries" => "presetRetries",
+        "split_chapters" => "presetSplitChapters",
+        "sponsorblock" => "presetSponsorBlock",
+        "sub_langs" => "settings_sub_langs",
+        "subs_enabled" => "presetSubsEnabled",
+        "thumbnail_format" => "settings_thumb_fmt",
+        "use_archive" => "archive",
+        "vcodec" => "presetVcodec",
+        "video_password" => "presetVideoPassword",
+        "video_preset" => "videoPreset",
+        "windows_filenames" => "winNames",
+        "write_extra" => "presetWriteExtra",
+        _ => key,
+    };
+    settings::text(cfg, locale_key)
+        .trim_end_matches([':', ' '])
+        .to_string()
+}
+
 fn setting_label(key: &str, russian: bool) -> &str {
     match (key, russian) {
         ("use_terminal_palette", true) => "Палитра цветов терминала",
@@ -2649,6 +3003,241 @@ mod tests {
     fn app() -> App {
         App::new(config::defaults(), Queue::new(3, None).unwrap())
     }
+    fn press(app: &mut App, code: KeyCode) -> Result<()> {
+        app.key(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    fn wizard_url(app: &mut App) {
+        app.form.as_mut().unwrap().fields[0].value = "https://example.com/video".into();
+        press(app, KeyCode::Enter).unwrap();
+    }
+
+    #[test]
+    fn download_wizard_requires_url_and_preserves_invalid_input() {
+        let mut app = app();
+        for action in ["download", "playlist", "audio-download", "thumbnail"] {
+            app.open(action).unwrap();
+            assert_eq!(app.form.as_ref().unwrap().fields.len(), 1);
+            app.form.as_mut().unwrap().fields[0].value = "invalid".into();
+            assert!(press(&mut app, KeyCode::Enter).is_err());
+            assert_eq!(app.form.as_ref().unwrap().fields[0].value, "invalid");
+            wizard_url(&mut app);
+            assert_eq!(app.screen, "download-presets");
+            press(&mut app, KeyCode::Esc).unwrap();
+            assert_eq!(
+                app.form.as_ref().unwrap().fields[0].value,
+                "https://example.com/video"
+            );
+            press(&mut app, KeyCode::Esc).unwrap();
+            assert!(app.wizard.is_none());
+        }
+        assert!(app.queue.list().is_empty());
+    }
+
+    #[test]
+    fn download_wizard_clones_only_download_settings_and_keeps_changes_local() {
+        let mut app = app();
+        app.cfg["audio_format"] = json!("flac");
+        app.cfg["concurrent_fragments"] = json!(8);
+        let original = app.cfg.clone();
+        app.open("download").unwrap();
+        wizard_url(&mut app);
+        press(&mut app, KeyCode::Down).unwrap();
+        press(&mut app, KeyCode::Enter).unwrap();
+        let form = app.form.as_mut().unwrap();
+        assert_eq!(form.action, "wizard-config");
+        assert!(
+            form.fields
+                .iter()
+                .all(|f| config::download_fields().get(&f.key).is_some() || f.key == "output_dir")
+        );
+        assert_eq!(
+            form.fields
+                .iter()
+                .find(|f| f.key == "audio_format")
+                .unwrap()
+                .value,
+            "flac"
+        );
+        assert_eq!(
+            form.fields
+                .iter()
+                .find(|f| f.key == "concurrent_fragments")
+                .unwrap()
+                .value,
+            "8"
+        );
+        form.fields
+            .iter_mut()
+            .find(|f| f.key == "no_mtime")
+            .unwrap()
+            .value = "false".into();
+        form.fields
+            .iter_mut()
+            .find(|f| f.key == "quality")
+            .unwrap()
+            .value = "720".into();
+        app.key(KeyEvent::new(KeyCode::Enter, KeyModifiers::CONTROL))
+            .unwrap();
+        assert_eq!(app.screen, "download-finish");
+        let plan = app.download_plan().unwrap();
+        assert!(!plan.commands[0].contains(&"--no-mtime".into()));
+        assert!(plan.commands[0].iter().any(|a| a.contains("height<=720")));
+        assert_eq!(app.cfg, original);
+        press(&mut app, KeyCode::Down).unwrap();
+        press(&mut app, KeyCode::Enter).unwrap();
+        assert_eq!(app.form.as_ref().unwrap().action, "wizard-save");
+        assert!(press(&mut app, KeyCode::Enter).is_err());
+        assert!(app.form.is_some());
+        assert!(app.queue.list().is_empty());
+    }
+
+    #[test]
+    fn download_wizard_reuses_saved_presets_and_preserves_download_modes() {
+        for action in ["download", "playlist", "audio-download", "thumbnail"] {
+            let mut app = app();
+            app.cfg["download_presets"] = json!([{"id":"saved", "name":"720p",
+                "fields":{"quality":"720", "audio_only":false, "theme":"red"}}]);
+            app.start_download(action, Some("saved".into()));
+            wizard_url(&mut app);
+            assert_eq!(app.selected, 2);
+            press(&mut app, KeyCode::Enter).unwrap();
+            assert_eq!(app.screen, "download-finish");
+            assert!(app.wizard.as_ref().unwrap().fields.get("theme").is_none());
+            let command = &app.download_plan().unwrap().commands[0];
+            assert!(
+                command.contains(
+                    &if action == "playlist" {
+                        "--yes-playlist"
+                    } else {
+                        "--no-playlist"
+                    }
+                    .into()
+                )
+            );
+            assert_eq!(command.contains(&"-x".into()), action == "audio-download");
+            assert_eq!(
+                command.contains(&"--skip-download".into()),
+                action == "thumbnail"
+            );
+            assert!(app.queue.list().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn download_once_enqueues_without_saving_preferences() {
+        let mut app = app();
+        let output = tempfile::tempdir().unwrap();
+        app.cfg["download_dir"] = json!(output.path());
+        let original = app.cfg.clone();
+        app.open("download").unwrap();
+        wizard_url(&mut app);
+        press(&mut app, KeyCode::Enter).unwrap();
+        press(&mut app, KeyCode::Enter).unwrap();
+        assert_eq!(app.screen, "queue");
+        assert!(app.wizard.is_none());
+        assert_eq!(app.cfg, original);
+        assert_eq!(app.queue.list().len(), 1);
+        app.queue.cancel_all();
+        app.queue.shutdown().await;
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn download_wizard_saves_named_preset_in_isolated_config() {
+        // Run with a private XDG directory without changing this process's environment.
+        const MARKER: &str = "MEDIACLI_WIZARD_TEST_CHILD";
+        if std::env::var_os(MARKER).is_none() {
+            let dir = tempfile::tempdir().unwrap();
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tui::tests::download_wizard_saves_named_preset_in_isolated_config",
+                ])
+                .env(MARKER, "1")
+                .env("XDG_CONFIG_HOME", dir.path())
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+            return;
+        }
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let mut app = app();
+            let output = tempfile::tempdir().unwrap();
+            app.cfg["download_dir"] = json!(output.path());
+            let original = app.cfg.clone();
+            app.open("download").unwrap();
+            wizard_url(&mut app);
+            press(&mut app, KeyCode::Down).unwrap();
+            press(&mut app, KeyCode::Enter).unwrap();
+            app.key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL))
+                .unwrap();
+            press(&mut app, KeyCode::Down).unwrap();
+            press(&mut app, KeyCode::Enter).unwrap();
+            app.form.as_mut().unwrap().fields[0].value = "My preset".into();
+            press(&mut app, KeyCode::Enter).unwrap();
+            app.queue.cancel_all();
+            app.queue.shutdown().await;
+            let saved = config::load().unwrap();
+            let preset = &saved["download_presets"][0];
+            assert_eq!(preset["name"], "My preset");
+            assert_eq!(preset["fields"]["output_dir"], original["download_dir"]);
+            assert!(preset["fields"].get("url").is_none());
+            let mut expected = original;
+            expected["download_presets"] = saved["download_presets"].clone();
+            assert_eq!(saved, expected);
+        });
+    }
+
+    #[test]
+    fn wizard_steps_render_in_small_terminals() {
+        let mut app = app();
+        app.cfg["language"] = json!("ru");
+        app.open("download").unwrap();
+        for step in 0..5 {
+            match step {
+                1 => wizard_url(&mut app),
+                2 => {
+                    app.selected = 1;
+                    press(&mut app, KeyCode::Enter).unwrap();
+                }
+                3 => {
+                    app.key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL))
+                        .unwrap();
+                }
+                4 => {
+                    app.selected = 1;
+                    press(&mut app, KeyCode::Enter).unwrap();
+                }
+                _ => {}
+            }
+            for (width, height) in [(24, 8), (40, 12), (80, 24), (160, 50)] {
+                let mut terminal =
+                    Terminal::new(ratatui::backend::TestBackend::new(width, height)).unwrap();
+                terminal.draw(|frame| app.draw(frame)).unwrap();
+                if app.form.is_some() {
+                    let contents: String = terminal
+                        .backend()
+                        .buffer()
+                        .content
+                        .iter()
+                        .map(|c| c.symbol())
+                        .collect();
+                    assert!(contents.contains('│'));
+                }
+            }
+        }
+    }
+
     #[test]
     fn choices_start_at_current_values_and_cancel_preserves_them() {
         let mut app = app();

@@ -3,7 +3,7 @@
 
 # MediaCLI
 
-Version: **0.1.4** · `mediacli --version`
+Version: **1.0.0** (dev) · `mediacli --version`
 
 **An ultra-fast, keyboard-driven terminal media suite wrapping `yt-dlp` and `FFmpeg`.**  
 *Implemented in Rust, dual-pane TUI, background task engine, and a searchable command palette.*
@@ -68,7 +68,7 @@ A build from GitHub Actions can be installed from the saved archive before it
 is on the registry:
 
 ```bash
-npm install -g ./glob876-mediacli-linux-x64-0.1.4.tgz ./glob876-mediacli-0.1.4.tgz
+npm install -g ./glob876-mediacli-linux-x64-1.0.0.tgz ./glob876-mediacli-1.0.0.tgz
 mediacli --version
 ```
 
@@ -132,7 +132,7 @@ confirmation and retains media files. The previous text console is removed.
 
 ---
 
-## CLI 0.1.4
+## CLI 1.0.0
 
 Run without arguments for the TUI, or pass a command for non-interactive use:
 
@@ -149,7 +149,7 @@ Downloads, all media operations, projects, batch processing, size/range exports,
 configuration, presets, history, dependency checks and daemon task management are
 available as commands. [Full CLI reference and examples (Russian)](docs/cli.md).
 
-## TUI 0.1.4
+## TUI 1.0.0
 
 - The terminal queue is saved in `tui_queue.json`. After a restart, unfinished
   jobs appear as interrupted; use **Ctrl+P → Task queue → Retry whole chain**.

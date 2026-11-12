@@ -1,6 +1,6 @@
 {
   "name": "mediagui-shell",
-  "version": "0.1.4",
+  "version": "1.0.0",
   "description": "MediaGUI desktop shell over the Rust daemon API",
   "private": true,
   "author": "Glob876",
